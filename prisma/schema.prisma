@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  technician
+}
+
+enum BillingType {
+  Hourly
+  Retainer
+}
+
+enum BillableStatus {
+  Billable
+  NonBillable
+  Residual
+}
+
+enum BillingFrequency {
+  Monthly
+  Annual
+}
+
+enum InvoiceStatus {
+  Draft
+  Sent
+  Paid
+}
+
+enum TicketUrgency {
+  Critical
+  High
+  Medium
+  Low
+}
+
+enum TicketStatus {
+  New
+  InProgress
+  Resolved
+  Closed
+}
+
+model Organization {
+  id                  String   @id @default(uuid())
+  name                String
+  logoUrl             String?
+  brandColorPrimary   String   @default("#071E37")
+  brandColorAccent    String   @default("#06E1DC")
+  supportEmail        String   @unique
+  // From address used specifically for outbound invoice emails (may differ
+  // from supportEmail — e.g. a named staff mailbox rather than a shared inbox).
+  invoiceFromEmail    String?
+  phone               String?
+  // Manual onboarding checklist flag: domain/DKIM verified in Resend.
+  // Sends are blocked until this is true — see lib/email.
+  emailDomainVerified Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  users            User[]
+  clients          Client[]
+  serviceTypes     ServiceType[]
+  timeEntries      TimeEntry[]
+  recurringCharges RecurringCharge[]
+  invoices         Invoice[]
+  tickets          Ticket[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Mirrors Supabase auth.users.id — this row is the app-side profile/role record.
+  authUserId     String       @unique
+  name           String
+  email          String
+  role           UserRole     @default(technician)
+  createdAt      DateTime     @default(now())
+
+  loggedTimeEntries TimeEntry[] @relation("LoggedByUser")
+  assignedTickets   Ticket[]    @relation("AssignedToUser")
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Client {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  shortName      String
+  contactName    String?
+  email          String?
+  phone          String?
+  address1       String?
+  address2       String?
+  cityStateZip   String?
+  billingType    BillingType  @default(Hourly)
+  billingRate    Decimal?     @db.Decimal(10, 2)
+  activeStatus   Boolean      @default(true)
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  timeEntries      TimeEntry[]
+  recurringCharges RecurringCharge[]
+  invoices         Invoice[]
+
+  @@unique([organizationId, shortName])
+  @@index([organizationId])
+  @@map("clients")
+}
+
+model ServiceType {
+  id                  String       @id @default(uuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code                String
+  label               String
+  billingMinimumHours Decimal      @db.Decimal(5, 2)
+  // Overrides the client's standard billingRate when set (e.g. Low Voltage).
+  rateOverride        Decimal?     @db.Decimal(10, 2)
+
+  timeEntries TimeEntry[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("service_types")
+}
+
+model TimeEntry {
+  id             String         @id @default(uuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date           DateTime       @db.Date
+  durationHours  Decimal        @db.Decimal(5, 2)
+  description    String
+  billableStatus BillableStatus @default(Billable)
+  serviceTypeId  String
+  serviceType    ServiceType    @relation(fields: [serviceTypeId], references: [id])
+  // Null while unbilled; set once included on a generated invoice.
+  invoiceId      String?
+  invoice        Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  loggedByUserId String
+  loggedByUser   User           @relation("LoggedByUser", fields: [loggedByUserId], references: [id])
+  // Original voice/text input, kept only when this entry came from the AI parser.
+  rawInput       String?
+  createdAt      DateTime       @default(now())
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([invoiceId])
+  @@map("time_entries")
+}
+
+model RecurringCharge {
+  id               String           @id @default(uuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  description      String
+  amount           Decimal          @db.Decimal(10, 2)
+  billingFrequency BillingFrequency @default(Monthly)
+  createdAt        DateTime         @default(now())
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@map("recurring_charges")
+}
+
+model Invoice {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // Format: {ClientShortName}-{00001}, 5-digit zero-padded, sequential per client.
+  invoiceNumber  String
+  periodStart    DateTime      @db.Date
+  periodEnd      DateTime      @db.Date
+  totalHours     Decimal       @db.Decimal(7, 2)
+  totalAmount    Decimal       @db.Decimal(10, 2)
+  status         InvoiceStatus @default(Draft)
+  pdfUrl         String?
+  // Set when the invoice is voided/deleted instead of hard-deleting the row,
+  // so archived PDFs and invoice-number history stay intact.
+  voidedAt       DateTime?
+  createdAt      DateTime      @default(now())
+
+  timeEntries TimeEntry[]
+
+  @@unique([organizationId, clientId, invoiceNumber])
+  @@index([organizationId])
+  @@index([clientId])
+  @@map("invoices")
+}
+
+model Ticket {
+  id                String        @id @default(uuid())
+  organizationId    String
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Format: TKT-0001, sequential per organization.
+  ticketNumber      String
+  clientCompanyName String
+  contactName       String
+  contactEmail      String
+  issueType         String
+  urgency           TicketUrgency @default(Medium)
+  description       String
+  status            TicketStatus  @default(New)
+  assignedToUserId  String?
+  assignedToUser    User?         @relation("AssignedToUser", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  internalNotes     String?
+  resolvedAt        DateTime?
+  createdAt         DateTime      @default(now())
+
+  attachments TicketAttachment[]
+
+  @@unique([organizationId, ticketNumber])
+  @@index([organizationId])
+  @@index([status])
+  @@map("tickets")
+}
+
+model TicketAttachment {
+  id         String   @id @default(uuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  // Supabase Storage path: org/{orgId}/{clientCompanyName}/{ticketNumber}/{fileName}
+  fileUrl    String
+  fileName   String
+  uploadedAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_attachments")
+}
