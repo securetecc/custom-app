@@ -3,13 +3,25 @@
 -- this file owns Postgres-level access control that Prisma cannot express).
 --
 -- Design:
---   * public.users mirrors auth.users (one row per staff member, via auth_user_id).
+--   * public.users mirrors auth.users (one row per staff member, via "authUserId").
 --   * current_org_id()/current_user_role() are SECURITY DEFINER so policies on
 --     public.users itself don't recurse into RLS when looking up the caller's row.
---   * Every tenant table is scoped to organization_id = current_org_id().
+--   * Every tenant table is scoped to "organizationId" = current_org_id().
 --   * Clients (the org's own customers) are not platform users; the public ticket
 --     form runs as the Supabase `anon` role and is granted a narrow, column-limited
---     INSERT policy only — no anon SELECT/UPDATE/DELETE anywhere.
+--     INSERT policy only -- no anon SELECT/UPDATE/DELETE anywhere.
+--
+-- Column naming: the Prisma schema has no field-level @map(...), so Prisma
+-- generated camelCase columns (e.g. "organizationId", not organization_id).
+-- Every multi-word column reference below is double-quoted to match exactly
+-- -- Postgres folds unquoted identifiers to lowercase, which would silently
+-- resolve to a nonexistent column otherwise.
+--
+-- Type note: id/foreign-key columns are Prisma `String @default(uuid())`,
+-- which maps to Postgres `text`, NOT the native `uuid` type. Supabase's
+-- auth.uid() returns `uuid`, so it must be cast to `::text` before comparing
+-- against "authUserId", and the helper functions below return `text`
+-- accordingly (not `uuid`).
 --
 -- IMPORTANT -- this only does something if the app actually connects as a role
 -- these policies apply to. Prisma's DATABASE_URL normally connects as the
@@ -34,13 +46,13 @@ grant insert on public.tickets, public.ticket_attachments to anon;
 -- ============================================================================
 
 create or replace function public.current_org_id()
-returns uuid
+returns text
 language sql
 security definer
 set search_path = public
 stable
 as $$
-  select organization_id from public.users where auth_user_id = auth.uid() limit 1;
+  select "organizationId" from public.users where "authUserId" = auth.uid()::text limit 1;
 $$;
 
 create or replace function public.current_user_role()
@@ -50,7 +62,7 @@ security definer
 set search_path = public
 stable
 as $$
-  select role::text from public.users where auth_user_id = auth.uid() limit 1;
+  select role::text from public.users where "authUserId" = auth.uid()::text limit 1;
 $$;
 
 create or replace function public.is_admin()
@@ -89,12 +101,12 @@ alter table public.users enable row level security;
 
 create policy "users: staff can read own org roster"
   on public.users for select
-  using (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id());
 
 create policy "users: admin can manage own org roster"
   on public.users for all
-  using (organization_id = public.current_org_id() and public.is_admin())
-  with check (organization_id = public.current_org_id() and public.is_admin());
+  using ("organizationId" = public.current_org_id() and public.is_admin())
+  with check ("organizationId" = public.current_org_id() and public.is_admin());
 
 -- ============================================================================
 -- clients
@@ -104,8 +116,8 @@ alter table public.clients enable row level security;
 
 create policy "clients: staff full access within org"
   on public.clients for all
-  using (organization_id = public.current_org_id())
-  with check (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id())
+  with check ("organizationId" = public.current_org_id());
 
 -- ============================================================================
 -- service_types
@@ -115,20 +127,20 @@ alter table public.service_types enable row level security;
 
 create policy "service_types: staff can read within org"
   on public.service_types for select
-  using (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id());
 
 create policy "service_types: admin can manage within org"
   on public.service_types for insert
-  with check (organization_id = public.current_org_id() and public.is_admin());
+  with check ("organizationId" = public.current_org_id() and public.is_admin());
 
 create policy "service_types: admin can update within org"
   on public.service_types for update
-  using (organization_id = public.current_org_id() and public.is_admin())
-  with check (organization_id = public.current_org_id() and public.is_admin());
+  using ("organizationId" = public.current_org_id() and public.is_admin())
+  with check ("organizationId" = public.current_org_id() and public.is_admin());
 
 create policy "service_types: admin can delete within org"
   on public.service_types for delete
-  using (organization_id = public.current_org_id() and public.is_admin());
+  using ("organizationId" = public.current_org_id() and public.is_admin());
 
 -- ============================================================================
 -- time_entries
@@ -138,32 +150,32 @@ alter table public.time_entries enable row level security;
 
 create policy "time_entries: staff can read within org"
   on public.time_entries for select
-  using (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id());
 
 create policy "time_entries: staff can insert within org"
   on public.time_entries for insert
-  with check (organization_id = public.current_org_id());
+  with check ("organizationId" = public.current_org_id());
 
 -- Entries already attached to an invoice are billing history; only admins
 -- may edit/delete them (e.g. as part of a deliberate void-and-reinvoice flow).
--- Unbilled entries (invoice_id is null) remain editable by any staff member,
+-- Unbilled entries ("invoiceId" is null) remain editable by any staff member,
 -- including the technician correcting their own log before it's invoiced.
 create policy "time_entries: staff can update unbilled, admin can update any"
   on public.time_entries for update
   using (
-    organization_id = public.current_org_id()
-    and (invoice_id is null or public.is_admin())
+    "organizationId" = public.current_org_id()
+    and ("invoiceId" is null or public.is_admin())
   )
   with check (
-    organization_id = public.current_org_id()
-    and (invoice_id is null or public.is_admin())
+    "organizationId" = public.current_org_id()
+    and ("invoiceId" is null or public.is_admin())
   );
 
 create policy "time_entries: staff can delete unbilled, admin can delete any"
   on public.time_entries for delete
   using (
-    organization_id = public.current_org_id()
-    and (invoice_id is null or public.is_admin())
+    "organizationId" = public.current_org_id()
+    and ("invoiceId" is null or public.is_admin())
   );
 
 -- ============================================================================
@@ -174,8 +186,8 @@ alter table public.recurring_charges enable row level security;
 
 create policy "recurring_charges: staff full access within org"
   on public.recurring_charges for all
-  using (organization_id = public.current_org_id())
-  with check (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id())
+  with check ("organizationId" = public.current_org_id());
 
 -- ============================================================================
 -- invoices
@@ -185,24 +197,24 @@ alter table public.invoices enable row level security;
 
 create policy "invoices: staff can read within org"
   on public.invoices for select
-  using (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id());
 
 -- Any staff member can generate a Draft invoice from the review screen.
 create policy "invoices: staff can insert Draft within org"
   on public.invoices for insert
-  with check (organization_id = public.current_org_id() and status = 'Draft');
+  with check ("organizationId" = public.current_org_id() and status = 'Draft');
 
 -- Only admins can transition status (Draft -> Sent -> Paid) or void/edit a
 -- finalized invoice. This is the DB-level backstop for the highest-risk
 -- workflow in the system (see Delete/void invoice confirmation requirement).
 create policy "invoices: admin can update within org"
   on public.invoices for update
-  using (organization_id = public.current_org_id() and public.is_admin())
-  with check (organization_id = public.current_org_id() and public.is_admin());
+  using ("organizationId" = public.current_org_id() and public.is_admin())
+  with check ("organizationId" = public.current_org_id() and public.is_admin());
 
 create policy "invoices: admin can delete within org"
   on public.invoices for delete
-  using (organization_id = public.current_org_id() and public.is_admin());
+  using ("organizationId" = public.current_org_id() and public.is_admin());
 
 -- ============================================================================
 -- tickets
@@ -212,20 +224,20 @@ alter table public.tickets enable row level security;
 
 create policy "tickets: staff can read within org"
   on public.tickets for select
-  using (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id());
 
 create policy "tickets: staff can update within org"
   on public.tickets for update
-  using (organization_id = public.current_org_id())
-  with check (organization_id = public.current_org_id());
+  using ("organizationId" = public.current_org_id())
+  with check ("organizationId" = public.current_org_id());
 
 create policy "tickets: staff can delete within org"
   on public.tickets for delete
-  using (organization_id = public.current_org_id() and public.is_admin());
+  using ("organizationId" = public.current_org_id() and public.is_admin());
 
 -- Public, unauthenticated ticket submission (anon role). No login, so this
 -- cannot be scoped to current_org_id() -- the public form itself is served
--- per-tenant and supplies organization_id directly. The WITH CHECK below is
+-- per-tenant and supplies "organizationId" directly. The WITH CHECK below is
 -- the DB-level guarantee that a public submission can only ever create a
 -- brand-new "New" ticket with no internal fields set, regardless of what the
 -- client sends.
@@ -234,9 +246,9 @@ create policy "tickets: anon can submit new tickets"
   to anon
   with check (
     status = 'New'
-    and assigned_to_user_id is null
-    and internal_notes is null
-    and resolved_at is null
+    and "assignedToUserId" is null
+    and "internalNotes" is null
+    and "resolvedAt" is null
   );
 
 -- ============================================================================
@@ -250,8 +262,8 @@ create policy "ticket_attachments: staff can read within org"
   using (
     exists (
       select 1 from public.tickets t
-      where t.id = ticket_attachments.ticket_id
-        and t.organization_id = public.current_org_id()
+      where t.id = ticket_attachments."ticketId"
+        and t."organizationId" = public.current_org_id()
     )
   );
 
@@ -260,8 +272,8 @@ create policy "ticket_attachments: staff can delete within org"
   using (
     exists (
       select 1 from public.tickets t
-      where t.id = ticket_attachments.ticket_id
-        and t.organization_id = public.current_org_id()
+      where t.id = ticket_attachments."ticketId"
+        and t."organizationId" = public.current_org_id()
     )
   );
 
@@ -273,7 +285,7 @@ create policy "ticket_attachments: anon can attach to new tickets"
   with check (
     exists (
       select 1 from public.tickets t
-      where t.id = ticket_attachments.ticket_id
+      where t.id = ticket_attachments."ticketId"
         and t.status = 'New'
     )
   );
@@ -297,7 +309,7 @@ create policy "ticket-attachments: staff can read within org"
   to authenticated
   using (
     bucket_id = 'ticket-attachments'
-    and (storage.foldername(name))[1] = public.current_org_id()::text
+    and (storage.foldername(name))[1] = public.current_org_id()
   );
 
 create policy "ticket-attachments: staff can delete within org"
@@ -305,5 +317,5 @@ create policy "ticket-attachments: staff can delete within org"
   to authenticated
   using (
     bucket_id = 'ticket-attachments'
-    and (storage.foldername(name))[1] = public.current_org_id()::text
+    and (storage.foldername(name))[1] = public.current_org_id()
   );
