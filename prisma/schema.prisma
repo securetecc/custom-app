@@ -1,6 +1,12 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  // Vercel's serverless runtime is rhel-openssl-3.0.x. Declaring it
+  // explicitly (rather than relying on "native" platform detection at
+  // generate time) guarantees that engine binary exists in the build
+  // output -- see next.config.ts's outputFileTracingIncludes, which is
+  // what then gets it into the deployed function bundle.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
