@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && node scripts/stage-prisma-engine.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

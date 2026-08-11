@@ -14,8 +14,10 @@ const nextConfig: NextConfig = {
   // deployed function bundle, causing PrismaClientInitializationError
   // ("could not locate the Query Engine") in production despite `prisma
   // generate` succeeding at build time. This forces it to be included.
+  // Note the glob covers src/generated/**, not just src/generated/prisma/**,
+  // so the engine copy staged by scripts/stage-prisma-engine.mjs is traced too.
   outputFileTracingIncludes: {
-    "/**": ["./src/generated/prisma/**/*"],
+    "/**": ["./src/generated/**/*"],
   },
   // ...but shipping the binary isn't sufficient on its own. Bundling
   // @prisma/client rewrites the __dirname its runtime uses to locate that
