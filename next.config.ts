@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": ["./src/generated/prisma/**/*"],
   },
+  // ...but shipping the binary isn't sufficient on its own. Bundling
+  // @prisma/client rewrites the __dirname its runtime uses to locate that
+  // binary, so it searched /var/task/src/generated (one level above where
+  // the file actually lands, /var/task/src/generated/prisma) and still
+  // threw "could not locate the Query Engine". Keeping the package
+  // external preserves the real __dirname so the lookup resolves.
+  // See https://pris.ly/d/engine-not-found-nextjs
+  serverExternalPackages: ["@prisma/client", ".prisma/client"],
 };
 
 export default nextConfig;
