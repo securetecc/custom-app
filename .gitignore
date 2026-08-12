@@ -42,6 +42,10 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+# Prisma query-engine binaries staged one level up by
+# scripts/stage-prisma-engine.mjs (see next.config.ts) -- generated at install
+# time, ~35MB, must never be committed.
+/src/generated/*.node
 
 # claude code personal overrides
 .claude/settings.local.json

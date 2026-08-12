@@ -71,13 +71,14 @@ model Organization {
   emailDomainVerified Boolean  @default(false)
   createdAt           DateTime @default(now())
 
-  users            User[]
-  clients          Client[]
-  serviceTypes     ServiceType[]
-  timeEntries      TimeEntry[]
-  recurringCharges RecurringCharge[]
-  invoices         Invoice[]
-  tickets          Ticket[]
+  users                  User[]
+  clients                Client[]
+  serviceTypes           ServiceType[]
+  timeEntries            TimeEntry[]
+  recurringCharges       RecurringCharge[]
+  invoiceRecurringCharges InvoiceRecurringCharge[]
+  invoices               Invoice[]
+  tickets                Ticket[]
 
   @@map("organizations")
 }
@@ -118,6 +119,13 @@ model Client {
   activeStatus   Boolean      @default(true)
   notes          String?
   createdAt      DateTime     @default(now())
+  // Per-client invoice counter, incremented atomically inside the same
+  // transaction that creates an Invoice (see invoices/actions.ts) to produce
+  // {shortName}-{00001}. Never decremented -- a voided invoice keeps its
+  // number, matching normal accounting practice.
+  // Phase 6 note: the Sheets migration must seed this to each client's
+  // highest existing invoice number, NOT leave it at 0.
+  lastInvoiceSequence Int     @default(0)
 
   timeEntries      TimeEntry[]
   recurringCharges RecurringCharge[]
@@ -172,6 +180,11 @@ model TimeEntry {
   @@map("time_entries")
 }
 
+/// A perpetual billing template (e.g. "Managed Antivirus -- $50/mo"), NOT a
+/// one-time event like TimeEntry. It must stay billable every period, so it
+/// deliberately carries no invoiceId: "was this already billed for period X?"
+/// is answered by InvoiceRecurringCharge instead. Retire one with
+/// activeStatus rather than deleting, so historical snapshots keep their FK.
 model RecurringCharge {
   id               String           @id @default(uuid())
   organizationId   String
@@ -181,11 +194,38 @@ model RecurringCharge {
   description      String
   amount           Decimal          @db.Decimal(10, 2)
   billingFrequency BillingFrequency @default(Monthly)
+  activeStatus     Boolean          @default(true)
   createdAt        DateTime         @default(now())
+
+  invoiceOccurrences InvoiceRecurringCharge[]
 
   @@index([organizationId])
   @@index([clientId])
   @@map("recurring_charges")
+}
+
+/// One row per "this recurring charge was billed on this invoice", with the
+/// description/amount/frequency snapshotted at billing time so a later edit to
+/// the template never retroactively rewrites what a past invoice claimed.
+/// Rows are immutable: inserted during generation, deleted when an invoice is
+/// voided (which correctly re-opens that charge for that period).
+model InvoiceRecurringCharge {
+  id                String           @id @default(uuid())
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId         String
+  invoice           Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recurringChargeId String
+  recurringCharge   RecurringCharge  @relation(fields: [recurringChargeId], references: [id])
+  description       String
+  amount            Decimal          @db.Decimal(10, 2)
+  billingFrequency  BillingFrequency
+  createdAt         DateTime         @default(now())
+
+  @@index([organizationId])
+  @@index([invoiceId])
+  @@index([recurringChargeId])
+  @@map("invoice_recurring_charges")
 }
 
 model Invoice {
@@ -201,13 +241,21 @@ model Invoice {
   totalHours     Decimal       @db.Decimal(7, 2)
   totalAmount    Decimal       @db.Decimal(10, 2)
   status         InvoiceStatus @default(Draft)
+  // Storage object path in the private `invoices` bucket (NOT a public URL) --
+  // the app mints a short-lived signed URL on demand. Null until the PDF is
+  // rendered, which happens after the generation transaction commits.
   pdfUrl         String?
+  // Status alone can't answer "when was this sent?" once it moves to Paid,
+  // and both dates are shown on the list/detail screens.
+  sentAt         DateTime?
+  paidAt         DateTime?
   // Set when the invoice is voided/deleted instead of hard-deleting the row,
   // so archived PDFs and invoice-number history stay intact.
   voidedAt       DateTime?
   createdAt      DateTime      @default(now())
 
-  timeEntries TimeEntry[]
+  timeEntries      TimeEntry[]
+  recurringCharges InvoiceRecurringCharge[]
 
   @@unique([organizationId, clientId, invoiceNumber])
   @@index([organizationId])
