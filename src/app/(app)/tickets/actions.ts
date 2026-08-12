@@ -8,6 +8,7 @@ import {
   type TicketStatusChangeValues,
 } from "@/lib/validations/ticket";
 import { getTicketAttachmentSignedUrl } from "@/lib/storage/ticket-attachments";
+import { notifyTicketStatusChange } from "@/lib/email/notify";
 
 export type ActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -33,12 +34,12 @@ export async function changeTicketStatus(
   const { status, internalNotes } = parsed.data;
 
   const { authUserId } = await requireOrgContext();
+  const notes = internalNotes.trim();
 
   try {
     await withRLS(authUserId, async (tx) => {
       const ticket = await tx.ticket.findUniqueOrThrow({ where: { id } });
 
-      const notes = internalNotes.trim();
       await tx.ticket.update({
         where: { id },
         data: {
@@ -55,8 +56,20 @@ export async function changeTicketStatus(
     return { ok: false, error: errorMessage(err) };
   }
 
+  // Pass THIS change's notes explicitly rather than letting the email re-read
+  // internalNotes -- that column now holds the whole appended history, and
+  // re-reading would also pick up anything written after this moment. This is
+  // the ordering requirement from the proven system.
+  const sent = await notifyTicketStatusChange(id, notes.length > 0 ? notes : null);
+
   revalidatePath("/tickets");
   revalidatePath(`/tickets/${id}`);
+
+  if (!sent.ok && !sent.skipped) {
+    // The status change itself succeeded; surface the mail problem without
+    // pretending the whole action failed.
+    return { ok: false, error: `Status updated, but the client email failed: ${sent.error}` };
+  }
   return { ok: true };
 }
 

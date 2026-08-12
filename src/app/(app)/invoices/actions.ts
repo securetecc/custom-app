@@ -18,6 +18,7 @@ import {
   uploadInvoicePdf,
 } from "@/lib/storage/invoices";
 import type { InvoicePdfData } from "@/lib/pdf/types";
+import { notifyInvoiceSent } from "@/lib/email/notify";
 
 export type ActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -493,8 +494,6 @@ export async function markInvoiceSent(id: string): Promise<ActionResult> {
           "The organization's email domain isn't verified yet, so invoices can't be sent.",
         );
       }
-      // Status bookkeeping only. Actually emailing the invoice is Phase 5,
-      // where all outbound mail is built together.
       await tx.invoice.update({
         where: { id },
         data: { status: "Sent", sentAt: new Date() },
@@ -504,8 +503,17 @@ export async function markInvoiceSent(id: string): Promise<ActionResult> {
     return { ok: false, error: errorMessage(err) };
   }
 
+  // Email after the status commits. If the send fails the invoice is still
+  // correctly marked Sent -- report the failure rather than silently leaving
+  // the two out of sync, so someone can follow up manually.
+  const sent = await notifyInvoiceSent(id);
+
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${id}`);
+
+  if (!sent.ok && !sent.skipped) {
+    return { ok: false, error: `Invoice marked Sent, but the email failed: ${sent.error}` };
+  }
   return { ok: true };
 }
 

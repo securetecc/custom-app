@@ -5,7 +5,13 @@ import { NextResponse, type NextRequest } from "next/server";
 // This refreshes the Supabase session cookie on every request and gates the
 // staff app behind auth. The public ticket-submission route and its API stay
 // open (no login for clients, per spec).
-const PUBLIC_PATHS = ["/login", "/support", "/api/tickets"];
+//
+// /api/cron is listed here because Vercel Cron invokes it with no user
+// session -- redirecting it to /login would silently stop every scheduled job.
+// It is NOT unprotected: those routes verify `Authorization: Bearer
+// $CRON_SECRET` themselves and fail closed when the secret is unset
+// (src/lib/cron/auth.ts).
+const PUBLIC_PATHS = ["/login", "/support", "/api/tickets", "/api/cron"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

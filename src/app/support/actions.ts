@@ -12,6 +12,7 @@ import {
   ticketAttachmentPath,
   uploadTicketAttachment,
 } from "@/lib/storage/ticket-attachments";
+import { notifyNewTicket } from "@/lib/email/notify";
 
 // NOTE: every export from a "use server" file is a callable server action.
 // Keep this file to exactly the one action the public form needs.
@@ -143,6 +144,11 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
       failed.push(file.name);
     }
   }
+
+  // Confirmation + internal alert. Deliberately after the ticket is safely
+  // stored and not awaited for correctness -- a mail failure must never make a
+  // successfully-filed request look like it failed to the customer.
+  await notifyNewTicket(ticketId);
 
   if (failed.length > 0) {
     return {
