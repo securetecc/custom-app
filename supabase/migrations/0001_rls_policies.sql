@@ -241,6 +241,13 @@ create policy "tickets: staff can delete within org"
 -- the DB-level guarantee that a public submission can only ever create a
 -- brand-new "New" ticket with no internal fields set, regardless of what the
 -- client sends.
+--
+-- IMPORTANT for callers: anon deliberately has no SELECT policy here, and a
+-- RETURNING clause is evaluated against the SELECT policy. That means
+-- `INSERT ... RETURNING` fails for anon with 42501 even though the INSERT is
+-- allowed -- which rules out Prisma's create(), since it always emits
+-- RETURNING. src/app/support/actions.ts therefore inserts via raw SQL with a
+-- client-generated id. Do not "fix" that by granting anon SELECT.
 create policy "tickets: anon can submit new tickets"
   on public.tickets for insert
   to anon

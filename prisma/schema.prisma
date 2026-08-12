@@ -78,6 +78,11 @@ model Organization {
   // Sends are blocked until this is true — see lib/email.
   emailDomainVerified Boolean  @default(false)
   createdAt           DateTime @default(now())
+  // Per-org ticket counter, incremented atomically alongside ticket creation
+  // to produce TKT-0001 (same approach as Client.lastInvoiceSequence).
+  // Phase 6 note: the Sheets migration must seed this to the highest existing
+  // ticket number, NOT leave it at 0.
+  lastTicketSequence  Int      @default(0)
 
   users                  User[]
   clients                Client[]
