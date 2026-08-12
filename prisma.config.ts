@@ -12,6 +12,10 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: env("DATABASE_URL"),
+    // CLI work (migrate/db execute/seed) must use the session pooler, not the
+    // transaction pooler DATABASE_URL points at -- see schema.prisma's
+    // directUrl comment. Falls back to DATABASE_URL for environments that
+    // only set one (e.g. a plain local Postgres).
+    url: env("DIRECT_URL") ?? env("DATABASE_URL"),
   },
 });

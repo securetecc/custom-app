@@ -11,7 +11,15 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime connections go through Supabase's TRANSACTION pooler (port 6543)
+  // with ?pgbouncer=true&connection_limit=1. Session mode (5432) hands each
+  // client a dedicated Postgres connection for its whole session and caps out
+  // at 15 -- serverless functions exhaust that almost immediately, surfacing as
+  // "FATAL: (EMAXCONNSESSION) max clients reached in session mode".
+  url       = env("DATABASE_URL")
+  // Migrations and introspection can't run over the transaction pooler
+  // (advisory locks / prepared statements), so they use the session pooler.
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {

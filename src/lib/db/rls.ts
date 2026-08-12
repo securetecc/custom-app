@@ -20,14 +20,25 @@ export async function withRLS<T>(
   authUserId: string | null,
   fn: (tx: TxClient) => Promise<T>,
 ): Promise<T> {
-  return prisma.$transaction(async (tx) => {
-    const claims = authUserId
-      ? { sub: authUserId, role: "authenticated" }
-      : { role: "anon" };
+  return prisma.$transaction(
+    async (tx) => {
+      const claims = authUserId
+        ? { sub: authUserId, role: "authenticated" }
+        : { role: "anon" };
 
-    await tx.$executeRaw`SELECT set_config('request.jwt.claims', ${JSON.stringify(claims)}, true)`;
-    await tx.$executeRawUnsafe(`SET LOCAL ROLE ${authUserId ? "authenticated" : "anon"}`);
+      await tx.$executeRaw`SELECT set_config('request.jwt.claims', ${JSON.stringify(claims)}, true)`;
+      await tx.$executeRawUnsafe(`SET LOCAL ROLE ${authUserId ? "authenticated" : "anon"}`);
 
-    return fn(tx);
-  });
+      return fn(tx);
+    },
+    {
+      // Every request in this app goes through here, so each one occupies a
+      // pooled connection for the length of an interactive transaction. Under
+      // concurrency the default 2s maxWait fails fast with P2028 ("Unable to
+      // start a transaction in the given time") while connections are simply
+      // busy rather than broken. These give brief contention room to clear.
+      maxWait: 10_000,
+      timeout: 20_000,
+    },
+  );
 }
