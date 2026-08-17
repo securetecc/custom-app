@@ -76,6 +76,7 @@ export async function notifyNewTicket(ticketId: string): Promise<{
       clientCompanyName: ticket.clientCompanyName,
       contactName: ticket.contactName,
       contactEmail: ticket.contactEmail,
+      callbackNumber: ticket.callbackNumber,
       issueType: ticket.issueType,
       urgency: ticket.urgency,
       description: ticket.description,

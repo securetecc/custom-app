@@ -13,12 +13,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
+import { URGENCY_BADGE_CLASS } from "@/lib/validations/ticket";
 import type { TicketStatus, TicketUrgency } from "@/generated/prisma/enums";
 
 const STATUS_FILTERS = ["Open", "New", "InProgress", "Resolved", "Closed", "All"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
-const URGENCY_FILTERS = ["All", "Critical", "High", "Medium", "Low"] as const;
+const URGENCY_FILTERS = ["All", "Emergency", "Critical", "High", "Medium", "Low"] as const;
 type UrgencyFilter = (typeof URGENCY_FILTERS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -28,13 +29,6 @@ const STATUS_LABELS: Record<string, string> = {
   Resolved: "Resolved",
   Closed: "Closed",
   All: "All",
-};
-
-const URGENCY_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  Critical: "destructive",
-  High: "destructive",
-  Medium: "secondary",
-  Low: "secondary",
 };
 
 export default async function TicketsPage({
@@ -140,7 +134,7 @@ export default async function TicketsPage({
                 <TableCell>{ticket.clientCompanyName}</TableCell>
                 <TableCell>{ticket.issueType}</TableCell>
                 <TableCell>
-                  <Badge variant={URGENCY_VARIANT[ticket.urgency]}>{ticket.urgency}</Badge>
+                  <Badge className={URGENCY_BADGE_CLASS[ticket.urgency]}>{ticket.urgency}</Badge>
                 </TableCell>
                 <TableCell>
                   <Badge variant={ticket.status === "New" ? "default" : "secondary"}>

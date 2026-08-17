@@ -49,7 +49,10 @@ enum InvoiceStatus {
   Paid
 }
 
+/// Five tiers, matching the v1 client portal's published response-time SLAs:
+/// Emergency 1h, Critical 4h, High 8h, Medium 24h, Low 48h (business hours).
 enum TicketUrgency {
+  Emergency
   Critical
   High
   Medium
@@ -285,6 +288,9 @@ model Ticket {
   clientCompanyName String
   contactName       String
   contactEmail      String
+  /// Best number to reach the submitter -- carried over from the v1 portal,
+  /// where urgent issues are often faster to resolve by phone than by email.
+  callbackNumber    String?
   issueType         String
   urgency           TicketUrgency @default(Medium)
   description       String

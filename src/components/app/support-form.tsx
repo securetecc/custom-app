@@ -7,6 +7,7 @@ import {
   ISSUE_TYPES,
   MAX_ATTACHMENTS,
   URGENCY_LABELS,
+  URGENCY_RESPONSE_TIMES,
 } from "@/lib/validations/ticket";
 
 /**
@@ -26,6 +27,7 @@ export function SupportForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const [urgency, setUrgency] = useState("Medium");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -74,17 +76,31 @@ export function SupportForm() {
         </div>
       </div>
 
-      <div>
-        <label htmlFor="contactEmail" className={LABEL}>
-          Email
-        </label>
-        <input
-          id="contactEmail"
-          name="contactEmail"
-          type="email"
-          required
-          className={FIELD}
-        />
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label htmlFor="contactEmail" className={LABEL}>
+            Email
+          </label>
+          <input
+            id="contactEmail"
+            name="contactEmail"
+            type="email"
+            required
+            className={FIELD}
+          />
+        </div>
+        <div>
+          <label htmlFor="callbackNumber" className={LABEL}>
+            Callback number
+          </label>
+          <input
+            id="callbackNumber"
+            name="callbackNumber"
+            type="tel"
+            placeholder="Best number to reach you"
+            className={FIELD}
+          />
+        </div>
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
@@ -107,13 +123,23 @@ export function SupportForm() {
           <label htmlFor="urgency" className={LABEL}>
             Urgency
           </label>
-          <select id="urgency" name="urgency" required defaultValue="Medium" className={FIELD}>
+          <select
+            id="urgency"
+            name="urgency"
+            required
+            value={urgency}
+            onChange={(e) => setUrgency(e.target.value)}
+            className={FIELD}
+          >
             {Object.entries(URGENCY_LABELS).map(([value, label]) => (
               <option key={value} value={value} className="bg-[#071E37]">
                 {label}
               </option>
             ))}
           </select>
+          <p className="mt-2 text-xs text-[rgba(255,255,255,0.55)]">
+            Target response: {URGENCY_RESPONSE_TIMES[urgency]}
+          </p>
         </div>
       </div>
 

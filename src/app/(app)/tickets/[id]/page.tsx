@@ -12,6 +12,7 @@ import {
 } from "@/components/app/ticket-status-dialog";
 import { formatDate } from "@/lib/format";
 import { AUTO_CLOSE_AFTER_DAYS } from "@/lib/tickets/auto-close";
+import { URGENCY_BADGE_CLASS, URGENCY_RESPONSE_TIMES } from "@/lib/validations/ticket";
 
 const STATUS_LABELS: Record<string, string> = {
   New: "New",
@@ -50,15 +51,7 @@ export default async function TicketDetailPage({
             <Badge variant={ticket.status === "New" ? "default" : "secondary"}>
               {STATUS_LABELS[ticket.status]}
             </Badge>
-            <Badge
-              variant={
-                ticket.urgency === "Critical" || ticket.urgency === "High"
-                  ? "destructive"
-                  : "secondary"
-              }
-            >
-              {ticket.urgency}
-            </Badge>
+            <Badge className={URGENCY_BADGE_CLASS[ticket.urgency]}>{ticket.urgency}</Badge>
           </div>
           <p className="text-muted-foreground">
             {ticket.clientCompanyName} · {ticket.issueType} · submitted{" "}
@@ -119,9 +112,23 @@ export default async function TicketDetailPage({
                 </a>
               </dd>
             </div>
+            {ticket.callbackNumber && (
+              <div>
+                <dt className="text-muted-foreground">Callback number</dt>
+                <dd>
+                  <a href={`tel:${ticket.callbackNumber}`} className="hover:underline">
+                    {ticket.callbackNumber}
+                  </a>
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-muted-foreground">Company</dt>
               <dd>{ticket.clientCompanyName}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Target response</dt>
+              <dd>{URGENCY_RESPONSE_TIMES[ticket.urgency]}</dd>
             </div>
           </dl>
         </Card>

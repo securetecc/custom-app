@@ -93,11 +93,12 @@ export function ticketInternalAlertEmail(
   branding: Branding,
   ticket: {
     ticketNumber: string; clientCompanyName: string; contactName: string; contactEmail: string;
-    issueType: string; urgency: string; description: string;
+    callbackNumber?: string | null; issueType: string; urgency: string; description: string;
   },
   ticketUrl: string,
 ): { subject: string; html: string } {
-  const urgent = ticket.urgency === "Critical" || ticket.urgency === "High";
+  const urgent =
+    ticket.urgency === "Emergency" || ticket.urgency === "Critical" || ticket.urgency === "High";
   return {
     subject: `${urgent ? `[${ticket.urgency}] ` : ""}New ticket ${ticket.ticketNumber} — ${ticket.clientCompanyName}`,
     html: shell(
@@ -107,6 +108,11 @@ export function ticketInternalAlertEmail(
          <tr><td style="padding:8px 0;color:#5B6B7C;width:120px;">Ticket</td><td style="padding:8px 0;"><strong>${escapeHtml(ticket.ticketNumber)}</strong></td></tr>
          <tr><td style="padding:8px 0;color:#5B6B7C;">Company</td><td style="padding:8px 0;">${escapeHtml(ticket.clientCompanyName)}</td></tr>
          <tr><td style="padding:8px 0;color:#5B6B7C;">Contact</td><td style="padding:8px 0;">${escapeHtml(ticket.contactName)} &lt;${escapeHtml(ticket.contactEmail)}&gt;</td></tr>
+         ${
+           ticket.callbackNumber
+             ? `<tr><td style="padding:8px 0;color:#5B6B7C;">Callback</td><td style="padding:8px 0;">${escapeHtml(ticket.callbackNumber)}</td></tr>`
+             : ""
+         }
          <tr><td style="padding:8px 0;color:#5B6B7C;">Issue</td><td style="padding:8px 0;">${escapeHtml(ticket.issueType)}</td></tr>
          <tr><td style="padding:8px 0;color:#5B6B7C;">Urgency</td><td style="padding:8px 0;"><strong>${escapeHtml(ticket.urgency)}</strong></td></tr>
        </table>

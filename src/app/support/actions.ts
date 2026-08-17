@@ -43,6 +43,7 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
     clientCompanyName: formData.get("clientCompanyName"),
     contactName: formData.get("contactName"),
     contactEmail: formData.get("contactEmail"),
+    callbackNumber: formData.get("callbackNumber"),
     issueType: formData.get("issueType"),
     urgency: formData.get("urgency"),
     description: formData.get("description"),
@@ -108,11 +109,11 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
       tx.$executeRaw`
         insert into public.tickets
           (id, "organizationId", "ticketNumber", "clientCompanyName", "contactName",
-           "contactEmail", "issueType", urgency, description, status, "createdAt")
+           "contactEmail", "callbackNumber", "issueType", urgency, description, status, "createdAt")
         values (
           ${ticketId}, ${organization.id}, ${ticketNumber}, ${data.clientCompanyName},
-          ${data.contactName}, ${data.contactEmail}, ${data.issueType},
-          ${data.urgency}::"TicketUrgency", ${data.description},
+          ${data.contactName}, ${data.contactEmail}, ${data.callbackNumber || null},
+          ${data.issueType}, ${data.urgency}::"TicketUrgency", ${data.description},
           'New'::"TicketStatus", now()
         )
       `,

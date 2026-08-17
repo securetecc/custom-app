@@ -7,7 +7,12 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* Was self-referential (--font-sans: var(--font-sans)), which is an
+     invalid circular value -- the font-sans utility silently fell back to
+     the browser's default serif everywhere in the app. Geist is the font
+     next/font actually loads (layout.tsx sets --font-geist-sans); wire the
+     token to it directly, matching how --font-mono already does below. */
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -130,5 +135,20 @@
   }
   html {
     @apply font-sans;
+  }
+
+  /* Poppins for headings across the authenticated app, matching the brand
+     typography already used on /login, /support, and securetecc.com. Applied
+     here rather than per-page so every existing and future screen picks it up.
+     Card/dialog titles render as <div data-slot="...">, not heading tags, so
+     they're targeted explicitly. */
+  h1,
+  h2,
+  h3,
+  h4,
+  [data-slot="card-title"],
+  [data-slot="dialog-title"] {
+    font-family: var(--font-poppins), var(--font-sans), sans-serif;
+    letter-spacing: -0.01em;
   }
 }

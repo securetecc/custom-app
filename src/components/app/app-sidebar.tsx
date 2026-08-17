@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -29,14 +30,20 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
       className="hidden w-60 shrink-0 flex-col border-r md:flex"
       style={{ backgroundColor: "var(--sidebar)", borderColor: "var(--sidebar-border)" }}
     >
-      <div className="flex items-center gap-2 px-5 py-5">
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-[var(--brand-navy)]"
-          style={{ backgroundColor: "var(--brand-teal)" }}
-        >
-          ST
-        </div>
-        <span className="font-semibold text-sidebar-foreground">SecureTECC</span>
+      <div
+        className="flex items-center px-5 py-5"
+        style={{ borderBottom: "1px solid var(--sidebar-border)" }}
+      >
+        {/* Same asset as /login and /support, so the logo is identical
+            everywhere the brand appears rather than a text approximation. */}
+        <Image
+          src="/securetecc-logo.png"
+          alt="SecureTECC"
+          width={1080}
+          height={264}
+          priority
+          className="h-auto w-full max-w-[168px]"
+        />
       </div>
       <nav className="flex-1 space-y-1 px-3">
         {NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin").map((item) => {

@@ -1,0 +1,177 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireAdmin, requireOrgContext } from "@/lib/auth";
+import { withRLS } from "@/lib/db/rls";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { prisma } from "@/lib/db/prisma";
+import {
+  organizationFormSchema,
+  staffFormSchema,
+  type OrganizationFormValues,
+  type StaffFormValues,
+} from "@/lib/validations/organization";
+
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
+export async function updateOrganization(
+  input: OrganizationFormValues,
+): Promise<ActionResult> {
+  const parsed = organizationFormSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const data = parsed.data;
+
+  const appUser = await requireAdmin();
+  const { authUserId } = await requireOrgContext();
+
+  try {
+    // The "org: admin can update own org" policy gates this at the DB level
+    // too, so a non-admin calling this action directly still can't write.
+    await withRLS(authUserId, (tx) =>
+      tx.organization.update({
+        where: { id: appUser.organizationId },
+        data: {
+          name: data.name,
+          supportEmail: data.supportEmail,
+          invoiceFromEmail: data.invoiceFromEmail || null,
+          phone: data.phone || null,
+          logoUrl: data.logoUrl || null,
+          brandColorPrimary: data.brandColorPrimary,
+          brandColorAccent: data.brandColorAccent,
+        },
+      }),
+    );
+  } catch (err: unknown) {
+    if (typeof err === "object" && err !== null && "code" in err) {
+      if ((err as { code?: string }).code === "P2002") {
+        return { ok: false, error: "Another organization already uses that support email." };
+      }
+    }
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+
+  revalidatePath("/settings/organization");
+  return { ok: true };
+}
+
+/**
+ * Flips emailDomainVerified.
+ *
+ * Domain/DKIM verification itself is a manual checklist item in Resend (a
+ * resolved decision -- no in-app wizard for v1). This is the switch that says
+ * "we've done that", and until it's on, every send is skipped by the email
+ * gate. Deliberately admin-only and deliberately explicit about what turning
+ * it on means.
+ */
+export async function setEmailDomainVerified(verified: boolean): Promise<ActionResult> {
+  const appUser = await requireAdmin();
+  const { authUserId } = await requireOrgContext();
+
+  try {
+    await withRLS(authUserId, (tx) =>
+      tx.organization.update({
+        where: { id: appUser.organizationId },
+        data: { emailDomainVerified: verified },
+      }),
+    );
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+
+  revalidatePath("/settings/organization");
+  return { ok: true };
+}
+
+/**
+ * Creates a staff member: a Supabase auth user plus the app-side profile row.
+ *
+ * Uses the service-role client because Prisma alone can't create an auth.users
+ * row -- same category as the seed script's admin bootstrap.
+ */
+export async function createStaffUser(input: StaffFormValues): Promise<ActionResult> {
+  const parsed = staffFormSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const data = parsed.data;
+
+  if (data.password.length === 0) {
+    return { ok: false, error: "Set an initial password for the new user." };
+  }
+
+  const appUser = await requireAdmin();
+
+  const supabase = createAdminClient();
+  const { data: created, error } = await supabase.auth.admin.createUser({
+    email: data.email,
+    password: data.password,
+    email_confirm: true,
+  });
+
+  if (error && !error.message.includes("already been registered")) {
+    return { ok: false, error: error.message };
+  }
+
+  const authUserId =
+    created?.user?.id ??
+    (await supabase.auth.admin.listUsers()).data.users.find((u) => u.email === data.email)?.id;
+
+  if (!authUserId) {
+    return { ok: false, error: "Could not resolve the new user's auth id." };
+  }
+
+  try {
+    // Trusted client: this is tenant-administration work creating a row for
+    // someone who has no session of their own yet.
+    await prisma.user.upsert({
+      where: { authUserId },
+      update: { name: data.name, role: data.role, organizationId: appUser.organizationId },
+      create: {
+        authUserId,
+        organizationId: appUser.organizationId,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+      },
+    });
+  } catch (err: unknown) {
+    if (typeof err === "object" && err !== null && "code" in err) {
+      if ((err as { code?: string }).code === "P2002") {
+        return { ok: false, error: "Someone in this organization already uses that email." };
+      }
+    }
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+
+  revalidatePath("/settings/organization");
+  return { ok: true };
+}
+
+export async function updateStaffRole(
+  userId: string,
+  role: "admin" | "technician",
+): Promise<ActionResult> {
+  const appUser = await requireAdmin();
+  const { authUserId } = await requireOrgContext();
+
+  if (userId === appUser.id && role !== "admin") {
+    // Otherwise the last admin can lock the whole org out of settings.
+    const otherAdmins = await withRLS(authUserId, (tx) =>
+      tx.user.count({ where: { role: "admin", id: { not: userId } } }),
+    );
+    if (otherAdmins === 0) {
+      return { ok: false, error: "You're the only admin — promote someone else first." };
+    }
+  }
+
+  try {
+    await withRLS(authUserId, (tx) => tx.user.update({ where: { id: userId }, data: { role } }));
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+
+  revalidatePath("/settings/organization");
+  return { ok: true };
+}

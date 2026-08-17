@@ -35,8 +35,10 @@
  *   invoices.csv           clientShortName, invoiceNumber, periodStart, periodEnd,
  *                          totalHours, totalAmount, status, sentAt, paidAt, voidedAt
  *   tickets.csv            ticketNumber, clientCompanyName, contactName, contactEmail,
- *                          issueType, urgency, description, status, internalNotes,
- *                          resolvedAt, createdAt, assignedToEmail (optional)
+ *                          callbackNumber (optional), issueType, urgency, description,
+ *                          status, internalNotes, resolvedAt, createdAt,
+ *                          assignedToEmail (optional)
+ *                          urgency accepts: Emergency, Critical, High, Medium, Low
  */
 import "dotenv/config";
 import { readFileSync, existsSync } from "node:fs";
@@ -366,14 +368,17 @@ async function main() {
           clientCompanyName: r.clientcompanyname,
           contactName: r.contactname,
           contactEmail: r.contactemail,
+          callbackNumber: r.callbacknumber || null,
           issueType: r.issuetype || "Other",
-          urgency: /critical/i.test(r.urgency)
-            ? "Critical"
-            : /high/i.test(r.urgency)
-              ? "High"
-              : /low/i.test(r.urgency)
-                ? "Low"
-                : "Medium",
+          urgency: /emergency/i.test(r.urgency)
+            ? "Emergency"
+            : /critical/i.test(r.urgency)
+              ? "Critical"
+              : /high/i.test(r.urgency)
+                ? "High"
+                : /low/i.test(r.urgency)
+                  ? "Low"
+                  : "Medium",
           description: r.description,
           status,
           internalNotes: r.internalnotes || null,

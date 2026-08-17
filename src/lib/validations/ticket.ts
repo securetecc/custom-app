@@ -11,11 +11,41 @@ export const ISSUE_TYPES = [
   "Other",
 ] as const;
 
+// Labels and response targets mirror the v1 client portal's published SLAs,
+// so what a client sees on the form matches what they were promised.
 export const URGENCY_LABELS: Record<string, string> = {
-  Critical: "Critical — business stopped",
-  High: "High — major disruption",
-  Medium: "Medium — working, but impaired",
-  Low: "Low — question or request",
+  Emergency: "Emergency — business unable to operate",
+  Critical: "Critical — major functionality down, no workaround",
+  High: "High — productivity affected, workaround exists",
+  Medium: "Medium — standard request, single user",
+  Low: "Low — minor issue or general question",
+};
+
+export const URGENCY_RESPONSE_TIMES: Record<string, string> = {
+  Emergency: "1 business hour",
+  Critical: "4 business hours",
+  High: "8 business hours",
+  Medium: "24 business hours",
+  Low: "48 business hours",
+};
+
+/** Most urgent first — used for ordering and for the form's option list. */
+export const URGENCY_ORDER = ["Emergency", "Critical", "High", "Medium", "Low"] as const;
+
+/**
+ * Badge colors, shared between the ticket list and detail pages.
+ *
+ * Emergency needs to read as visibly more alarming than Critical/High at a
+ * glance, not just alphabetically first -- a solid fill vs. their tinted
+ * outline, matching the darkest red/amber scale the v1 portal's response-time
+ * list used.
+ */
+export const URGENCY_BADGE_CLASS: Record<string, string> = {
+  Emergency: "border-transparent bg-red-600 text-white dark:bg-red-600 dark:text-white",
+  Critical: "border-transparent bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  High: "border-transparent bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  Medium: "border-transparent bg-accent/15 text-foreground",
+  Low: "border-transparent bg-muted text-muted-foreground",
 };
 
 // Public submission. Deliberately carries NO organizationId, status,
@@ -26,8 +56,9 @@ export const publicTicketSchema = z.object({
   clientCompanyName: z.string().min(1, "Company name is required"),
   contactName: z.string().min(1, "Your name is required"),
   contactEmail: z.string().email("Enter a valid email address"),
+  callbackNumber: z.string().optional().or(z.literal("")),
   issueType: z.enum(ISSUE_TYPES),
-  urgency: z.enum(["Critical", "High", "Medium", "Low"]),
+  urgency: z.enum(URGENCY_ORDER),
   description: z.string().min(10, "Please describe the issue in a little more detail"),
 });
 
