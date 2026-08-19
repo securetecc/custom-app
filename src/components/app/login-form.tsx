@@ -494,11 +494,11 @@ export function LoginForm() {
 
         <section className="px-6 pb-24">
           <div ref={revealRef} className="reveal">
-            <div className="mx-auto mb-10 max-w-[560px] text-center">
+            <div className="mx-auto mb-10 max-w-[680px] text-center">
               <p className="mb-[10px] text-xs font-bold uppercase tracking-[2px] text-[#06E1DC]">
                 What&apos;s inside
               </p>
-              <h2 className="mb-3 text-[clamp(24px,3.4vw,32px)] font-bold">
+              <h2 className="mb-3 whitespace-nowrap text-[clamp(14px,calc((100vw-48px)/18.3),32px)] font-bold">
                 Everything the team runs day to day
               </h2>
               <p className="text-[15px] leading-[1.6] text-[rgba(255,255,255,0.74)]">

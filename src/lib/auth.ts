@@ -11,12 +11,22 @@ import { withRLS } from "@/lib/db/rls";
 // org roster" policy resolves via the SECURITY DEFINER current_org_id(), so
 // this doesn't need a bypass -- it's the same DB-level check every other
 // query gets.
-export async function getCurrentAppUser() {
+// supabase.auth.getUser() validates the JWT against Supabase's Auth API --
+// a real network round trip, not a local decode. getCurrentAppUser() and
+// getCurrentAuthUserId() used to each call it independently, so
+// requireOrgContext() (used on every server-rendered page) fired it twice
+// per request on top of the middleware's own call. Centralizing it here so
+// a single request only ever pays for one verified lookup.
+async function getVerifiedAuthUser() {
   const supabase = await createClient();
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
+  return authUser;
+}
 
+export async function getCurrentAppUser() {
+  const authUser = await getVerifiedAuthUser();
   if (!authUser) return null;
 
   const appUser = await withRLS(authUser.id, (tx) =>
@@ -32,10 +42,7 @@ export async function getCurrentAppUser() {
 // Returns the verified Supabase auth user id for the current request, for
 // callers (server actions) that need to open their own withRLS transaction.
 export async function getCurrentAuthUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  const authUser = await getVerifiedAuthUser();
   return authUser?.id ?? null;
 }
 
@@ -53,13 +60,21 @@ export async function requireAdmin() {
 
 // For server actions/route handlers: one call to get both the verified auth
 // user id (needed to open a withRLS transaction) and the resolved app user
-// (org + role, for building the write payload and any role checks).
+// (org + role, for building the write payload and any role checks). Calls
+// getVerifiedAuthUser() exactly once -- every page in the app goes through
+// here, so this is the highest-leverage spot to avoid a second Auth API
+// round trip per request.
 export async function requireOrgContext() {
-  const authUserId = await getCurrentAuthUserId();
-  if (!authUserId) redirect("/login");
+  const authUser = await getVerifiedAuthUser();
+  if (!authUser) redirect("/login");
 
-  const appUser = await getCurrentAppUser();
+  const appUser = await withRLS(authUser.id, (tx) =>
+    tx.user.findUnique({
+      where: { authUserId: authUser.id },
+      include: { organization: true },
+    }),
+  );
   if (!appUser) redirect("/login");
 
-  return { authUserId, appUser };
+  return { authUserId: authUser.id, appUser };
 }
