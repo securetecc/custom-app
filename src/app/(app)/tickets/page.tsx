@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
 import { URGENCY_BADGE_CLASS } from "@/lib/validations/ticket";
+import { TicketFilters } from "@/components/app/ticket-filters";
 import type { TicketStatus, TicketUrgency } from "@/generated/prisma/enums";
 
 const STATUS_FILTERS = ["Open", "New", "InProgress", "Resolved", "Closed", "All"] as const;
@@ -77,32 +78,7 @@ export default async function TicketsPage({
         </Button>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((f) => (
-            <Button
-              key={f}
-              size="sm"
-              variant={f === status ? "default" : "outline"}
-              render={<Link href={`/tickets?status=${f}&urgency=${urgency}`} />}
-            >
-              {STATUS_LABELS[f]}
-            </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {URGENCY_FILTERS.map((u) => (
-            <Button
-              key={u}
-              size="sm"
-              variant={u === urgency ? "secondary" : "ghost"}
-              render={<Link href={`/tickets?status=${status}&urgency=${u}`} />}
-            >
-              {u === "All" ? "Any urgency" : u}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <TicketFilters status={status} urgency={urgency} />
 
       <Card>
         <Table>
