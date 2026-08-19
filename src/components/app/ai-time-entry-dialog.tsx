@@ -179,7 +179,9 @@ export function AiTimeEntryDialog({
                   <Label>Client</Label>
                   <Select value={clientId} onValueChange={(v) => setValue("clientId", v ?? "")}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
+                      <SelectValue placeholder="Select client">
+                        {(value) => clients.find((c) => c.id === value)?.name ?? "Select client"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {clients.map((c) => (
@@ -206,7 +208,12 @@ export function AiTimeEntryDialog({
                   onValueChange={(v) => setValue("serviceTypeId", v ?? "")}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select service type" />
+                    <SelectValue placeholder="Select service type">
+                      {(value) => {
+                        const st = serviceTypes.find((s) => s.id === value);
+                        return st ? `${st.code} — ${st.label}` : "Select service type";
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {serviceTypes.map((st) => (
@@ -251,7 +258,9 @@ export function AiTimeEntryDialog({
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue>
+                        {(value) => BILLABLE_STATUS_LABELS[value as TimeEntryFormValues["billableStatus"]]}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {Object.entries(BILLABLE_STATUS_LABELS).map(([value, label]) => (

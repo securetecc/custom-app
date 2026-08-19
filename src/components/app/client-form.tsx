@@ -130,7 +130,9 @@ export function ClientForm({
               onValueChange={(v) => setValue("billingType", v as ClientFormValues["billingType"])}
             >
               <SelectTrigger id="billingType">
-                <SelectValue />
+                <SelectValue>
+                  {(value) => (value === "Retainer" ? "Retainer" : "Hourly")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Hourly">Hourly</SelectItem>
@@ -154,7 +156,9 @@ export function ClientForm({
               onValueChange={(v) => setValue("activeStatus", v === "active")}
             >
               <SelectTrigger id="activeStatus">
-                <SelectValue />
+                <SelectValue>
+                  {(value) => (value === "active" ? "Active" : "Inactive")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="active">Active</SelectItem>
