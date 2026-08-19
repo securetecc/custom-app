@@ -6,13 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 /**
- * Landing + sign-in page, ported 1:1 from manage.securetecc.com's v1 static
- * gate (github.com/securetecc/manage) -- same aurora/grain/particle
- * background, splash intro, cursor-tracking compass + glow orb, staggered
- * entrance, and scroll-reveal tools grid. The one deliberate difference: the
- * v1 gate is a single shared password (client-side only, not real auth --
- * see that repo's README); this is real per-user Supabase auth, so the form
- * has an email field alongside password.
+ * Landing + sign-in page, ported from manage.securetecc.com's v1 static gate
+ * (github.com/securetecc/manage) -- same aurora/grain/particle background,
+ * splash intro, cursor-tracking compass, staggered entrance, and
+ * scroll-reveal tools grid. Glow is ring-only (no filled center orb). The
+ * one deliberate difference from the source: the v1 gate is a single shared
+ * password (client-side only, not real auth -- see that repo's README);
+ * this is real per-user Supabase auth, so the form has an email field
+ * alongside password.
  */
 
 const TOOLS = [
@@ -67,7 +68,6 @@ export function LoginForm() {
   >([]);
 
   const heroRef = useRef<HTMLElement>(null);
-  const orbRef = useRef<HTMLDivElement>(null);
   const needleRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
 
@@ -108,32 +108,23 @@ export function LoginForm() {
     );
   }, []);
 
-  // Glow orb parallax + compass needle tracking the cursor within the hero.
+  // Compass needle tracking the cursor within the hero.
   useEffect(() => {
     const hero = heroRef.current;
-    const orb = orbRef.current;
-    if (!hero || !orb || prefersReducedMotion()) return;
+    if (!hero || prefersReducedMotion()) return;
 
     function handleMove(e: MouseEvent) {
       const rect = hero!.getBoundingClientRect();
       const dx = e.clientX - rect.left - rect.width / 2;
       const dy = e.clientY - rect.top - rect.height / 2;
-      const px = Math.max(-30, Math.min(30, dx / 14));
-      const py = Math.max(-30, Math.min(30, dy / 14));
-      orb!.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
       if (needleRef.current) {
         const angle = Math.atan2(dy, dx) * (180 / Math.PI);
         needleRef.current.style.transform = `rotate(${angle}deg)`;
       }
     }
-    function handleLeave() {
-      orb!.style.transform = "translate(-50%, -50%)";
-    }
     hero.addEventListener("mousemove", handleMove);
-    hero.addEventListener("mouseleave", handleLeave);
     return () => {
       hero.removeEventListener("mousemove", handleMove);
-      hero.removeEventListener("mouseleave", handleLeave);
     };
   }, []);
 
@@ -369,19 +360,6 @@ export function LoginForm() {
               height: "max(900px, 85vw)",
               backgroundImage:
                 "radial-gradient(circle, transparent 0%, transparent 42%, rgba(20,216,196,0.14) 46%, rgba(20,216,196,0.05) 52%, transparent 60%)",
-            }}
-          />
-
-          {/* Glow orb, tracks the cursor */}
-          <div
-            ref={orbRef}
-            aria-hidden
-            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[46px]"
-            style={{
-              width: "max(400px, 38vw)",
-              height: "max(400px, 38vw)",
-              backgroundImage:
-                "radial-gradient(circle at 42% 38%, rgba(6,225,220,0.16), transparent 52%), radial-gradient(circle at 60% 65%, rgba(6,225,220,0.08), transparent 58%), radial-gradient(circle at 50% 50%, rgba(6,225,220,0.05), transparent 70%)",
             }}
           />
 
