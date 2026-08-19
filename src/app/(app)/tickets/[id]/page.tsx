@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,9 +26,9 @@ export default async function TicketDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { authUserId } = await requireOrgContext();
-
-  const [ticket, staff] = await withRLS(authUserId, async (tx) => [
+  const {
+    data: [ticket, staff],
+  } = await requireOrgContext(async (tx) => [
     await tx.ticket.findUnique({
       where: { id },
       include: {

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 
-type TxClient = Prisma.TransactionClient;
+export type TxClient = Prisma.TransactionClient;
 
 /**
  * Runs `fn` inside a transaction scoped to a Postgres role that Supabase RLS

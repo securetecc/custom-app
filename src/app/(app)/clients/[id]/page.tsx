@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { ClientForm } from "@/components/app/client-form";
 import { RecurringChargeDialog } from "@/components/app/recurring-charge-dialog";
 import { DeleteRecurringChargeButton } from "@/components/app/delete-recurring-charge-button";
@@ -25,9 +24,7 @@ export default async function EditClientPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { authUserId } = await requireOrgContext();
-
-  const client = await withRLS(authUserId, (tx) =>
+  const { data: client } = await requireOrgContext((tx) =>
     tx.client.findUnique({
       where: { id },
       include: {

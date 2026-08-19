@@ -1,32 +1,29 @@
 import Link from "next/link";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mic } from "lucide-react";
 
 export default async function DashboardPage() {
-  const { authUserId, appUser } = await requireOrgContext();
-
-  const [openTickets, unbilledHours, activeClients, draftInvoices] = await withRLS(
-    authUserId,
-    async (tx) => {
-      const [openTicketCount, unbilled, activeClientCount, draftInvoiceCount] = await Promise.all([
-        tx.ticket.count({ where: { status: { in: ["New", "InProgress"] } } }),
-        tx.timeEntry.aggregate({
-          where: { invoiceId: null, billableStatus: "Billable" },
-          _sum: { durationHours: true },
-        }),
-        tx.client.count({ where: { activeStatus: true } }),
-        tx.invoice.count({ where: { status: "Draft", voidedAt: null } }),
-      ]);
-      return [
-        openTicketCount,
-        Number(unbilled._sum.durationHours ?? 0),
-        activeClientCount,
-        draftInvoiceCount,
-      ];
-    },
-  );
+  const {
+    appUser,
+    data: [openTickets, unbilledHours, activeClients, draftInvoices],
+  } = await requireOrgContext(async (tx) => {
+    const [openTicketCount, unbilled, activeClientCount, draftInvoiceCount] = await Promise.all([
+      tx.ticket.count({ where: { status: { in: ["New", "InProgress"] } } }),
+      tx.timeEntry.aggregate({
+        where: { invoiceId: null, billableStatus: "Billable" },
+        _sum: { durationHours: true },
+      }),
+      tx.client.count({ where: { activeStatus: true } }),
+      tx.invoice.count({ where: { status: "Draft", voidedAt: null } }),
+    ]);
+    return [
+      openTicketCount,
+      Number(unbilled._sum.durationHours ?? 0),
+      activeClientCount,
+      draftInvoiceCount,
+    ];
+  });
 
   return (
     <div className="space-y-6">

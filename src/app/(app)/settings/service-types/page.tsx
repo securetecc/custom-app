@@ -1,6 +1,5 @@
-import { requireAdmin } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
-import { getCurrentAuthUserId } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requireOrgContext } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -16,12 +15,10 @@ import { DeleteServiceTypeButton } from "@/components/app/delete-service-type-bu
 import { Plus, Pencil } from "lucide-react";
 
 export default async function ServiceTypesPage() {
-  await requireAdmin();
-  const authUserId = await getCurrentAuthUserId();
-
-  const serviceTypes = await withRLS(authUserId, (tx) =>
+  const { appUser, data: serviceTypes } = await requireOrgContext((tx) =>
     tx.serviceType.findMany({ orderBy: { code: "asc" } }),
   );
+  if (appUser.role !== "admin") redirect("/dashboard?error=admin-only");
 
   return (
     <div className="space-y-6">

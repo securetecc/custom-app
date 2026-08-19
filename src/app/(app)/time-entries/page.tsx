@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -19,9 +18,9 @@ import { BILLABLE_STATUS_LABELS } from "@/lib/validations/time-entry";
 import { Plus, Pencil, Sparkles, Mic } from "lucide-react";
 
 export default async function TimeEntriesPage() {
-  const { authUserId } = await requireOrgContext();
-
-  const [entries, clients, serviceTypes] = await withRLS(authUserId, (tx) =>
+  const {
+    data: [entries, clients, serviceTypes],
+  } = await requireOrgContext((tx) =>
     Promise.all([
       tx.timeEntry.findMany({
         orderBy: { date: "desc" },

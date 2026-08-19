@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
-import { getCurrentAuthUserId } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
+import { redirect } from "next/navigation";
+import { requireOrgContext } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import {
   EmailDomainChecklist,
@@ -10,16 +9,17 @@ import {
 } from "@/components/app/organization-form";
 
 export default async function OrganizationSettingsPage() {
-  const appUser = await requireAdmin();
-  const authUserId = await getCurrentAuthUserId();
-
-  const [organization, staff] = await withRLS(authUserId, async (tx) => [
-    await tx.organization.findUniqueOrThrow({ where: { id: appUser.organizationId } }),
+  const {
+    appUser,
+    data: [organization, staff],
+  } = await requireOrgContext(async (tx, user) => [
+    await tx.organization.findUniqueOrThrow({ where: { id: user.organizationId } }),
     await tx.user.findMany({
       select: { id: true, name: true, email: true, role: true },
       orderBy: { name: "asc" },
     }),
   ]);
+  if (appUser.role !== "admin") redirect("/dashboard?error=admin-only");
 
   return (
     <div className="space-y-6">

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -26,9 +25,7 @@ export default async function InvoicesPage({
   const { status } = await searchParams;
   const active: Filter = FILTERS.includes(status as Filter) ? (status as Filter) : "Draft";
 
-  const { authUserId } = await requireOrgContext();
-
-  const invoices = await withRLS(authUserId, (tx) =>
+  const { data: invoices } = await requireOrgContext((tx) =>
     tx.invoice.findMany({
       where:
         active === "Voided"

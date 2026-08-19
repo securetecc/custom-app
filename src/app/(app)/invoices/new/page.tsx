@@ -1,11 +1,8 @@
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { InvoiceGenerationFlow } from "@/components/app/invoice-generation-flow";
 
 export default async function NewInvoicePage() {
-  const { authUserId } = await requireOrgContext();
-
-  const clients = await withRLS(authUserId, (tx) =>
+  const { data: clients } = await requireOrgContext((tx) =>
     tx.client.findMany({
       where: { activeStatus: true },
       select: { id: true, name: true },

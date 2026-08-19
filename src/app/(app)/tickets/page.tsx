@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -45,9 +44,7 @@ export default async function TicketsPage({
     ? (params.urgency as UrgencyFilter)
     : "All";
 
-  const { authUserId } = await requireOrgContext();
-
-  const tickets = await withRLS(authUserId, (tx) =>
+  const { data: tickets } = await requireOrgContext((tx) =>
     tx.ticket.findMany({
       where: {
         // "Open" is the default working view: anything not yet put to bed.

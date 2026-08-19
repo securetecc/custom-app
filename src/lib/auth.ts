@@ -1,6 +1,17 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { withRLS } from "@/lib/db/rls";
+import { withRLS, type TxClient } from "@/lib/db/rls";
+import type { Prisma } from "@/generated/prisma/client";
+
+type AppUser = Prisma.UserGetPayload<{ include: { organization: true } }>;
+
+// Thrown (and caught) inside the withRLS transaction below so a missing app
+// user redirects the same way whether or not a caller passed a callback --
+// never let next/navigation's redirect() throw from inside a Prisma
+// interactive transaction callback directly, since that couples this app's
+// navigation control-flow to how Prisma happens to propagate errors out of
+// $transaction().
+class AppUserNotFoundError extends Error {}
 
 // Resolves the signed-in Supabase auth user to their app-side profile row
 // (organization + role). This is the single place request handlers should
@@ -64,17 +75,41 @@ export async function requireAdmin() {
 // getVerifiedAuthUser() exactly once -- every page in the app goes through
 // here, so this is the highest-leverage spot to avoid a second Auth API
 // round trip per request.
-export async function requireOrgContext() {
+//
+// Pass a callback to also run that page/action's own query in the SAME
+// withRLS transaction as the app-user lookup, instead of the caller opening
+// a second transaction right after. Each transaction pays its own
+// connection-acquisition + SET claims + SET LOCAL ROLE round trips against
+// Supabase, so folding the two together roughly halves that fixed cost per
+// request -- the callback receives the open `tx` so it can run in-transaction
+// queries rather than calling withRLS again itself.
+export async function requireOrgContext(): Promise<{
+  authUserId: string;
+  appUser: AppUser;
+}>;
+export async function requireOrgContext<T>(
+  fn: (tx: TxClient, appUser: AppUser) => Promise<T>,
+): Promise<{ authUserId: string; appUser: AppUser; data: T }>;
+export async function requireOrgContext<T>(fn?: (tx: TxClient, appUser: AppUser) => Promise<T>) {
   const authUser = await getVerifiedAuthUser();
   if (!authUser) redirect("/login");
 
-  const appUser = await withRLS(authUser.id, (tx) =>
-    tx.user.findUnique({
-      where: { authUserId: authUser.id },
-      include: { organization: true },
-    }),
-  );
-  if (!appUser) redirect("/login");
+  let outcome: { appUser: AppUser; data: T | undefined };
+  try {
+    outcome = await withRLS(authUser.id, async (tx) => {
+      const appUser = await tx.user.findUnique({
+        where: { authUserId: authUser.id },
+        include: { organization: true },
+      });
+      if (!appUser) throw new AppUserNotFoundError();
 
-  return { authUserId: authUser.id, appUser };
+      const data = fn ? await fn(tx, appUser) : undefined;
+      return { appUser, data };
+    });
+  } catch (err) {
+    if (err instanceof AppUserNotFoundError) redirect("/login");
+    throw err;
+  }
+
+  return { authUserId: authUser.id, appUser: outcome.appUser, data: outcome.data as T };
 }

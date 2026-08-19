@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,9 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Plus } from "lucide-react";
 
 export default async function ClientsPage() {
-  const { authUserId } = await requireOrgContext();
-
-  const clients = await withRLS(authUserId, (tx) =>
+  const { data: clients } = await requireOrgContext((tx) =>
     tx.client.findMany({ orderBy: { name: "asc" } }),
   );
 

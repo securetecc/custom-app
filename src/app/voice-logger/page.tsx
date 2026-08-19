@@ -1,11 +1,10 @@
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { VoiceLoggerApp } from "@/components/app/voice-logger-app";
 
 export default async function VoiceLoggerPage() {
-  const { authUserId } = await requireOrgContext();
-
-  const [clients, serviceTypes] = await withRLS(authUserId, (tx) =>
+  const {
+    data: [clients, serviceTypes],
+  } = await requireOrgContext((tx) =>
     Promise.all([
       tx.client.findMany({ where: { activeStatus: true }, orderBy: { name: "asc" } }),
       tx.serviceType.findMany({ orderBy: { code: "asc" } }),

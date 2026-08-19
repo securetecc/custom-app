@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
 import { getInvoicePdfSignedUrl } from "@/lib/storage/invoices";
 
 /**
@@ -16,9 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const { authUserId } = await requireOrgContext();
-
-  const invoice = await withRLS(authUserId, (tx) =>
+  const { data: invoice } = await requireOrgContext((tx) =>
     tx.invoice.findUnique({ where: { id }, select: { pdfUrl: true } }),
   );
 
