@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Mic } from "lucide-react";
 
 export default async function DashboardPage() {
   const { authUserId, appUser } = await requireOrgContext();
@@ -71,6 +72,23 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       </div>
+
+      <Link href="/voice-logger">
+        <Card className="border-[#06E1DC]/30 bg-[#071E37] text-white transition-colors hover:border-[#06E1DC]">
+          <CardContent className="flex items-center gap-4 py-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#06E1DC]/15">
+              <Mic className="h-5 w-5 text-[#06E1DC]" />
+            </div>
+            <div>
+              <p className="font-medium">Voice Logger</p>
+              <p className="text-sm text-white/70">
+                Log billable time by speaking naturally — AI classifies the service type and applies
+                billing minimums automatically.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
     </div>
   );
 }

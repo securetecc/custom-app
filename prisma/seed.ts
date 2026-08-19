@@ -18,6 +18,8 @@ const DEFAULT_SERVICE_TYPES = [
   { code: "E-S", label: "Email Service", billingMinimumHours: 0.25, rateOverride: null },
   { code: "O-S", label: "On-Site Service", billingMinimumHours: 1.0, rateOverride: null },
   { code: "L-V", label: "Low Voltage", billingMinimumHours: 1.0, rateOverride: 150 },
+  { code: "W-D", label: "Website Development", billingMinimumHours: 0.25, rateOverride: 50 },
+  { code: "A-I", label: "AI Automation", billingMinimumHours: 0.25, rateOverride: 50 },
 ] as const;
 
 async function main() {

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { TimeEntryDialog } from "@/components/app/time-entry-dialog";
 import { DeleteTimeEntryButton } from "@/components/app/delete-time-entry-button";
 import { AiTimeEntryDialog } from "@/components/app/ai-time-entry-dialog";
 import { BILLABLE_STATUS_LABELS } from "@/lib/validations/time-entry";
-import { Plus, Pencil, Sparkles } from "lucide-react";
+import { Plus, Pencil, Sparkles, Mic } from "lucide-react";
 
 export default async function TimeEntriesPage() {
   const { authUserId } = await requireOrgContext();
@@ -49,6 +50,9 @@ export default async function TimeEntriesPage() {
           <p className="text-muted-foreground">Most recent 100 entries.</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" render={<Link href="/voice-logger" />}>
+            <Mic className="mr-1 h-4 w-4" /> Voice Logger
+          </Button>
           <AiTimeEntryDialog
             clients={clientOptions}
             serviceTypes={serviceTypeOptions}
