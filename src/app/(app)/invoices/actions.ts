@@ -12,6 +12,7 @@ import {
   type InvoicePeriodValues,
 } from "@/lib/validations/invoice";
 import { generateInvoicePdf, buildServiceSummary } from "@/lib/pdf/generate-invoice-pdf";
+import { fetchLogoDataUri } from "@/lib/pdf/logo";
 import {
   archiveInvoicePdf,
   invoicePdfPath,
@@ -355,12 +356,15 @@ export async function generateInvoice(
         totalAmount,
       };
 
-      return { invoiceId: invoice.id, invoiceNumber: number, data };
+      return { invoiceId: invoice.id, invoiceNumber: number, data, logoUrl: organization.logoUrl };
     });
 
     invoiceId = created.invoiceId;
     invoiceNumber = created.invoiceNumber;
     pdfInput = { invoiceId: created.invoiceId, data: created.data };
+    // Fetch outside the transaction -- it's a network call, and the PDF render
+    // below already runs after commit for the same reason.
+    pdfInput.data.organization.logoDataUri = await fetchLogoDataUri(created.logoUrl);
   } catch (err: unknown) {
     return { ok: false, error: errorMessage(err) };
   }
@@ -427,7 +431,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
           periodEnd: invoice.periodEnd.toISOString().slice(0, 10),
           organization: {
             name: invoice.organization.name,
-            logoDataUri: null,
+            logoDataUri: null as string | null,
             phone: invoice.organization.phone,
             brandColorPrimary: invoice.organization.brandColorPrimary,
             brandColorAccent: invoice.organization.brandColorAccent,
@@ -459,6 +463,9 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
         } satisfies InvoicePdfData,
       };
     });
+
+    // Fetch outside the transaction -- it's a network call.
+    data.pdf.organization.logoDataUri = await fetchLogoDataUri(data.invoice.organization.logoUrl);
 
     const pdf = await generateInvoicePdf(data.pdf);
     const path = invoicePdfPath(appUser.organizationId, data.invoice.clientId, id);
