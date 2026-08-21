@@ -13,7 +13,22 @@ import { NextResponse, type NextRequest } from "next/server";
 // (src/lib/cron/auth.ts).
 const PUBLIC_PATHS = ["/login", "/support", "/api/tickets", "/api/cron"];
 
+// The client-facing ticket portal is meant to live at its own hostname
+// (support.securetecc.com) rather than a path under the internal app's
+// domain (manage.securetecc.com). Rewriting that host's root to /support
+// here means the public site's URL bar never shows /support, while reusing
+// the exact same page and backend as everything else -- no separate
+// deployment, no duplicated ticket-submission logic.
+const SUPPORT_HOST = "support.securetecc.com";
+
 export async function proxy(request: NextRequest) {
+  const host = request.headers.get("host")?.split(":")[0];
+  if (host === SUPPORT_HOST && request.nextUrl.pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/support";
+    return NextResponse.rewrite(url);
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
