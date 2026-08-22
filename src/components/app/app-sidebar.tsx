@@ -45,7 +45,7 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
           className="h-auto w-full max-w-[168px]"
         />
       </div>
-      <nav className="flex-1 space-y-1 px-3">
+      <nav className="flex-1 space-y-1 px-3 pt-4">
         {NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin").map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;

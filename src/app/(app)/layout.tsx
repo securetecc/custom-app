@@ -26,12 +26,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             doesn't belong in
             a data-dense daily-use tool. */}
         <header
-          className="flex h-16 shrink-0 items-center justify-between bg-background px-6"
+          className="flex h-16 shrink-0 items-center justify-end bg-background px-6"
           style={{ borderBottom: "2px solid var(--brand-teal)" }}
         >
-          <div>
-            <p className="text-sm font-medium">{appUser.organization.name}</p>
-          </div>
+          {/* No org name here -- the sidebar logo already identifies the
+              brand, so repeating "SecureTECC" in the header was redundant. */}
           <div className="flex items-center gap-3">
             <div className="text-right text-sm">
               <p className="font-medium leading-none">{appUser.name}</p>
