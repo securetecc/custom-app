@@ -2,16 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
+import { withRLS, type TxClient } from "@/lib/db/rls";
 import {
   generateInvoiceSchema,
   invoicePeriodSchema,
-  monthBounds,
-  periodTouchesJanuary,
+  januaryOccurrencesInRange,
+  monthsInRange,
+  parseIsoDate,
+  toIsoDate,
   type GenerateInvoiceValues,
   type InvoicePeriodValues,
 } from "@/lib/validations/invoice";
-import { generateInvoicePdf, buildServiceSummary } from "@/lib/pdf/generate-invoice-pdf";
+import { generateInvoicePdf } from "@/lib/pdf/generate-invoice-pdf";
 import { fetchLogoDataUri } from "@/lib/pdf/logo";
 import {
   archiveInvoicePdf,
@@ -20,6 +22,7 @@ import {
 } from "@/lib/storage/invoices";
 import type { InvoicePdfData } from "@/lib/pdf/types";
 import { notifyInvoiceSent } from "@/lib/email/notify";
+import type { BillingFrequency } from "@/generated/prisma/enums";
 
 export type ActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -30,6 +33,8 @@ export type BillingCandidate = {
   date: string;
   description: string;
   hours: number;
+  // Both null for a Retainer client's entries: hours are shown for
+  // reference, but aren't individually billed (see retainerRate below).
   rate: number | null;
   amount: number | null;
   serviceTypeCode: string;
@@ -37,7 +42,9 @@ export type BillingCandidate = {
 };
 
 export type RecurringCandidate = {
+  /** Composite `${recurringChargeId}:${occurrencePeriodStart}` -- see expandRecurringOccurrences. */
   id: string;
+  recurringChargeId: string;
   description: string;
   amount: number;
   billingFrequency: "Monthly" | "Annual";
@@ -45,16 +52,125 @@ export type RecurringCandidate = {
 
 export type BillingCandidates = {
   clientName: string;
+  billingType: "Hourly" | "Retainer";
+  /** Flat rate billed once per calendar month in the period, for Retainer clients. */
+  retainerRate: number | null;
   periodStart: string;
   periodEnd: string;
   timeEntries: BillingCandidate[];
   recurringCharges: RecurringCandidate[];
-  /** Entries whose rate can't be resolved -- generation will refuse these. */
+  /** Entries whose rate can't be resolved -- generation will refuse these. Hourly clients only. */
   unratedEntryIds: string[];
 };
 
+function monthLabel(date: Date): string {
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+    date,
+  );
+}
+
+/** A charge/retainer row for the PDF's flat line-item table -- no date, hours, or rate. */
+function chargeLineItem(description: string, amount: number): InvoicePdfData["lineItems"][number] {
+  return { date: null, description, hours: null, rate: null, amount };
+}
+
+type PdfOrganizationRow = {
+  name: string;
+  phone: string | null;
+  billerName: string | null;
+  billerAddress1: string | null;
+  billerAddress2: string | null;
+  billerCityStateZip: string | null;
+  billerMobilePhone: string | null;
+  billerEmail: string | null;
+  website: string | null;
+  invoiceForLabel: string | null;
+  checkPayableTo: string | null;
+  acceptedPaymentMethods: string | null;
+};
+
+/** Maps an Organization row to the PDF's letterhead shape. logoDataUri is filled in after, outside the transaction. */
+function buildPdfOrganization(organization: PdfOrganizationRow): InvoicePdfData["organization"] {
+  return {
+    name: organization.name,
+    logoDataUri: null,
+    billerName: organization.billerName,
+    billerAddress1: organization.billerAddress1,
+    billerAddress2: organization.billerAddress2,
+    billerCityStateZip: organization.billerCityStateZip,
+    officePhone: organization.phone,
+    mobilePhone: organization.billerMobilePhone,
+    billerEmail: organization.billerEmail,
+    website: organization.website,
+    invoiceForLabel: organization.invoiceForLabel || "IT Services",
+    checkPayableTo: organization.checkPayableTo,
+    acceptedPaymentMethods: organization.acceptedPaymentMethods,
+  };
+}
+
+type RecurringChargeRow = {
+  id: string;
+  description: string;
+  amount: unknown; // Prisma.Decimal, kept opaque here -- always Number()'d before use
+  billingFrequency: BillingFrequency;
+};
+
 /**
- * Read-only: what *would* go on an invoice for this client + month.
+ * Expands each active recurring charge into one occurrence per calendar
+ * month (Monthly) or per January (Annual) touched by [periodStart,
+ * periodEnd], excluding occurrences already billed on a non-voided invoice.
+ * Shared by loadBillingCandidates (read-only preview) and generateInvoice
+ * (which re-runs this from scratch server-side rather than trusting the
+ * client's selection -- same principle as time-entry rate resolution).
+ */
+async function expandRecurringOccurrences(
+  tx: TxClient,
+  charges: RecurringChargeRow[],
+  periodStart: Date,
+  periodEnd: Date,
+): Promise<(RecurringCandidate & { occurrencePeriodStart: Date; occurrencePeriodEnd: Date })[]> {
+  if (charges.length === 0) return [];
+
+  const months = monthsInRange(periodStart, periodEnd);
+  const januaries = januaryOccurrencesInRange(periodStart, periodEnd);
+  const spansMultipleMonths = months.length > 1;
+
+  const occurrences = charges.flatMap((charge) => {
+    const periods = charge.billingFrequency === "Monthly" ? months : januaries;
+    return periods.map((p) => ({ charge, occStart: p.monthStart, occEnd: p.monthEnd }));
+  });
+  if (occurrences.length === 0) return [];
+
+  const alreadyBilled = await tx.invoiceRecurringCharge.findMany({
+    where: {
+      recurringChargeId: { in: charges.map((c) => c.id) },
+      invoice: { voidedAt: null },
+    },
+    select: { recurringChargeId: true, periodStart: true, periodEnd: true },
+  });
+  const billedKey = (id: string, start: Date, end: Date) =>
+    `${id}:${toIsoDate(start)}:${toIsoDate(end)}`;
+  const billedSet = new Set(
+    alreadyBilled.map((r) => billedKey(r.recurringChargeId, r.periodStart, r.periodEnd)),
+  );
+
+  return occurrences
+    .filter((o) => !billedSet.has(billedKey(o.charge.id, o.occStart, o.occEnd)))
+    .map((o) => ({
+      id: `${o.charge.id}:${toIsoDate(o.occStart)}`,
+      recurringChargeId: o.charge.id,
+      description: spansMultipleMonths
+        ? `${o.charge.description} — ${monthLabel(o.occStart)}`
+        : o.charge.description,
+      amount: Number(o.charge.amount),
+      billingFrequency: o.charge.billingFrequency,
+      occurrencePeriodStart: o.occStart,
+      occurrencePeriodEnd: o.occEnd,
+    }));
+}
+
+/**
+ * Read-only: what *would* go on an invoice for this client + period.
  *
  * Any staff member can run this; it writes nothing.
  */
@@ -65,16 +181,18 @@ export async function loadBillingCandidates(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { clientId, billingMonth } = parsed.data;
-  const { periodStart, periodEnd } = monthBounds(billingMonth);
+  const { clientId } = parsed.data;
+  const periodStart = parseIsoDate(parsed.data.periodStart);
+  const periodEnd = parseIsoDate(parsed.data.periodEnd);
 
   const { authUserId } = await requireOrgContext();
 
   try {
     const result = await withRLS(authUserId, async (tx) => {
       const client = await tx.client.findUniqueOrThrow({ where: { id: clientId } });
+      const isRetainer = client.billingType === "Retainer";
 
-      const [timeEntries, recurringCharges, alreadyBilled] = await Promise.all([
+      const [timeEntries, recurringCharges] = await Promise.all([
         tx.timeEntry.findMany({
           where: {
             clientId,
@@ -89,28 +207,29 @@ export async function loadBillingCandidates(
           where: { clientId, activeStatus: true },
           orderBy: [{ billingFrequency: "asc" }, { description: "asc" }],
         }),
-        // Snapshot rows are how we know a charge was already billed for this
-        // exact period -- the template itself is never stamped.
-        tx.invoiceRecurringCharge.findMany({
-          where: {
-            recurringCharge: { clientId },
-            invoice: { periodStart, periodEnd, voidedAt: null },
-          },
-          select: { recurringChargeId: true },
-        }),
       ]);
-
-      const billedIds = new Set(alreadyBilled.map((r) => r.recurringChargeId));
-      const januaryPeriod = periodTouchesJanuary(periodStart, periodEnd);
 
       const clientRate = client.billingRate ? Number(client.billingRate) : null;
 
       const candidates: BillingCandidate[] = timeEntries.map((entry) => {
+        const hours = Number(entry.durationHours);
+        // Retainer: hours are informational only, never billed per-entry.
+        if (isRetainer) {
+          return {
+            id: entry.id,
+            date: entry.date.toISOString().slice(0, 10),
+            description: entry.description,
+            hours,
+            rate: null,
+            amount: null,
+            serviceTypeCode: entry.serviceType.code,
+            serviceTypeLabel: entry.serviceType.label,
+          };
+        }
         const override = entry.serviceType.rateOverride
           ? Number(entry.serviceType.rateOverride)
           : null;
         const rate = override ?? clientRate;
-        const hours = Number(entry.durationHours);
         return {
           id: entry.id,
           date: entry.date.toISOString().slice(0, 10),
@@ -123,25 +242,20 @@ export async function loadBillingCandidates(
         };
       });
 
-      const applicable: RecurringCandidate[] = recurringCharges
-        .filter(
-          (rc) =>
-            !billedIds.has(rc.id) && (rc.billingFrequency === "Monthly" || januaryPeriod),
-        )
-        .map((rc) => ({
-          id: rc.id,
-          description: rc.description,
-          amount: Number(rc.amount),
-          billingFrequency: rc.billingFrequency,
-        }));
+      const applicable = await expandRecurringOccurrences(tx, recurringCharges, periodStart, periodEnd);
 
       return {
         clientName: client.name,
-        periodStart: periodStart.toISOString().slice(0, 10),
-        periodEnd: periodEnd.toISOString().slice(0, 10),
+        billingType: client.billingType,
+        retainerRate: isRetainer ? clientRate : null,
+        periodStart: toIsoDate(periodStart),
+        periodEnd: toIsoDate(periodEnd),
         timeEntries: candidates,
-        recurringCharges: applicable,
-        unratedEntryIds: candidates.filter((c) => c.rate === null).map((c) => c.id),
+        recurringCharges: applicable.map(
+          ({ occurrencePeriodStart: _s, occurrencePeriodEnd: _e, ...rest }) => rest,
+        ),
+        // Hourly only -- a Retainer entry with no rate isn't an error, it's expected.
+        unratedEntryIds: isRetainer ? [] : candidates.filter((c) => c.rate === null).map((c) => c.id),
       } satisfies BillingCandidates;
     });
 
@@ -165,13 +279,14 @@ export async function generateInvoice(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { clientId, billingMonth, timeEntryIds, recurringChargeIds } = parsed.data;
+  const { clientId, timeEntryIds, recurringChargeOccurrenceIds } = parsed.data;
+  const periodStart = parseIsoDate(parsed.data.periodStart);
+  const periodEnd = parseIsoDate(parsed.data.periodEnd);
 
-  if (timeEntryIds.length === 0 && recurringChargeIds.length === 0) {
+  if (timeEntryIds.length === 0 && recurringChargeOccurrenceIds.length === 0) {
     return { ok: false, error: "Select at least one item to invoice." };
   }
 
-  const { periodStart, periodEnd } = monthBounds(billingMonth);
   const { authUserId, appUser } = await requireOrgContext();
 
   let pdfInput: { invoiceId: string; data: InvoicePdfData } | null = null;
@@ -184,6 +299,7 @@ export async function generateInvoice(
         tx.organization.findUniqueOrThrow({ where: { id: appUser.organizationId } }),
         tx.client.findUniqueOrThrow({ where: { id: clientId } }),
       ]);
+      const isRetainer = client.billingType === "Retainer";
 
       // Re-verify the submitted selection against the DB with the same
       // conditions loadBillingCandidates used. A mismatch means something
@@ -208,45 +324,47 @@ export async function generateInvoice(
         );
       }
 
-      const januaryPeriod = periodTouchesJanuary(periodStart, periodEnd);
-      const charges = await tx.recurringCharge.findMany({
-        where: { id: { in: recurringChargeIds }, clientId, activeStatus: true },
+      // Re-expand from scratch -- never trust the period embedded in a
+      // client-submitted composite id.
+      const allActiveCharges = await tx.recurringCharge.findMany({
+        where: { clientId, activeStatus: true },
       });
-
-      if (charges.length !== recurringChargeIds.length) {
-        throw new ConflictError(
-          "Some selected recurring charges are no longer active. Reload and try again.",
-        );
-      }
-
-      const outOfSeason = charges.filter(
-        (c) => c.billingFrequency === "Annual" && !januaryPeriod,
+      const occurrences = await expandRecurringOccurrences(
+        tx,
+        allActiveCharges,
+        periodStart,
+        periodEnd,
       );
-      if (outOfSeason.length > 0) {
+      const selectedOccurrences = occurrences.filter((o) =>
+        recurringChargeOccurrenceIds.includes(o.id),
+      );
+      if (selectedOccurrences.length !== recurringChargeOccurrenceIds.length) {
         throw new ConflictError(
-          `Annual charges can only be billed in a January period: ${outOfSeason
-            .map((c) => c.description)
-            .join(", ")}`,
-        );
-      }
-
-      const alreadyBilled = await tx.invoiceRecurringCharge.findMany({
-        where: {
-          recurringChargeId: { in: recurringChargeIds },
-          invoice: { periodStart, periodEnd, voidedAt: null },
-        },
-        select: { recurringChargeId: true },
-      });
-      if (alreadyBilled.length > 0) {
-        throw new ConflictError(
-          "One or more recurring charges were already billed for this period.",
+          "Some selected recurring charges are no longer available — they may already be billed, " +
+            "inactive, or outside this period. Reload the review screen and try again.",
         );
       }
 
       // Resolve rates. Refusing is deliberate -- a $0/NaN line item on a real
       // invoice is worse than a failed generation.
       const clientRate = client.billingRate ? Number(client.billingRate) : null;
+      if (isRetainer && clientRate === null) {
+        throw new ConflictError(
+          `${client.name} is billed as Retainer but has no billing rate set. Set one on the client first.`,
+        );
+      }
+
       const lineItems = entries.map((entry) => {
+        const hours = Number(entry.durationHours);
+        if (isRetainer) {
+          return {
+            date: entry.date.toISOString().slice(0, 10),
+            description: entry.description,
+            hours,
+            rate: null as number | null,
+            amount: null as number | null,
+          };
+        }
         const override = entry.serviceType.rateOverride
           ? Number(entry.serviceType.rateOverride)
           : null;
@@ -258,22 +376,30 @@ export async function generateInvoice(
               `billing rate on the client.`,
           );
         }
-        const hours = Number(entry.durationHours);
         return {
           date: entry.date.toISOString().slice(0, 10),
           description: entry.description,
           hours,
           rate,
           amount: Number((hours * rate).toFixed(2)),
-          serviceTypeLabel: entry.serviceType.label,
         };
       });
 
       const totalHours = Number(lineItems.reduce((s, l) => s + l.hours, 0).toFixed(2));
-      const chargeTotal = charges.reduce((s, c) => s + Number(c.amount), 0);
-      const totalAmount = Number(
-        (lineItems.reduce((s, l) => s + l.amount, 0) + chargeTotal).toFixed(2),
-      );
+      const chargeTotal = selectedOccurrences.reduce((s, o) => s + o.amount, 0);
+      // Retainer: flat rate billed once per calendar month in the invoiced
+      // period, replacing the time-based total entirely. Known limitation:
+      // unlike recurring charges, retainer occurrences have no per-month
+      // snapshot ledger yet (no client currently uses Retainer), so
+      // generating two invoices whose periods both touch the same month
+      // isn't blocked the way recurring-charge double-billing is. Revisit
+      // once a real Retainer client exists.
+      const retainerMonths = isRetainer ? monthsInRange(periodStart, periodEnd).length : 0;
+      const retainerTotal = isRetainer ? (clientRate as number) * retainerMonths : 0;
+      const timeTotal = isRetainer
+        ? retainerTotal
+        : lineItems.reduce((s, l) => s + (l.amount ?? 0), 0);
+      const totalAmount = Number((timeTotal + chargeTotal).toFixed(2));
 
       // Atomic per-client sequence. Postgres row-locks the client row for this
       // UPDATE, so two concurrent generations for the same client serialize.
@@ -302,38 +428,42 @@ export async function generateInvoice(
         data: { invoiceId: invoice.id },
       });
 
-      if (charges.length > 0) {
+      if (selectedOccurrences.length > 0) {
         await tx.invoiceRecurringCharge.createMany({
-          data: charges.map((c) => ({
+          data: selectedOccurrences.map((o) => ({
             organizationId: appUser.organizationId,
             invoiceId: invoice.id,
-            recurringChargeId: c.id,
-            description: c.description,
-            amount: c.amount,
-            billingFrequency: c.billingFrequency,
+            recurringChargeId: o.recurringChargeId,
+            description: o.description,
+            amount: o.amount,
+            billingFrequency: o.billingFrequency,
+            periodStart: o.occurrencePeriodStart,
+            periodEnd: o.occurrencePeriodEnd,
           })),
         });
       }
 
-      const monthlyCharges = charges
-        .filter((c) => c.billingFrequency === "Monthly")
-        .map((c) => ({ description: c.description, amount: Number(c.amount) }));
-      const annualCharges = charges
-        .filter((c) => c.billingFrequency === "Annual")
-        .map((c) => ({ description: c.description, amount: Number(c.amount) }));
+      // Charge/retainer rows fold into the same flat table as extra rows,
+      // matching the org's canonical invoice template -- no separate
+      // "Monthly/Annual Recurring Charges" or "Retainer" sections.
+      const chargeRows = selectedOccurrences.map((o) => chargeLineItem(o.description, o.amount));
+      const retainerRow = isRetainer
+        ? [
+            chargeLineItem(
+              retainerMonths > 1
+                ? `${client.name} — Retainer (${retainerMonths} months)`
+                : `${client.name} — Retainer`,
+              retainerTotal,
+            ),
+          ]
+        : [];
 
       const data: InvoicePdfData = {
         invoiceNumber: number,
         issuedAt: new Date().toISOString().slice(0, 10),
         periodStart: periodStart.toISOString().slice(0, 10),
         periodEnd: periodEnd.toISOString().slice(0, 10),
-        organization: {
-          name: organization.name,
-          logoDataUri: null,
-          phone: organization.phone,
-          brandColorPrimary: organization.brandColorPrimary,
-          brandColorAccent: organization.brandColorAccent,
-        },
+        organization: buildPdfOrganization(organization),
         client: {
           name: client.name,
           address1: client.address1,
@@ -341,17 +471,7 @@ export async function generateInvoice(
           cityStateZip: client.cityStateZip,
           phone: client.phone,
         },
-        lineItems: lineItems.map(({ serviceTypeLabel: _label, ...rest }) => rest),
-        monthlyCharges,
-        annualCharges,
-        serviceSummary: buildServiceSummary({
-          organizationName: organization.name,
-          clientName: client.name,
-          totalHours,
-          entryCount: lineItems.length,
-          serviceTypeLabels: lineItems.map((l) => l.serviceTypeLabel),
-          hasRecurring: charges.length > 0,
-        }),
+        lineItems: [...lineItems, ...chargeRows, ...retainerRow],
         totalHours,
         totalAmount,
       };
@@ -404,23 +524,49 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
           recurringCharges: true,
         },
       });
+      const isRetainer = invoice.client.billingType === "Retainer";
 
       const clientRate = invoice.client.billingRate ? Number(invoice.client.billingRate) : null;
       const lineItems = invoice.timeEntries.map((entry) => {
+        const hours = Number(entry.durationHours);
+        if (isRetainer) {
+          return {
+            date: entry.date.toISOString().slice(0, 10),
+            description: entry.description,
+            hours,
+            rate: null as number | null,
+            amount: null as number | null,
+          };
+        }
         const override = entry.serviceType.rateOverride
           ? Number(entry.serviceType.rateOverride)
           : null;
         const rate = override ?? clientRate ?? 0;
-        const hours = Number(entry.durationHours);
         return {
           date: entry.date.toISOString().slice(0, 10),
           description: entry.description,
           hours,
           rate,
           amount: Number((hours * rate).toFixed(2)),
-          serviceTypeLabel: entry.serviceType.label,
         };
       });
+
+      // Charge/retainer rows fold into the same flat table as extra rows.
+      const chargeRows = invoice.recurringCharges.map((c) =>
+        chargeLineItem(c.description, Number(c.amount)),
+      );
+      // Retainer total isn't separately stored -- re-derive it as
+      // (invoice total minus recurring charges), which is exact since
+      // generation computed totalAmount the same way.
+      const recurringTotal = invoice.recurringCharges.reduce((s, c) => s + Number(c.amount), 0);
+      const retainerRow = isRetainer
+        ? [
+            chargeLineItem(
+              `${invoice.client.name} — Retainer`,
+              Number((Number(invoice.totalAmount) - recurringTotal).toFixed(2)),
+            ),
+          ]
+        : [];
 
       return {
         invoice,
@@ -429,13 +575,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
           issuedAt: invoice.createdAt.toISOString().slice(0, 10),
           periodStart: invoice.periodStart.toISOString().slice(0, 10),
           periodEnd: invoice.periodEnd.toISOString().slice(0, 10),
-          organization: {
-            name: invoice.organization.name,
-            logoDataUri: null as string | null,
-            phone: invoice.organization.phone,
-            brandColorPrimary: invoice.organization.brandColorPrimary,
-            brandColorAccent: invoice.organization.brandColorAccent,
-          },
+          organization: buildPdfOrganization(invoice.organization),
           client: {
             name: invoice.client.name,
             address1: invoice.client.address1,
@@ -443,21 +583,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
             cityStateZip: invoice.client.cityStateZip,
             phone: invoice.client.phone,
           },
-          lineItems: lineItems.map(({ serviceTypeLabel: _l, ...rest }) => rest),
-          monthlyCharges: invoice.recurringCharges
-            .filter((c) => c.billingFrequency === "Monthly")
-            .map((c) => ({ description: c.description, amount: Number(c.amount) })),
-          annualCharges: invoice.recurringCharges
-            .filter((c) => c.billingFrequency === "Annual")
-            .map((c) => ({ description: c.description, amount: Number(c.amount) })),
-          serviceSummary: buildServiceSummary({
-            organizationName: invoice.organization.name,
-            clientName: invoice.client.name,
-            totalHours: Number(invoice.totalHours),
-            entryCount: lineItems.length,
-            serviceTypeLabels: lineItems.map((l) => l.serviceTypeLabel),
-            hasRecurring: invoice.recurringCharges.length > 0,
-          }),
+          lineItems: [...lineItems, ...chargeRows, ...retainerRow],
           totalHours: Number(invoice.totalHours),
           totalAmount: Number(invoice.totalAmount),
         } satisfies InvoicePdfData,

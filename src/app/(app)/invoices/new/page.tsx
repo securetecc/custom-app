@@ -15,7 +15,7 @@ export default async function NewInvoicePage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Generate invoice</h1>
         <p className="text-muted-foreground">
-          Pick a client and billing month, review what will be billed, then create a draft.
+          Pick a client and billing period, review what will be billed, then create a draft.
         </p>
       </div>
       <InvoiceGenerationFlow clients={clients} />

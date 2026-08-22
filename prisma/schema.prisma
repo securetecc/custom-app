@@ -81,6 +81,24 @@ model Organization {
   // Sends are blocked until this is true — see lib/email.
   emailDomainVerified Boolean  @default(false)
   createdAt           DateTime @default(now())
+
+  // --- Invoice letterhead -------------------------------------------------
+  // The invoice PDF's letterhead names an individual biller (e.g. the owner),
+  // not the org itself -- distinct from `name` above. `phone` (below the
+  // relations) doubles as the letterhead's "Office:" line; these are the
+  // fields with no existing equivalent. All optional: invoices just render
+  // the corresponding line blank until Settings → Organization is filled in.
+  billerName             String?
+  billerAddress1         String?
+  billerAddress2         String?
+  billerCityStateZip     String?
+  billerMobilePhone      String?
+  billerEmail            String?
+  website                String?
+  // Invoice PDF's "FOR:" row. Falls back to "IT Services" at render time when null.
+  invoiceForLabel        String?
+  checkPayableTo         String?
+  acceptedPaymentMethods String?
   // Per-org ticket counter, incremented atomically alongside ticket creation
   // to produce TKT-0001 (same approach as Client.lastInvoiceSequence).
   // Phase 6 note: the Sheets migration must seed this to the highest existing
@@ -236,6 +254,15 @@ model InvoiceRecurringCharge {
   description       String
   amount            Decimal          @db.Decimal(10, 2)
   billingFrequency  BillingFrequency
+  // The specific calendar month (Monthly) or January (Annual) this row
+  // covers -- distinct from the parent Invoice's own periodStart/periodEnd,
+  // which can now span many months. "Already billed?" is checked against
+  // THIS range, not the invoice's, so a charge can't be double-billed by
+  // mixing single-month and multi-month invoice generations for overlapping
+  // months. Backfilled from the parent invoice's period for rows that
+  // predate multi-month invoicing (always single-month, so it's exact).
+  periodStart       DateTime         @db.Date
+  periodEnd         DateTime         @db.Date
   createdAt         DateTime         @default(now())
 
   @@index([organizationId])

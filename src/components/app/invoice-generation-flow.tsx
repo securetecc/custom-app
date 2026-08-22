@@ -32,6 +32,53 @@ import { formatCurrency, formatDate, formatHours } from "@/lib/format";
 
 type ClientOption = { id: string; name: string };
 
+type Preset = "this-month" | "last-month" | "past-3" | "past-6" | "past-12" | "custom";
+
+const PRESET_LABELS: Record<Preset, string> = {
+  "this-month": "This month",
+  "last-month": "Last month",
+  "past-3": "Past 3 months",
+  "past-6": "Past 6 months",
+  "past-12": "Past 12 months",
+  custom: "Custom range",
+};
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Resolves a preset (or the custom start/end pair) to a concrete
+ * [periodStart, periodEnd] range, in UTC. "Past N months" means the N most
+ * recently *completed* calendar months -- not including the current,
+ * still-open one -- matching how "last month's invoice" is normally meant.
+ */
+function resolvePeriod(
+  preset: Preset,
+  customStart: string,
+  customEnd: string,
+): { periodStart: string; periodEnd: string } | null {
+  if (preset === "custom") {
+    if (!customStart || !customEnd) return null;
+    return { periodStart: customStart, periodEnd: customEnd };
+  }
+
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const spans: Record<Exclude<Preset, "custom">, [number, number]> = {
+    "this-month": [0, 0],
+    "last-month": [1, 1],
+    "past-3": [3, 1],
+    "past-6": [6, 1],
+    "past-12": [12, 1],
+  };
+  const [monthsAgoStart, monthsAgoEnd] = spans[preset];
+  const periodStart = new Date(Date.UTC(y, m - monthsAgoStart, 1));
+  const periodEnd = new Date(Date.UTC(y, m - monthsAgoEnd + 1, 0));
+  return { periodStart: isoDate(periodStart), periodEnd: isoDate(periodEnd) };
+}
+
 /**
  * Two-step flow, mirroring the input -> review shape of
  * ai-time-entry-dialog.tsx but as a full page (the review table is far too
@@ -48,7 +95,9 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
 
   const [step, setStep] = useState<"select" | "review">("select");
   const [clientId, setClientId] = useState("");
-  const [billingMonth, setBillingMonth] = useState(defaultBillingMonth());
+  const [preset, setPreset] = useState<Preset>("last-month");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -61,8 +110,13 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
       toast.error("Select a client first.");
       return;
     }
+    const period = resolvePeriod(preset, customStart, customEnd);
+    if (!period) {
+      toast.error("Pick a start and end date.");
+      return;
+    }
     setLoading(true);
-    const result = await loadBillingCandidates({ clientId, billingMonth });
+    const result = await loadBillingCandidates({ clientId, ...period });
     setLoading(false);
 
     if (!result.ok) {
@@ -72,7 +126,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
 
     const data = result.data;
     if (data.timeEntries.length === 0 && data.recurringCharges.length === 0) {
-      toast.error("Nothing unbilled for that client and month.");
+      toast.error("Nothing unbilled for that client and period.");
       return;
     }
 
@@ -90,12 +144,14 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
   }
 
   async function handleGenerate() {
+    const period = resolvePeriod(preset, customStart, customEnd);
+    if (!period || !candidates) return;
     setSubmitting(true);
     const result = await generateInvoice({
       clientId,
-      billingMonth,
+      ...period,
       timeEntryIds: [...selectedEntries],
-      recurringChargeIds: [...selectedCharges],
+      recurringChargeOccurrenceIds: [...selectedCharges],
     });
     setSubmitting(false);
 
@@ -159,17 +215,47 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="billingMonth">Billing month</Label>
-            <Input
-              id="billingMonth"
-              type="month"
-              value={billingMonth}
-              onChange={(e) => setBillingMonth(e.target.value)}
-            />
+            <Label htmlFor="period">Billing period</Label>
+            <Select value={preset} onValueChange={(v) => setPreset((v ?? "last-month") as Preset)}>
+              <SelectTrigger id="period">
+                <SelectValue>{(value) => PRESET_LABELS[value as Preset]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(PRESET_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
-              Annual recurring charges are only included for a January period.
+              A Monthly recurring charge bills once per calendar month the period touches; an
+              Annual charge bills once per January it touches.
             </p>
           </div>
+
+          {preset === "custom" && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="customStart">Start date</Label>
+                <Input
+                  id="customStart"
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customEnd">End date</Label>
+                <Input
+                  id="customEnd"
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
           <Button onClick={handleLoad} disabled={loading} className="w-full">
             {loading ? "Loading…" : "Load billable items"}
@@ -321,11 +407,4 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
       </div>
     </div>
   );
-}
-
-function defaultBillingMonth(): string {
-  // Default to last month -- you almost always invoice a period that's closed.
-  const now = new Date();
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }

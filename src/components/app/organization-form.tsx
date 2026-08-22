@@ -130,6 +130,81 @@ export function OrganizationForm({ defaultValues }: { defaultValues: Organizatio
           </div>
         </div>
 
+        <div className="space-y-4 border-t pt-6">
+          <div>
+            <h2 className="font-medium">Invoice letterhead</h2>
+            <p className="text-sm text-muted-foreground">
+              The person and contact details printed on invoice PDFs — separate from the
+              organization name above.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="billerName">Biller name</Label>
+              <Input id="billerName" placeholder="e.g. Tony Gregory" {...register("billerName")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invoiceForLabel">&ldquo;For&rdquo; label</Label>
+              <Input id="invoiceForLabel" placeholder="IT Services" {...register("invoiceForLabel")} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="billerAddress1">Address line 1</Label>
+              <Input id="billerAddress1" {...register("billerAddress1")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="billerAddress2">Address line 2</Label>
+              <Input id="billerAddress2" placeholder="e.g. MailBox 220" {...register("billerAddress2")} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="billerCityStateZip">City, state, ZIP</Label>
+            <Input id="billerCityStateZip" {...register("billerCityStateZip")} />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="billerMobilePhone">Mobile phone</Label>
+              <Input id="billerMobilePhone" {...register("billerMobilePhone")} />
+              <p className="text-xs text-muted-foreground">
+                &ldquo;Office:&rdquo; uses the phone number above; this is the &ldquo;Mobile:&rdquo; line.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="billerEmail">Biller email</Label>
+              <Input id="billerEmail" type="email" {...register("billerEmail")} />
+              {errors.billerEmail && (
+                <p className="text-xs text-destructive">{errors.billerEmail.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="website">Website</Label>
+            <Input id="website" placeholder="https://securetecc.com" {...register("website")} />
+            {errors.website && <p className="text-xs text-destructive">{errors.website.message}</p>}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="checkPayableTo">Checks payable to</Label>
+              <Input id="checkPayableTo" placeholder="e.g. Tony Gregory" {...register("checkPayableTo")} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="acceptedPaymentMethods">Accepted payment methods</Label>
+              <Input
+                id="acceptedPaymentMethods"
+                placeholder="e.g. ACH, Zelle, PayPal, and Venmo"
+                {...register("acceptedPaymentMethods")}
+              />
+            </div>
+          </div>
+        </div>
+
         <Button type="submit" disabled={submitting}>
           {submitting ? "Saving…" : "Save organization"}
         </Button>

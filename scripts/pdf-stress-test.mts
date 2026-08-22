@@ -9,13 +9,13 @@
  * duplicated/misplaced totals, split rows, and the Address2-empty comma rule.
  */
 import { writeFileSync } from "node:fs";
-import { generateInvoicePdf, buildServiceSummary } from "../src/lib/pdf/generate-invoice-pdf";
+import { generateInvoicePdf } from "../src/lib/pdf/generate-invoice-pdf";
 import { formatAddressLine } from "../src/lib/format";
-import type { InvoicePdfData } from "../src/lib/pdf/types";
+import type { InvoicePdfData, InvoicePdfLineItem } from "../src/lib/pdf/types";
 
 const SERVICE_LABELS = ["Remote Service", "On-Site Service", "Phone Service", "Low Voltage"];
 
-function makeLineItems(count: number) {
+function makeLineItems(count: number): InvoicePdfLineItem[] {
   return Array.from({ length: count }, (_, i) => {
     const day = (i % 28) + 1;
     const hours = [0.25, 0.5, 1, 1.5, 2, 3.25][i % 6];
@@ -33,18 +33,18 @@ function makeLineItems(count: number) {
   });
 }
 
+function chargeItem(description: string, amount: number): InvoicePdfLineItem {
+  return { date: null, description, hours: null, rate: null, amount };
+}
+
 function baseData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {
   const lineItems = overrides.lineItems ?? makeLineItems(70);
-  const totalHours = Number(lineItems.reduce((s, l) => s + l.hours, 0).toFixed(2));
-  const lineTotal = lineItems.reduce((s, l) => s + l.amount, 0);
-  const monthlyCharges = overrides.monthlyCharges ?? [
-    { description: "Managed Antivirus — 24 endpoints", amount: 240 },
-    { description: "Offsite Backup — 500GB", amount: 95 },
-  ];
-  const annualCharges = overrides.annualCharges ?? [];
-  const recurringTotal =
-    monthlyCharges.reduce((s, c) => s + c.amount, 0) +
-    annualCharges.reduce((s, c) => s + c.amount, 0);
+  const totalHours = Number(
+    lineItems.reduce((s, l) => s + (l.hours ?? 0), 0).toFixed(2),
+  );
+  const totalAmount = Number(
+    lineItems.reduce((s, l) => s + (l.amount ?? 0), 0).toFixed(2),
+  );
 
   return {
     invoiceNumber: "ACME-00001",
@@ -54,9 +54,17 @@ function baseData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {
     organization: {
       name: "SecureTECC",
       logoDataUri: null,
-      phone: "877.707.TECC",
-      brandColorPrimary: "#071E37",
-      brandColorAccent: "#06E1DC",
+      billerName: "Tony Gregory",
+      billerAddress1: "365 E. Avenida De Los Arboles",
+      billerAddress2: "MailBox 220",
+      billerCityStateZip: "Thousand Oaks, CA 91360",
+      officePhone: "805.888.8322",
+      mobilePhone: "805.815.6446",
+      billerEmail: "tgregory@securetecc.com",
+      website: "https://securetecc.com",
+      invoiceForLabel: "IT Services",
+      checkPayableTo: "Tony Gregory",
+      acceptedPaymentMethods: "ACH, Zelle, PayPal, and Venmo",
     },
     client: {
       name: "Acme Manufacturing, Inc.",
@@ -66,18 +74,8 @@ function baseData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {
       phone: "(217) 555-0142",
     },
     lineItems,
-    monthlyCharges,
-    annualCharges,
-    serviceSummary: buildServiceSummary({
-      organizationName: "SecureTECC",
-      clientName: "Acme Manufacturing, Inc.",
-      totalHours,
-      entryCount: lineItems.length,
-      serviceTypeLabels: SERVICE_LABELS,
-      hasRecurring: monthlyCharges.length + annualCharges.length > 0,
-    }),
     totalHours,
-    totalAmount: Number((lineTotal + recurringTotal).toFixed(2)),
+    totalAmount,
     ...overrides,
   };
 }
@@ -97,23 +95,26 @@ function check(label: string, ok: boolean, detail = "") {
 }
 
 async function main() {
-  // 1. Multi-page: 70 entries must span several pages.
-  const big = await render("multipage", baseData());
+  const monthlyCharges = [
+    chargeItem("Managed Antivirus — 24 endpoints", 240),
+    chargeItem("Offsite Backup — 500GB", 95),
+  ];
+
+  // 1. Multi-page: 70 entries + recurring charges must span several pages.
+  const bigLineItems = [...makeLineItems(70), ...monthlyCharges];
+  const big = await render("multipage", baseData({ lineItems: bigLineItems }));
   check("multi-page invoice renders", big.bytes > 0, `${big.pageCount} pages, ${big.bytes} bytes`);
   check("spans 3+ pages", big.pageCount >= 3, `${big.pageCount} pages`);
 
-  // 2. Totals must appear exactly once, on the last page. "Total Due" is
+  // 2. Totals must appear exactly once, on the last page. The totals block is
   //    deliberately NOT `fixed` -- a fixed element repeats on every page,
   //    which is precisely the duplicated-totals failure mode.
   //
   //    react-pdf embeds subset fonts, so the text can't be read out of the
-  //    raw PDF bytes here without a full extractor. Verified out-of-band with
-  //    pdfjs-dist against these same fixtures:
-  //      multipage(11pp), no-address2(2pp), single-page(1pp),
-  //      annual(2pp), recurring-only(1pp)
-  //    -> "Total Due" occurred exactly once in every file, always on the
-  //       final page, with correct "Page X of Y" footers on every page.
-  //    Re-run that check if the totals/footer markup changes.
+  //    raw PDF bytes here without a full extractor. Verify out-of-band with
+  //    pdfjs-dist against these fixtures if the totals/footer markup changes:
+  //    "TOTAL" should occur exactly once per file, always on the final page,
+  //    with the navy footer band on every page.
 
   // 3. Address2 empty -> no stray comma.
   check(
@@ -149,39 +150,42 @@ async function main() {
   check("address2-empty invoice renders", noAddr2.bytes > 0, `${noAddr2.pageCount} page(s)`);
 
   // 4. Single page, no recurring charges.
-  const small = await render(
-    "single-page",
-    baseData({ lineItems: makeLineItems(3), monthlyCharges: [], annualCharges: [] }),
-  );
+  const small = await render("single-page", baseData({ lineItems: makeLineItems(3) }));
   check("single-page invoice stays one page", small.pageCount === 1, `${small.pageCount} page(s)`);
 
-  // 5. Annual charges section (January period).
+  // 5. Annual charge row (January period).
   const annual = await render(
     "annual",
     baseData({
-      lineItems: makeLineItems(5),
+      lineItems: [...makeLineItems(5), chargeItem("Annual Domain & SSL Renewal", 480)],
       periodStart: "2026-01-01",
       periodEnd: "2026-01-31",
-      annualCharges: [{ description: "Annual Domain & SSL Renewal", amount: 480 }],
     }),
   );
-  check("annual-charges invoice renders", annual.bytes > 0, `${annual.pageCount} page(s)`);
+  check("annual-charge invoice renders", annual.bytes > 0, `${annual.pageCount} page(s)`);
 
   // 6. Recurring-only invoice (no time entries at all).
-  const recurringOnly = await render(
-    "recurring-only",
-    baseData({ lineItems: [] }),
-  );
+  const recurringOnly = await render("recurring-only", baseData({ lineItems: monthlyCharges }));
   check(
     "recurring-only invoice renders",
     recurringOnly.bytes > 0,
     `${recurringOnly.pageCount} page(s)`,
   );
 
+  // 7. Retainer row -- blank date/hours/rate, single flat amount.
+  const retainer = await render(
+    "retainer",
+    baseData({
+      lineItems: [...makeLineItems(6), chargeItem("Acme Manufacturing, Inc. — Retainer", 2500)],
+    }),
+  );
+  check("retainer invoice renders", retainer.bytes > 0, `${retainer.pageCount} page(s)`);
+
   console.log(results.join("\n"));
   console.log(
     "\nWrote: /tmp/invoice-multipage.pdf, /tmp/invoice-no-address2.pdf, " +
-      "/tmp/invoice-single-page.pdf, /tmp/invoice-annual.pdf, /tmp/invoice-recurring-only.pdf",
+      "/tmp/invoice-single-page.pdf, /tmp/invoice-annual.pdf, /tmp/invoice-recurring-only.pdf, " +
+      "/tmp/invoice-retainer.pdf",
   );
   if (results.some((r) => r.startsWith("FAIL"))) process.exit(1);
 }

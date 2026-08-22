@@ -12,6 +12,18 @@ export const organizationFormSchema = z.object({
   logoUrl: z.string().url("Enter a valid URL").or(z.literal("")),
   brandColorPrimary: z.string().regex(HEX, "Use a hex colour like #071E37"),
   brandColorAccent: z.string().regex(HEX, "Use a hex colour like #06E1DC"),
+
+  // Invoice letterhead -- see Organization.billerName etc. in schema.prisma.
+  billerName: z.string().optional().or(z.literal("")),
+  billerAddress1: z.string().optional().or(z.literal("")),
+  billerAddress2: z.string().optional().or(z.literal("")),
+  billerCityStateZip: z.string().optional().or(z.literal("")),
+  billerMobilePhone: z.string().optional().or(z.literal("")),
+  billerEmail: z.string().email("Enter a valid email").or(z.literal("")),
+  website: z.string().url("Enter a valid URL").or(z.literal("")),
+  invoiceForLabel: z.string().optional().or(z.literal("")),
+  checkPayableTo: z.string().optional().or(z.literal("")),
+  acceptedPaymentMethods: z.string().optional().or(z.literal("")),
 });
 
 export type OrganizationFormValues = z.infer<typeof organizationFormSchema>;
