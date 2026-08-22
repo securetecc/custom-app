@@ -11,6 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // It is NOT unprotected: those routes verify `Authorization: Bearer
 // $CRON_SECRET` themselves and fail closed when the secret is unset
 // (src/lib/cron/auth.ts).
+// "/support" (a startsWith prefix match below) already covers "/support/status".
 const PUBLIC_PATHS = ["/login", "/support", "/api/tickets", "/api/cron"];
 
 // The client-facing ticket portal is meant to live at its own hostname

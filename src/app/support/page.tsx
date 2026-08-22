@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { SupportForm, SupportHeader } from "@/components/app/support-form";
 
 export const metadata: Metadata = {
@@ -48,6 +49,12 @@ export default function SupportPage() {
 
           <p className="mt-6 text-center text-[13px] text-[rgba(255,255,255,0.55)]">
             Urgent and business-stopping? Call us at 877.707.TECC.
+          </p>
+          <p className="mt-2 text-center text-[13px] text-[rgba(255,255,255,0.55)]">
+            Already submitted a request?{" "}
+            <Link href="/support/status" className="text-[#06E1DC] underline">
+              Check its status
+            </Link>
           </p>
         </div>
       </main>

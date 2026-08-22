@@ -35,6 +35,7 @@ export default async function InvoiceDetailPage({
         organization: { select: { emailDomainVerified: true } },
         timeEntries: { include: { serviceType: true }, orderBy: { date: "asc" } },
         recurringCharges: true,
+        reimbursableExpenses: { orderBy: { date: "asc" } },
       },
     }),
   );
@@ -104,6 +105,7 @@ export default async function InvoiceDetailPage({
               totalAmount={Number(invoice.totalAmount)}
               timeEntryCount={invoice.timeEntries.length}
               recurringChargeCount={invoice.recurringCharges.length}
+              reimbursableExpenseCount={invoice.reimbursableExpenses.length}
             />
           )}
         </div>
@@ -200,6 +202,36 @@ export default async function InvoiceDetailPage({
                   </TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(Number(charge.amount))}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      {invoice.reimbursableExpenses.length > 0 && (
+        <Card>
+          <div className="border-b px-4 py-3">
+            <h2 className="font-medium">
+              Reimbursable expenses ({invoice.reimbursableExpenses.length})
+            </h2>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invoice.reimbursableExpenses.map((expense) => (
+                <TableRow key={expense.id}>
+                  <TableCell className="whitespace-nowrap">{formatDate(expense.date)}</TableCell>
+                  <TableCell className="max-w-md truncate">{expense.description}</TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(Number(expense.amount))}
                   </TableCell>
                 </TableRow>
               ))}

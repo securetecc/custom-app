@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { submitPublicTicket } from "@/app/support/actions";
 import {
   ISSUE_TYPES,
@@ -54,6 +55,12 @@ export function SupportForm() {
         <p className="text-[15px] leading-[1.6] text-[rgba(255,255,255,0.74)]">
           We&apos;ve logged your request and the team has been notified. Keep this number for
           reference — we&apos;ll follow up by email at the address you provided.
+        </p>
+        <p className="mt-4 text-[13px] text-[rgba(255,255,255,0.55)]">
+          <Link href="/support/status" className="text-[#06E1DC] underline">
+            Check your request&apos;s status
+          </Link>{" "}
+          any time.
         </p>
       </div>
     );

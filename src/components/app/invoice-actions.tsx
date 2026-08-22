@@ -115,6 +115,7 @@ export function VoidInvoiceDialog({
   totalAmount,
   timeEntryCount,
   recurringChargeCount,
+  reimbursableExpenseCount,
 }: {
   invoiceId: string;
   invoiceNumber: string;
@@ -122,6 +123,7 @@ export function VoidInvoiceDialog({
   totalAmount: number;
   timeEntryCount: number;
   recurringChargeCount: number;
+  reimbursableExpenseCount: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -178,10 +180,16 @@ export function VoidInvoiceDialog({
 
           <dt className="text-muted-foreground">Recurring charges released</dt>
           <dd className="text-right font-medium">{recurringChargeCount}</dd>
+
+          <dt className="text-muted-foreground">Expenses released</dt>
+          <dd className="text-right font-medium">{reimbursableExpenseCount}</dd>
         </dl>
 
         <p className="text-sm text-muted-foreground">
-          Those {timeEntryCount} time {timeEntryCount === 1 ? "entry" : "entries"} become
+          Those {timeEntryCount} time {timeEntryCount === 1 ? "entry" : "entries"}
+          {reimbursableExpenseCount > 0
+            ? ` and ${reimbursableExpenseCount} expense${reimbursableExpenseCount === 1 ? "" : "s"} become`
+            : " become"}{" "}
           unbilled and can be invoiced again.
         </p>
 

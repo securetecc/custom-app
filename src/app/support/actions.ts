@@ -15,11 +15,68 @@ import {
 import { notifyNewTicket } from "@/lib/email/notify";
 
 // NOTE: every export from a "use server" file is a callable server action.
-// Keep this file to exactly the one action the public form needs.
 
 export type SubmitResult =
   | { ok: true; ticketNumber: string }
   | { ok: false; error: string };
+
+export type TicketStatusResult =
+  | {
+      ok: true;
+      found: true;
+      ticketNumber: string;
+      status: string;
+      submittedAt: string;
+      issueType: string;
+    }
+  | { ok: true; found: false }
+  | { ok: false; error: string };
+
+/**
+ * Public ticket-status lookup, gated on ticket number + the email it was
+ * filed under (not ticket number alone -- those are sequential and
+ * guessable). Calls a SECURITY DEFINER SQL function rather than querying the
+ * table directly: `anon` has no SELECT policy on `tickets` at all, by design
+ * (see 0001_rls_policies.sql), and a blanket policy can't be scoped to "only
+ * the row this specific query's WHERE matched." The function bypasses RLS
+ * internally and returns only a narrow, safe column set -- see
+ * supabase/migrations/0003_reimbursables_addon_audit_ticket_lookup.sql.
+ *
+ * Returns `found: false` (not an error) on any mismatch, on EITHER field --
+ * never signals which one was wrong.
+ */
+export async function lookupTicketStatus(
+  ticketNumber: string,
+  contactEmail: string,
+): Promise<TicketStatusResult> {
+  const trimmedNumber = ticketNumber.trim();
+  const trimmedEmail = contactEmail.trim();
+  if (!trimmedNumber || !trimmedEmail) {
+    return { ok: false, error: "Enter both your ticket number and email." };
+  }
+
+  try {
+    const rows = await withRLS(null, (tx) =>
+      tx.$queryRaw<
+        { ticket_number: string; status: string; submitted_at: Date; issue_type: string }[]
+      >`select * from public.lookup_ticket_status(${trimmedNumber}, ${trimmedEmail})`,
+    );
+
+    const row = rows[0];
+    if (!row) return { ok: true, found: false };
+
+    return {
+      ok: true,
+      found: true,
+      ticketNumber: row.ticket_number,
+      status: row.status,
+      submittedAt: row.submitted_at.toISOString(),
+      issueType: row.issue_type,
+    };
+  } catch {
+    return { ok: false, error: "Something went wrong looking that up. Please try again." };
+  }
+}
 
 /**
  * Public, unauthenticated ticket submission.

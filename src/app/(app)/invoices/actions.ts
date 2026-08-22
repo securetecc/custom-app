@@ -50,6 +50,13 @@ export type RecurringCandidate = {
   billingFrequency: "Monthly" | "Annual";
 };
 
+export type ReimbursableCandidate = {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+};
+
 export type BillingCandidates = {
   clientName: string;
   billingType: "Hourly" | "Retainer";
@@ -59,6 +66,7 @@ export type BillingCandidates = {
   periodEnd: string;
   timeEntries: BillingCandidate[];
   recurringCharges: RecurringCandidate[];
+  reimbursableExpenses: ReimbursableCandidate[];
   /** Entries whose rate can't be resolved -- generation will refuse these. Hourly clients only. */
   unratedEntryIds: string[];
 };
@@ -192,7 +200,7 @@ export async function loadBillingCandidates(
       const client = await tx.client.findUniqueOrThrow({ where: { id: clientId } });
       const isRetainer = client.billingType === "Retainer";
 
-      const [timeEntries, recurringCharges] = await Promise.all([
+      const [timeEntries, recurringCharges, reimbursableExpenses] = await Promise.all([
         tx.timeEntry.findMany({
           where: {
             clientId,
@@ -206,6 +214,14 @@ export async function loadBillingCandidates(
         tx.recurringCharge.findMany({
           where: { clientId, activeStatus: true },
           orderBy: [{ billingFrequency: "asc" }, { description: "asc" }],
+        }),
+        tx.reimbursableExpense.findMany({
+          where: {
+            clientId,
+            invoiceId: null, // unbilled only
+            date: { gte: periodStart, lte: periodEnd },
+          },
+          orderBy: { date: "asc" },
         }),
       ]);
 
@@ -254,6 +270,12 @@ export async function loadBillingCandidates(
         recurringCharges: applicable.map(
           ({ occurrencePeriodStart: _s, occurrencePeriodEnd: _e, ...rest }) => rest,
         ),
+        reimbursableExpenses: reimbursableExpenses.map((e) => ({
+          id: e.id,
+          date: e.date.toISOString().slice(0, 10),
+          description: e.description,
+          amount: Number(e.amount),
+        })),
         // Hourly only -- a Retainer entry with no rate isn't an error, it's expected.
         unratedEntryIds: isRetainer ? [] : candidates.filter((c) => c.rate === null).map((c) => c.id),
       } satisfies BillingCandidates;
@@ -279,11 +301,16 @@ export async function generateInvoice(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { clientId, timeEntryIds, recurringChargeOccurrenceIds } = parsed.data;
+  const { clientId, timeEntryIds, recurringChargeOccurrenceIds, reimbursableExpenseIds } =
+    parsed.data;
   const periodStart = parseIsoDate(parsed.data.periodStart);
   const periodEnd = parseIsoDate(parsed.data.periodEnd);
 
-  if (timeEntryIds.length === 0 && recurringChargeOccurrenceIds.length === 0) {
+  if (
+    timeEntryIds.length === 0 &&
+    recurringChargeOccurrenceIds.length === 0 &&
+    reimbursableExpenseIds.length === 0
+  ) {
     return { ok: false, error: "Select at least one item to invoice." };
   }
 
@@ -345,6 +372,23 @@ export async function generateInvoice(
         );
       }
 
+      // Same re-verification principle as time entries above.
+      const reimbursables = await tx.reimbursableExpense.findMany({
+        where: {
+          id: { in: reimbursableExpenseIds },
+          clientId,
+          invoiceId: null,
+          date: { gte: periodStart, lte: periodEnd },
+        },
+        orderBy: { date: "asc" },
+      });
+      if (reimbursables.length !== reimbursableExpenseIds.length) {
+        throw new ConflictError(
+          "Some selected expenses are no longer available to invoice — they may have been " +
+            "edited or invoiced elsewhere. Reload the review screen and try again.",
+        );
+      }
+
       // Resolve rates. Refusing is deliberate -- a $0/NaN line item on a real
       // invoice is worse than a failed generation.
       const clientRate = client.billingRate ? Number(client.billingRate) : null;
@@ -387,6 +431,7 @@ export async function generateInvoice(
 
       const totalHours = Number(lineItems.reduce((s, l) => s + l.hours, 0).toFixed(2));
       const chargeTotal = selectedOccurrences.reduce((s, o) => s + o.amount, 0);
+      const reimbursableTotal = reimbursables.reduce((s, e) => s + Number(e.amount), 0);
       // Retainer: flat rate billed once per calendar month in the invoiced
       // period, replacing the time-based total entirely. Known limitation:
       // unlike recurring charges, retainer occurrences have no per-month
@@ -399,7 +444,7 @@ export async function generateInvoice(
       const timeTotal = isRetainer
         ? retainerTotal
         : lineItems.reduce((s, l) => s + (l.amount ?? 0), 0);
-      const totalAmount = Number((timeTotal + chargeTotal).toFixed(2));
+      const totalAmount = Number((timeTotal + chargeTotal + reimbursableTotal).toFixed(2));
 
       // Atomic per-client sequence. Postgres row-locks the client row for this
       // UPDATE, so two concurrent generations for the same client serialize.
@@ -428,6 +473,13 @@ export async function generateInvoice(
         data: { invoiceId: invoice.id },
       });
 
+      if (reimbursables.length > 0) {
+        await tx.reimbursableExpense.updateMany({
+          where: { id: { in: reimbursables.map((e) => e.id) } },
+          data: { invoiceId: invoice.id },
+        });
+      }
+
       if (selectedOccurrences.length > 0) {
         await tx.invoiceRecurringCharge.createMany({
           data: selectedOccurrences.map((o) => ({
@@ -443,10 +495,17 @@ export async function generateInvoice(
         });
       }
 
-      // Charge/retainer rows fold into the same flat table as extra rows,
-      // matching the org's canonical invoice template -- no separate
+      // Charge/retainer/expense rows fold into the same flat table as extra
+      // rows, matching the org's canonical invoice template -- no separate
       // "Monthly/Annual Recurring Charges" or "Retainer" sections.
       const chargeRows = selectedOccurrences.map((o) => chargeLineItem(o.description, o.amount));
+      const expenseRows = reimbursables.map((e) => ({
+        date: e.date.toISOString().slice(0, 10),
+        description: e.description,
+        hours: null,
+        rate: null,
+        amount: Number(e.amount),
+      }));
       const retainerRow = isRetainer
         ? [
             chargeLineItem(
@@ -471,7 +530,7 @@ export async function generateInvoice(
           cityStateZip: client.cityStateZip,
           phone: client.phone,
         },
-        lineItems: [...lineItems, ...chargeRows, ...retainerRow],
+        lineItems: [...lineItems, ...expenseRows, ...chargeRows, ...retainerRow],
         totalHours,
         totalAmount,
       };
@@ -522,6 +581,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
           organization: true,
           timeEntries: { include: { serviceType: true }, orderBy: { date: "asc" } },
           recurringCharges: true,
+          reimbursableExpenses: { orderBy: { date: "asc" } },
         },
       });
       const isRetainer = invoice.client.billingType === "Retainer";
@@ -551,19 +611,27 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
         };
       });
 
-      // Charge/retainer rows fold into the same flat table as extra rows.
+      // Charge/retainer/expense rows fold into the same flat table as extra rows.
       const chargeRows = invoice.recurringCharges.map((c) =>
         chargeLineItem(c.description, Number(c.amount)),
       );
+      const expenseRows = invoice.reimbursableExpenses.map((e) => ({
+        date: e.date.toISOString().slice(0, 10),
+        description: e.description,
+        hours: null,
+        rate: null,
+        amount: Number(e.amount),
+      }));
       // Retainer total isn't separately stored -- re-derive it as
-      // (invoice total minus recurring charges), which is exact since
-      // generation computed totalAmount the same way.
+      // (invoice total minus recurring charges minus expenses), which is
+      // exact since generation computed totalAmount the same way.
       const recurringTotal = invoice.recurringCharges.reduce((s, c) => s + Number(c.amount), 0);
+      const expenseTotal = invoice.reimbursableExpenses.reduce((s, e) => s + Number(e.amount), 0);
       const retainerRow = isRetainer
         ? [
             chargeLineItem(
               `${invoice.client.name} — Retainer`,
-              Number((Number(invoice.totalAmount) - recurringTotal).toFixed(2)),
+              Number((Number(invoice.totalAmount) - recurringTotal - expenseTotal).toFixed(2)),
             ),
           ]
         : [];
@@ -583,7 +651,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
             cityStateZip: invoice.client.cityStateZip,
             phone: invoice.client.phone,
           },
-          lineItems: [...lineItems, ...chargeRows, ...retainerRow],
+          lineItems: [...lineItems, ...expenseRows, ...chargeRows, ...retainerRow],
           totalHours: Number(invoice.totalHours),
           totalAmount: Number(invoice.totalAmount),
         } satisfies InvoicePdfData,
@@ -676,9 +744,10 @@ export async function markInvoicePaid(id: string): Promise<ActionResult> {
 }
 
 /**
- * Voids an invoice: frees its time entries to be re-invoiced, removes its
- * recurring-charge snapshots (re-opening those charges for that period), marks
- * it voided, and archives rather than deletes the PDF.
+ * Voids an invoice: frees its time entries AND reimbursable expenses to be
+ * re-invoiced, removes its recurring-charge snapshots (re-opening those
+ * charges for that period), marks it voided, and archives rather than
+ * deletes the PDF.
  */
 export async function voidInvoice(
   id: string,
@@ -695,6 +764,10 @@ export async function voidInvoice(
       if (invoice.voidedAt) throw new ConflictError("This invoice is already voided.");
 
       await tx.timeEntry.updateMany({ where: { invoiceId: id }, data: { invoiceId: null } });
+      await tx.reimbursableExpense.updateMany({
+        where: { invoiceId: id },
+        data: { invoiceId: null },
+      });
       await tx.invoiceRecurringCharge.deleteMany({ where: { invoiceId: id } });
       await tx.invoice.update({ where: { id }, data: { voidedAt: new Date() } });
 

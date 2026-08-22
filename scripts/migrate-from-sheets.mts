@@ -44,44 +44,11 @@ import "dotenv/config";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { parseCsv } from "../src/lib/csv";
 
 const prisma = new PrismaClient();
 
 // ---------------------------------------------------------------- CSV parsing
-
-/** Minimal RFC4180-ish parser: handles quoted fields, embedded commas/newlines. */
-function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
-
-  const src = text.replace(/^﻿/, "").replace(/\r\n/g, "\n");
-
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (src[i + 1] === '"') { field += '"'; i++; }
-        else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') inQuotes = true;
-    else if (c === ",") { row.push(field); field = ""; }
-    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
-    else field += c;
-  }
-  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
-
-  const [header, ...body] = rows.filter((r) => r.some((c) => c.trim() !== ""));
-  if (!header) return [];
-
-  const keys = header.map((h) => h.trim().toLowerCase().replace(/[\s_]+/g, ""));
-  return body.map((cols) => {
-    const record: Record<string, string> = {};
-    keys.forEach((k, i) => (record[k] = (cols[i] ?? "").trim()));
-    return record;
-  });
-}
 
 function readCsv(dir: string, file: string): Record<string, string>[] {
   const full = path.join(dir, file);

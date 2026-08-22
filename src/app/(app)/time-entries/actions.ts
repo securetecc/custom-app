@@ -41,6 +41,10 @@ export async function createTimeEntry(
           billableStatus: data.billableStatus,
           loggedByUserId: appUser.id,
           rawInput: rawInput ?? null,
+          // Presence of rawInput is already this codebase's existing signal
+          // for "came from the AI/voice parser" -- source just makes it a
+          // proper queryable column instead of an implicit null check.
+          source: rawInput ? "Voice" : "Manual",
         },
       });
     });
@@ -93,10 +97,21 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
 }
 
 export async function deleteTimeEntry(id: string): Promise<ActionResult> {
-  const { authUserId } = await requireOrgContext();
+  const { authUserId, appUser } = await requireOrgContext();
 
   try {
-    await withRLS(authUserId, (tx) => tx.timeEntry.delete({ where: { id } }));
+    await withRLS(authUserId, async (tx) => {
+      // Check invoiceId explicitly first, so a technician trying to delete a
+      // billed entry gets a clear message instead of a raw RLS-driven "record
+      // not found" from the delete itself. Admins are still allowed through --
+      // RLS ("staff can delete unbilled, admin can delete any") permits it
+      // too; the UI just asks for stronger confirmation for them.
+      const entry = await tx.timeEntry.findUniqueOrThrow({ where: { id } });
+      if (entry.invoiceId && appUser.role !== "admin") {
+        throw new AlreadyInvoicedError();
+      }
+      await tx.timeEntry.delete({ where: { id } });
+    });
   } catch (err: unknown) {
     return { ok: false, error: errorMessage(err) };
   }
@@ -105,7 +120,12 @@ export async function deleteTimeEntry(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+class AlreadyInvoicedError extends Error {}
+
 function errorMessage(err: unknown): string {
+  if (err instanceof AlreadyInvoicedError) {
+    return "This entry has already been invoiced — ask an admin to void the invoice first.";
+  }
   if (err instanceof Error) {
     if (err.message.includes("Record to update not found") || err.message.includes("No record")) {
       return "This entry is already billed and can no longer be edited by a technician.";

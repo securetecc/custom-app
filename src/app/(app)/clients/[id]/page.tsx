@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
+import { ADDON_ITEM_TYPE_LABELS } from "@/lib/validations/recurring-charge";
 import { Pencil, Plus } from "lucide-react";
 
 export default async function EditClientPage({
@@ -24,18 +25,27 @@ export default async function EditClientPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { data: client } = await requireOrgContext((tx) =>
-    tx.client.findUnique({
-      where: { id },
-      include: {
-        recurringCharges: {
-          orderBy: [{ billingFrequency: "asc" }, { description: "asc" }],
+  const {
+    data: [client, pricingRows],
+  } = await requireOrgContext((tx, appUser) =>
+    Promise.all([
+      tx.client.findUnique({
+        where: { id },
+        include: {
+          recurringCharges: {
+            orderBy: [{ billingFrequency: "asc" }, { description: "asc" }],
+          },
         },
-      },
-    }),
+      }),
+      tx.addonPricing.findMany({ where: { organizationId: appUser.organizationId } }),
+    ]),
   );
 
   if (!client) notFound();
+
+  const addonPricing = Object.fromEntries(
+    pricingRows.map((p) => [p.itemType, Number(p.defaultRate)]),
+  );
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -79,6 +89,7 @@ export default async function EditClientPage({
             </p>
             <RecurringChargeDialog
               clientId={client.id}
+              addonPricing={addonPricing}
               trigger={
                 <Button>
                   <Plus className="mr-1 h-4 w-4" /> New charge
@@ -92,8 +103,10 @@ export default async function EditClientPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Description</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Frequency</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Authorized by</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
@@ -102,11 +115,17 @@ export default async function EditClientPage({
                 {client.recurringCharges.map((charge) => (
                   <TableRow key={charge.id}>
                     <TableCell className="font-medium">{charge.description}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {charge.itemType ? ADDON_ITEM_TYPE_LABELS[charge.itemType] : "—"}
+                    </TableCell>
                     <TableCell>
                       {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
                     </TableCell>
                     <TableCell className="text-right">
                       {formatCurrency(Number(charge.amount))}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {charge.authorizedBy ?? "—"}
                     </TableCell>
                     <TableCell>
                       <Badge variant={charge.activeStatus ? "default" : "secondary"}>
@@ -118,11 +137,14 @@ export default async function EditClientPage({
                         <RecurringChargeDialog
                           clientId={client.id}
                           recurringChargeId={charge.id}
+                          addonPricing={addonPricing}
                           defaultValues={{
                             description: charge.description,
                             amount: Number(charge.amount),
                             billingFrequency: charge.billingFrequency,
                             activeStatus: charge.activeStatus,
+                            itemType: charge.itemType,
+                            authorizedBy: charge.authorizedBy ?? "",
                           }}
                           trigger={
                             <Button variant="ghost" size="icon" aria-label="Edit charge">
@@ -137,7 +159,7 @@ export default async function EditClientPage({
                 ))}
                 {client.recurringCharges.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                       No recurring charges for this client yet.
                     </TableCell>
                   </TableRow>

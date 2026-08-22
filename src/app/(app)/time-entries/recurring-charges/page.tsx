@@ -1,0 +1,142 @@
+import { requireOrgContext } from "@/lib/auth";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { RecurringChargeDialog } from "@/components/app/recurring-charge-dialog";
+import { DeleteRecurringChargeButton } from "@/components/app/delete-recurring-charge-button";
+import { TimeEntriesTabs } from "@/components/app/time-entries-tabs";
+import { ADDON_ITEM_TYPE_LABELS } from "@/lib/validations/recurring-charge";
+import { formatCurrency } from "@/lib/format";
+import { Plus, Pencil } from "lucide-react";
+
+/**
+ * Cross-client view of every recurring charge ("monthly/yearly charges") in
+ * the org -- the per-client version lives on each client's own "Recurring
+ * charges" tab (src/app/(app)/clients/[id]/page.tsx); this one adds a Client
+ * column and lets "New charge" pick which client it's for.
+ */
+export default async function RecurringChargesPage() {
+  const {
+    data: [charges, clients, pricingRows],
+  } = await requireOrgContext((tx, appUser) =>
+    Promise.all([
+      tx.recurringCharge.findMany({
+        include: { client: true },
+        orderBy: [{ client: { name: "asc" } }, { billingFrequency: "asc" }, { description: "asc" }],
+      }),
+      tx.client.findMany({ where: { activeStatus: true }, orderBy: { name: "asc" } }),
+      tx.addonPricing.findMany({ where: { organizationId: appUser.organizationId } }),
+    ]),
+  );
+
+  const clientOptions = clients.map((c) => ({ id: c.id, name: c.name }));
+  const addonPricing = Object.fromEntries(
+    pricingRows.map((p) => [p.itemType, Number(p.defaultRate)]),
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Time entries</h1>
+        <p className="text-muted-foreground">Logged time, expenses, and recurring charges.</p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TimeEntriesTabs />
+        <RecurringChargeDialog
+          clients={clientOptions}
+          addonPricing={addonPricing}
+          trigger={
+            <Button>
+              <Plus className="mr-1 h-4 w-4" /> New charge
+            </Button>
+          }
+        />
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        Pulled into invoices automatically. Annual charges only apply to a January period.
+      </p>
+
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Client</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Frequency</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Authorized by</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-20" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {charges.map((charge) => (
+              <TableRow key={charge.id}>
+                <TableCell>{charge.client.name}</TableCell>
+                <TableCell className="font-medium">{charge.description}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {charge.itemType ? ADDON_ITEM_TYPE_LABELS[charge.itemType] : "—"}
+                </TableCell>
+                <TableCell>
+                  {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
+                </TableCell>
+                <TableCell className="text-right">
+                  {formatCurrency(Number(charge.amount))}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {charge.authorizedBy ?? "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={charge.activeStatus ? "default" : "secondary"}>
+                    {charge.activeStatus ? "Active" : "Inactive"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center justify-end gap-1">
+                    <RecurringChargeDialog
+                      clientId={charge.clientId}
+                      recurringChargeId={charge.id}
+                      addonPricing={addonPricing}
+                      defaultValues={{
+                        description: charge.description,
+                        amount: Number(charge.amount),
+                        billingFrequency: charge.billingFrequency,
+                        activeStatus: charge.activeStatus,
+                        itemType: charge.itemType,
+                        authorizedBy: charge.authorizedBy ?? "",
+                      }}
+                      trigger={
+                        <Button variant="ghost" size="icon" aria-label="Edit charge">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      }
+                    />
+                    <DeleteRecurringChargeButton id={charge.id} clientId={charge.clientId} />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {charges.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                  No recurring charges yet.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+}

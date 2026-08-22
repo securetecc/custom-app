@@ -104,6 +104,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
   const [candidates, setCandidates] = useState<BillingCandidates | null>(null);
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [selectedCharges, setSelectedCharges] = useState<Set<string>>(new Set());
+  const [selectedExpenses, setSelectedExpenses] = useState<Set<string>>(new Set());
 
   async function handleLoad() {
     if (!clientId) {
@@ -125,7 +126,11 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
     }
 
     const data = result.data;
-    if (data.timeEntries.length === 0 && data.recurringCharges.length === 0) {
+    if (
+      data.timeEntries.length === 0 &&
+      data.recurringCharges.length === 0 &&
+      data.reimbursableExpenses.length === 0
+    ) {
       toast.error("Nothing unbilled for that client and period.");
       return;
     }
@@ -140,6 +145,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
       ),
     );
     setSelectedCharges(new Set(data.recurringCharges.map((c) => c.id)));
+    setSelectedExpenses(new Set(data.reimbursableExpenses.map((e) => e.id)));
     setStep("review");
   }
 
@@ -152,6 +158,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
       ...period,
       timeEntryIds: [...selectedEntries],
       recurringChargeOccurrenceIds: [...selectedCharges],
+      reimbursableExpenseIds: [...selectedExpenses],
     });
     setSubmitting(false);
 
@@ -184,10 +191,13 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
     candidates?.timeEntries.filter((e) => selectedEntries.has(e.id)) ?? [];
   const selectedChargeRows =
     candidates?.recurringCharges.filter((c) => selectedCharges.has(c.id)) ?? [];
+  const selectedExpenseRows =
+    candidates?.reimbursableExpenses.filter((e) => selectedExpenses.has(e.id)) ?? [];
   const runningHours = selectedEntryRows.reduce((s, e) => s + e.hours, 0);
   const runningTotal =
     selectedEntryRows.reduce((s, e) => s + (e.amount ?? 0), 0) +
-    selectedChargeRows.reduce((s, c) => s + c.amount, 0);
+    selectedChargeRows.reduce((s, c) => s + c.amount, 0) +
+    selectedExpenseRows.reduce((s, e) => s + e.amount, 0);
 
   if (step === "select") {
     return (
@@ -278,7 +288,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
           <div className="text-right">
             <p className="text-sm text-muted-foreground">
               {formatHours(runningHours)} hrs · {selectedEntryRows.length} entries ·{" "}
-              {selectedChargeRows.length} charges
+              {selectedChargeRows.length} charges · {selectedExpenseRows.length} expenses
             </p>
             <p className="text-xl font-semibold">{formatCurrency(runningTotal)}</p>
           </div>
@@ -394,13 +404,65 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
         </Card>
       )}
 
+      {candidates && candidates.reimbursableExpenses.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <h2 className="font-medium">Reimbursable expenses</h2>
+            <button
+              type="button"
+              className="text-sm text-muted-foreground underline"
+              onClick={() =>
+                setSelectedExpenses(
+                  selectedExpenses.size === candidates.reimbursableExpenses.length
+                    ? new Set()
+                    : new Set(candidates.reimbursableExpenses.map((e) => e.id)),
+                )
+              }
+            >
+              Toggle all
+            </button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10" />
+                <TableHead>Date</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {candidates.reimbursableExpenses.map((expense) => (
+                <TableRow key={expense.id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedExpenses.has(expense.id)}
+                      onCheckedChange={() =>
+                        toggle(selectedExpenses, expense.id, setSelectedExpenses)
+                      }
+                      aria-label={`Include ${expense.description}`}
+                    />
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{formatDate(expense.date)}</TableCell>
+                  <TableCell className="max-w-md truncate">{expense.description}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between">
         <Button variant="outline" onClick={() => setStep("select")} disabled={submitting}>
           Back
         </Button>
         <Button
           onClick={handleGenerate}
-          disabled={submitting || (selectedEntries.size === 0 && selectedCharges.size === 0)}
+          disabled={
+            submitting ||
+            (selectedEntries.size === 0 && selectedCharges.size === 0 && selectedExpenses.size === 0)
+          }
         >
           {submitting ? "Generating…" : "Generate draft invoice"}
         </Button>

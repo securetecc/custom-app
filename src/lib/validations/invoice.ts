@@ -35,6 +35,7 @@ export const generateInvoiceSchema = z
     // re-derives every occurrence's period from scratch and only uses the
     // submitted ids as a selection filter (same principle as time entries).
     recurringChargeOccurrenceIds: z.array(z.string()),
+    reimbursableExpenseIds: z.array(z.string()),
   })
   .refine((v) => v.periodStart <= v.periodEnd, {
     message: "Start date must be before the end date",

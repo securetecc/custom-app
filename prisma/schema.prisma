@@ -49,6 +49,24 @@ enum InvoiceStatus {
   Paid
 }
 
+/// Structured category for a recurring charge ("add-on"), replacing a free-text
+/// guess at what a charge is for. `Other` covers anything not in the fixed set
+/// AddonPricing has a default rate for.
+enum AddonItemType {
+  DMARC
+  MonitoringSeat
+  RemoteMonitoring
+  Other
+}
+
+/// Where a TimeEntry originated -- purely provenance/audit, never affects
+/// billing logic. Manual is the default so existing rows need no backfill.
+enum TimeEntrySource {
+  Manual
+  Voice
+  CsvImport
+}
+
 /// Five tiers, matching the v1 client portal's published response-time SLAs:
 /// Emergency 1h, Critical 4h, High 8h, Medium 24h, Low 48h (business hours).
 enum TicketUrgency {
@@ -109,7 +127,10 @@ model Organization {
   clients                Client[]
   serviceTypes           ServiceType[]
   timeEntries            TimeEntry[]
+  reimbursableExpenses   ReimbursableExpense[]
   recurringCharges       RecurringCharge[]
+  recurringChargeAuditLogs RecurringChargeAuditLog[]
+  addonPricing           AddonPricing[]
   invoiceRecurringCharges InvoiceRecurringCharge[]
   invoices               Invoice[]
   tickets                Ticket[]
@@ -128,8 +149,9 @@ model User {
   role           UserRole     @default(technician)
   createdAt      DateTime     @default(now())
 
-  loggedTimeEntries TimeEntry[] @relation("LoggedByUser")
-  assignedTickets   Ticket[]    @relation("AssignedToUser")
+  loggedTimeEntries          TimeEntry[]            @relation("LoggedByUser")
+  loggedReimbursableExpenses ReimbursableExpense[]
+  assignedTickets            Ticket[]               @relation("AssignedToUser")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -161,9 +183,10 @@ model Client {
   // highest existing invoice number, NOT leave it at 0.
   lastInvoiceSequence Int     @default(0)
 
-  timeEntries      TimeEntry[]
-  recurringCharges RecurringCharge[]
-  invoices         Invoice[]
+  timeEntries          TimeEntry[]
+  reimbursableExpenses ReimbursableExpense[]
+  recurringCharges     RecurringCharge[]
+  invoices             Invoice[]
 
   @@unique([organizationId, shortName])
   @@index([organizationId])
@@ -206,12 +229,40 @@ model TimeEntry {
   loggedByUser   User           @relation("LoggedByUser", fields: [loggedByUserId], references: [id])
   // Original voice/text input, kept only when this entry came from the AI parser.
   rawInput       String?
+  // Provenance only -- never affects billing/rate logic. Defaults to Manual so
+  // every pre-existing row needs no backfill.
+  source         TimeEntrySource @default(Manual)
   createdAt      DateTime       @default(now())
 
   @@index([organizationId])
   @@index([clientId])
   @@index([invoiceId])
   @@map("time_entries")
+}
+
+/// A one-off billable material/expense cost (e.g. a replacement part), distinct
+/// from TimeEntry (labor). Shaped identically to TimeEntry's billing lifecycle:
+/// invoiceId is null while unbilled, set once included on a generated invoice,
+/// and cleared again if that invoice is voided (see invoices/actions.ts).
+model ReimbursableExpense {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date           DateTime     @db.Date
+  description    String
+  amount         Decimal      @db.Decimal(10, 2)
+  invoiceId      String?
+  invoice        Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  loggedByUserId String
+  loggedByUser   User         @relation(fields: [loggedByUserId], references: [id])
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([invoiceId])
+  @@map("reimbursable_expenses")
 }
 
 /// A perpetual billing template (e.g. "Managed Antivirus -- $50/mo"), NOT a
@@ -229,13 +280,58 @@ model RecurringCharge {
   amount           Decimal          @db.Decimal(10, 2)
   billingFrequency BillingFrequency @default(Monthly)
   activeStatus     Boolean          @default(true)
+  // Structured category + who signed off on it. Both optional -- older/plain
+  // retainer-style charges never need to classify themselves. itemType, when
+  // set, is used only to pre-fill a suggested amount from AddonPricing in the
+  // UI; it never affects billing.
+  itemType         AddonItemType?
+  authorizedBy     String?
   createdAt        DateTime         @default(now())
 
   invoiceOccurrences InvoiceRecurringCharge[]
+  auditLog           RecurringChargeAuditLog[]
 
   @@index([organizationId])
   @@index([clientId])
   @@map("recurring_charges")
+}
+
+/// Append-only history of every create/update to a RecurringCharge, snapshotting
+/// who authorized it and what changed. Rows are inserted alongside the
+/// RecurringCharge write in the same transaction and are never updated or
+/// deleted by application code (see recurring-charge-actions.ts) -- the RLS
+/// migration backs this with no update/delete policy at all.
+model RecurringChargeAuditLog {
+  id                String           @id @default(uuid())
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recurringChargeId String
+  recurringCharge   RecurringCharge  @relation(fields: [recurringChargeId], references: [id], onDelete: Cascade)
+  action            String           // "created" | "updated"
+  itemType          AddonItemType?
+  description       String
+  amount            Decimal          @db.Decimal(10, 2)
+  billingFrequency  BillingFrequency
+  authorizedBy      String
+  notes             String?
+  createdAt         DateTime         @default(now())
+
+  @@index([organizationId])
+  @@index([recurringChargeId])
+  @@map("recurring_charge_audit_log")
+}
+
+/// Reference-only default rate per add-on item type, used purely to pre-fill
+/// the amount field in the UI when an item type is chosen -- never enforced or
+/// read by billing logic (a technician can always override the amount).
+model AddonPricing {
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  itemType       AddonItemType
+  defaultRate    Decimal       @db.Decimal(10, 2)
+
+  @@id([organizationId, itemType])
+  @@map("addon_pricing")
 }
 
 /// One row per "this recurring charge was billed on this invoice", with the
@@ -297,8 +393,9 @@ model Invoice {
   voidedAt       DateTime?
   createdAt      DateTime      @default(now())
 
-  timeEntries      TimeEntry[]
-  recurringCharges InvoiceRecurringCharge[]
+  timeEntries          TimeEntry[]
+  reimbursableExpenses ReimbursableExpense[]
+  recurringCharges     InvoiceRecurringCharge[]
 
   @@unique([organizationId, clientId, invoiceNumber])
   @@index([organizationId])

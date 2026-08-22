@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import {
+  ADDON_ITEM_TYPE_LABELS,
+  ADDON_ITEM_TYPES,
   recurringChargeFormSchema,
   type RecurringChargeFormValues,
 } from "@/lib/validations/recurring-charge";
@@ -42,19 +44,39 @@ const STATUS_LABELS: Record<string, string> = {
   inactive: "Inactive — stop billing",
 };
 
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  none: "— None —",
+  ...ADDON_ITEM_TYPE_LABELS,
+};
+
+type ClientOption = { id: string; name: string };
+
 export function RecurringChargeDialog({
   clientId,
+  clients,
   recurringChargeId,
   defaultValues,
+  /** itemType -> default amount, for the pre-fill-on-select behavior below. Reference-only. */
+  addonPricing = {},
   trigger,
 }: {
-  clientId: string;
+  /**
+   * Pre-set client (the per-client "Recurring charges" tab, and every edit --
+   * a charge never changes client). When omitted, a client picker renders
+   * instead (the cross-client /time-entries/recurring-charges "New charge"
+   * flow) and `clients` becomes required.
+   */
+  clientId?: string;
+  clients?: ClientOption[];
   recurringChargeId?: string;
   defaultValues?: Partial<RecurringChargeFormValues>;
+  addonPricing?: Partial<Record<(typeof ADDON_ITEM_TYPES)[number], number>>;
   trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [pickedClientId, setPickedClientId] = useState("");
+  const effectiveClientId = clientId ?? pickedClientId;
 
   const {
     register,
@@ -70,18 +92,26 @@ export function RecurringChargeDialog({
       amount: 0,
       billingFrequency: "Monthly",
       activeStatus: true,
+      itemType: null,
+      authorizedBy: "",
       ...defaultValues,
     },
   });
 
   const billingFrequency = watch("billingFrequency");
   const activeStatus = watch("activeStatus");
+  const itemType = watch("itemType");
+  const amount = watch("amount");
 
   async function onSubmit(values: RecurringChargeFormValues) {
+    if (!effectiveClientId) {
+      toast.error("Select a client first.");
+      return;
+    }
     setSubmitting(true);
     const result = recurringChargeId
-      ? await updateRecurringCharge(recurringChargeId, clientId, values)
-      : await createRecurringCharge(clientId, values);
+      ? await updateRecurringCharge(recurringChargeId, effectiveClientId, values)
+      : await createRecurringCharge(effectiveClientId, values);
     setSubmitting(false);
 
     if (!result.ok) {
@@ -91,7 +121,10 @@ export function RecurringChargeDialog({
 
     toast.success(recurringChargeId ? "Recurring charge updated" : "Recurring charge added");
     setOpen(false);
-    if (!recurringChargeId) reset();
+    if (!recurringChargeId) {
+      reset();
+      setPickedClientId("");
+    }
   }
 
   return (
@@ -110,6 +143,27 @@ export function RecurringChargeDialog({
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {!clientId && (
+              <div className="space-y-2">
+                <Label>Client</Label>
+                <Select value={pickedClientId} onValueChange={(v) => setPickedClientId(v ?? "")}>
+                  <SelectTrigger>
+                    {/* base-ui renders the raw value (a uuid) without this mapper */}
+                    <SelectValue placeholder="Select client">
+                      {(value) => clients?.find((c) => c.id === value)?.name ?? "Select client"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients?.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
               <Input
@@ -120,6 +174,38 @@ export function RecurringChargeDialog({
               {errors.description && (
                 <p className="text-xs text-destructive">{errors.description.message}</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="itemType">Item type</Label>
+              <Select
+                value={itemType ?? "none"}
+                onValueChange={(v) => {
+                  const next = v === "none" ? null : ((v ?? "none") as RecurringChargeFormValues["itemType"]);
+                  setValue("itemType", next);
+                  // Pre-fill the amount only when it's still at the untouched
+                  // default -- never clobber a value someone already typed.
+                  const defaultRate = next ? addonPricing[next] : undefined;
+                  if (defaultRate !== undefined && (amount === 0 || Number.isNaN(amount))) {
+                    setValue("amount", defaultRate);
+                  }
+                }}
+              >
+                <SelectTrigger id="itemType">
+                  <SelectValue>{(value) => ITEM_TYPE_LABELS[(value as string) ?? "none"]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ITEM_TYPE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Reference only -- classifies the charge and suggests an amount below; never
+                affects billing.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -157,6 +243,21 @@ export function RecurringChargeDialog({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="authorizedBy">Authorized by</Label>
+              <Input
+                id="authorizedBy"
+                placeholder="e.g. Tony Gregory"
+                {...register("authorizedBy")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Recorded on this charge&apos;s audit history -- who approved it.
+              </p>
+              {errors.authorizedBy && (
+                <p className="text-xs text-destructive">{errors.authorizedBy.message}</p>
+              )}
             </div>
 
             <div className="space-y-2">

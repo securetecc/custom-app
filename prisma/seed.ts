@@ -22,6 +22,15 @@ const DEFAULT_SERVICE_TYPES = [
   { code: "A-I", label: "AI Automation", billingMinimumHours: 0.25, rateOverride: 50 },
 ] as const;
 
+// Reference-only, per the schema comment on AddonPricing -- pre-fills the
+// dialog's amount field, never enforced. Amounts are placeholders; adjust
+// per-org from Settings once that UI exists, or edit here before re-seeding.
+const DEFAULT_ADDON_PRICING = [
+  { itemType: "DMARC", defaultRate: 25 },
+  { itemType: "MonitoringSeat", defaultRate: 15 },
+  { itemType: "RemoteMonitoring", defaultRate: 35 },
+] as const;
+
 async function main() {
   const org = await prisma.organization.upsert({
     where: { supportEmail: "support@securetecc.com" },
@@ -52,6 +61,16 @@ async function main() {
   }
 
   console.log(`Seeded ${DEFAULT_SERVICE_TYPES.length} default service types.`);
+
+  for (const p of DEFAULT_ADDON_PRICING) {
+    await prisma.addonPricing.upsert({
+      where: { organizationId_itemType: { organizationId: org.id, itemType: p.itemType } },
+      update: { defaultRate: p.defaultRate },
+      create: { organizationId: org.id, itemType: p.itemType, defaultRate: p.defaultRate },
+    });
+  }
+
+  console.log(`Seeded ${DEFAULT_ADDON_PRICING.length} default add-on price references.`);
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL;
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;

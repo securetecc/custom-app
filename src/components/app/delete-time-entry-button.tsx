@@ -6,11 +6,14 @@ import { deleteTimeEntry } from "@/app/(app)/time-entries/actions";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 
-export function DeleteTimeEntryButton({ id }: { id: string }) {
+export function DeleteTimeEntryButton({ id, isBilled }: { id: string; isBilled?: boolean }) {
   const [pending, setPending] = useState(false);
 
   async function handleDelete() {
-    if (!confirm("Delete this time entry? This cannot be undone.")) return;
+    const message = isBilled
+      ? "This entry has already been invoiced. Deleting it will NOT update the invoice total — continue?"
+      : "Delete this time entry? This cannot be undone.";
+    if (!confirm(message)) return;
     setPending(true);
     const result = await deleteTimeEntry(id);
     setPending(false);

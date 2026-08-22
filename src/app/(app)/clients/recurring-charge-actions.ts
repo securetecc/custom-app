@@ -23,8 +23,8 @@ export async function createRecurringCharge(
   const { authUserId, appUser } = await requireOrgContext();
 
   try {
-    await withRLS(authUserId, (tx) =>
-      tx.recurringCharge.create({
+    await withRLS(authUserId, async (tx) => {
+      const charge = await tx.recurringCharge.create({
         data: {
           organizationId: appUser.organizationId,
           clientId,
@@ -32,14 +32,32 @@ export async function createRecurringCharge(
           amount: data.amount,
           billingFrequency: data.billingFrequency,
           activeStatus: data.activeStatus,
+          itemType: data.itemType,
+          authorizedBy: data.authorizedBy,
         },
-      }),
-    );
+      });
+
+      // Append-only history row, same transaction -- see the model's doc
+      // comment. Never updated/deleted by app code.
+      await tx.recurringChargeAuditLog.create({
+        data: {
+          organizationId: appUser.organizationId,
+          recurringChargeId: charge.id,
+          action: "created",
+          itemType: data.itemType,
+          description: data.description,
+          amount: data.amount,
+          billingFrequency: data.billingFrequency,
+          authorizedBy: data.authorizedBy,
+        },
+      });
+    });
   } catch (err: unknown) {
     return { ok: false, error: errorMessage(err) };
   }
 
   revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/time-entries/recurring-charges");
   return { ok: true };
 }
 
@@ -54,28 +72,45 @@ export async function updateRecurringCharge(
   }
   const data = parsed.data;
 
-  const { authUserId } = await requireOrgContext();
+  const { authUserId, appUser } = await requireOrgContext();
 
   try {
     // Editing a template never rewrites history: past invoices carry their own
     // snapshot rows in invoice_recurring_charges, so changing the amount here
-    // only affects future invoices.
-    await withRLS(authUserId, (tx) =>
-      tx.recurringCharge.update({
+    // only affects future invoices. The audit log gets its own new row rather
+    // than updating the "created" one, for the same reason.
+    await withRLS(authUserId, async (tx) => {
+      await tx.recurringCharge.update({
         where: { id },
         data: {
           description: data.description,
           amount: data.amount,
           billingFrequency: data.billingFrequency,
           activeStatus: data.activeStatus,
+          itemType: data.itemType,
+          authorizedBy: data.authorizedBy,
         },
-      }),
-    );
+      });
+
+      await tx.recurringChargeAuditLog.create({
+        data: {
+          organizationId: appUser.organizationId,
+          recurringChargeId: id,
+          action: "updated",
+          itemType: data.itemType,
+          description: data.description,
+          amount: data.amount,
+          billingFrequency: data.billingFrequency,
+          authorizedBy: data.authorizedBy,
+        },
+      });
+    });
   } catch (err: unknown) {
     return { ok: false, error: errorMessage(err) };
   }
 
   revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/time-entries/recurring-charges");
   return { ok: true };
 }
 
@@ -92,6 +127,7 @@ export async function deleteRecurringCharge(
   }
 
   revalidatePath(`/clients/${clientId}`);
+  revalidatePath("/time-entries/recurring-charges");
   return { ok: true };
 }
 
