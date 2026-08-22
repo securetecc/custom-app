@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SupportHeader } from "@/components/app/support-form";
 import { TicketStatusForm } from "@/components/app/ticket-status-form";
+import { PublicFooter } from "@/components/app/public-footer";
 
 export const metadata: Metadata = {
   title: "Check your request status — SecureTECC",
@@ -54,9 +55,7 @@ export default function TicketStatusPage() {
         </div>
       </main>
 
-      <footer className="border-t border-[rgba(6,225,220,0.24)] px-6 py-8 text-center text-[13px] text-[rgba(255,255,255,0.55)]">
-        SecureTECC Solutions · 877.707.TECC
-      </footer>
+      <PublicFooter />
     </div>
   );
 }
