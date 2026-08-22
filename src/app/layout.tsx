@@ -37,7 +37,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      {/* dark is applied here rather than scoped to just the authenticated
+          app shell because shadcn/base-ui portals (Dialog, Select, Popover,
+          Tooltip, and Sonner's toasts) render directly under <body>, outside
+          any wrapper div's DOM subtree -- scoping .dark to a child element
+          left every portaled overlay stuck on the light theme. /login,
+          /support, and /voice-logger don't use these design tokens at all
+          (hardcoded colors throughout), so this has no effect on them. */}
+      <body className="dark min-h-full flex flex-col bg-background text-foreground">
         {children}
         <Toaster />
       </body>

@@ -18,8 +18,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppSidebar role={appUser.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Teal rule under the header mirrors the brand treatment used on the
-            public pages (/login, /support) without importing their dark theme,
-            which would hurt readability in a data-dense daily-use tool. */}
+            public pages (/login, /support). The app shell uses the same dark
+            navy/teal palette as those pages (globals.css's .dark tokens,
+            applied on <body> in the root layout so portaled dialogs/selects
+            pick it up too) rather than a light theme with a dark sidebar
+            bolted on -- kept free of their splash/particle/glow motion, which
+            doesn't belong in
+            a data-dense daily-use tool. */}
         <header
           className="flex h-16 shrink-0 items-center justify-between bg-background px-6"
           style={{ borderBottom: "2px solid var(--brand-teal)" }}
