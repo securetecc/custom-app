@@ -1,5 +1,6 @@
 "use server";
 
+import { fileTypeFromBuffer } from "file-type";
 import { prisma } from "@/lib/db/prisma";
 import { withRLS } from "@/lib/db/rls";
 import {
@@ -13,6 +14,7 @@ import {
   uploadTicketAttachment,
 } from "@/lib/storage/ticket-attachments";
 import { notifyNewTicket } from "@/lib/email/notify";
+import { checkRateLimit, getClientIp, rateLimitedMessage } from "@/lib/rate-limit";
 
 // NOTE: every export from a "use server" file is a callable server action.
 
@@ -53,6 +55,14 @@ export async function lookupTicketStatus(
   const trimmedEmail = contactEmail.trim();
   if (!trimmedNumber || !trimmedEmail) {
     return { ok: false, error: "Enter both your ticket number and email." };
+  }
+
+  // Two-factor-gated already (number + email), but still unauthenticated and
+  // guessable enough to be worth capping -- ticket numbers are sequential.
+  const ip = await getClientIp();
+  const limited = await checkRateLimit(`ticket-status:${ip}`, 10, 3600);
+  if (!limited.ok) {
+    return { ok: false, error: rateLimitedMessage(limited.retryAfterSeconds) };
   }
 
   try {
@@ -96,6 +106,12 @@ export async function lookupTicketStatus(
  *    number unused, which is fine: numbers are sequential, not gapless.
  */
 export async function submitPublicTicket(formData: FormData): Promise<SubmitResult> {
+  const ip = await getClientIp();
+  const limited = await checkRateLimit(`ticket-submit:${ip}`, 5, 3600);
+  if (!limited.ok) {
+    return { ok: false, error: rateLimitedMessage(limited.retryAfterSeconds) };
+  }
+
   const parsed = publicTicketSchema.safeParse({
     clientCompanyName: formData.get("clientCompanyName"),
     contactName: formData.get("contactName"),
@@ -118,6 +134,9 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
   if (files.length > MAX_ATTACHMENTS) {
     return { ok: false, error: `Please attach at most ${MAX_ATTACHMENTS} files.` };
   }
+  // Buffers are read once here and reused for the upload below, rather than
+  // re-reading each file from formData a second time.
+  const fileBuffers = new Map<File, Buffer>();
   for (const file of files) {
     if (file.size > MAX_ATTACHMENT_BYTES) {
       return { ok: false, error: `"${file.name}" is larger than 10MB.` };
@@ -127,6 +146,16 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
     ) {
       return { ok: false, error: `"${file.name}" must be an image or PDF.` };
     }
+    // The declared MIME type above is whatever the browser guessed from the
+    // file extension -- trivially spoofed by renaming a file. Sniff the
+    // actual magic bytes and require them to agree, on a public,
+    // unauthenticated upload endpoint.
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const sniffed = await fileTypeFromBuffer(buffer);
+    if (!sniffed || !ALLOWED_ATTACHMENT_TYPES.includes(sniffed.mime as (typeof ALLOWED_ATTACHMENT_TYPES)[number])) {
+      return { ok: false, error: `"${file.name}" doesn't look like a valid image or PDF.` };
+    }
+    fileBuffers.set(file, buffer);
   }
 
   // Single-tenant for now; Phase 7 (tenant onboarding) turns this into
@@ -190,7 +219,7 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
         ticketNumber,
         file.name,
       );
-      await uploadTicketAttachment(path, Buffer.from(await file.arrayBuffer()), file.type);
+      await uploadTicketAttachment(path, fileBuffers.get(file)!, file.type);
       // Same no-RETURNING reasoning as the ticket insert above.
       await withRLS(null, (tx) =>
         tx.$executeRaw`

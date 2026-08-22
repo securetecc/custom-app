@@ -2,6 +2,32 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Stop announcing the framework in responses -- free, no functional effect.
+  poweredByHeader: false,
+  // Security-audit fix: no headers were set anywhere (checked proxy.ts too).
+  // Scoped deliberately narrow for now -- these three are safe, unconditional
+  // wins that can't break anything the app currently does. A real script-src
+  // CSP is a separate, bigger piece of work (needs nonces threaded through
+  // every inline script/portal-rendered dialog) and is intentionally not
+  // attempted here to avoid shipping a CSP that silently breaks the app.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Replaces the older X-Frame-Options; blocks clickjacking by
+          // refusing to render this app inside anyone's <iframe>.
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          // 2 years + preload is a one-way door (undoing it once submitted to
+          // browsers' preload lists takes months), so start without preload;
+          // add it deliberately later once you're confident every subdomain
+          // that will ever exist under securetecc.com is HTTPS-only.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
   // A stray lockfile in a parent directory (outside this repo) otherwise
   // makes Next.js guess the wrong workspace root.
   turbopack: {

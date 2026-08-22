@@ -165,7 +165,11 @@ export function LoginForm() {
       return;
     }
 
-    const next = searchParams.get("next") ?? "/dashboard";
+    // Only ever follow an internal path -- a bare "/" prefix that isn't also
+    // "//..." (a protocol-relative URL browsers treat as external). Without
+    // this, ?next=//evil.com is an open redirect off a trusted login page.
+    const rawNext = searchParams.get("next");
+    const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/dashboard";
     if (reduceMotion) {
       router.push(next);
       router.refresh();

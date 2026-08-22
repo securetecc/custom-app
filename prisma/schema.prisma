@@ -445,3 +445,18 @@ model TicketAttachment {
   @@index([ticketId])
   @@map("ticket_attachments")
 }
+
+/// DB-backed fixed-window rate limiter for the two public, unauthenticated
+/// actions (ticket submission, ticket status lookup) -- an in-memory counter
+/// wouldn't survive across serverless invocations, so the counter itself has
+/// to live somewhere durable. Not tenant data and never touched through
+/// withRLS: see src/lib/rate-limit.ts, which uses the trusted Prisma client
+/// directly (same category as the ticket-sequence increment).
+model RateLimitHit {
+  key         String
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@id([key, windowStart])
+  @@map("rate_limit_hits")
+}
