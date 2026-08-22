@@ -54,10 +54,10 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
                 active
-                  ? "bg-sidebar-accent text-sidebar-foreground"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  ? "border-[rgba(6,225,220,0.4)] bg-[rgba(6,225,220,0.12)] text-[#06E1DC] shadow-[0_0_12px_rgba(6,225,220,0.25)]"
+                  : "border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
               )}
             >
               <Icon className="h-4 w-4" />
