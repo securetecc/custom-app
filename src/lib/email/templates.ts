@@ -70,6 +70,12 @@ function button(href: string, label: string, color: string): string {
 export function ticketConfirmationEmail(
   branding: Branding,
   ticket: { ticketNumber: string; contactName: string; issueType: string; urgency: string; description: string },
+  /**
+   * Public status-lookup URL (ticket.securetecc.com/status). Optional so the
+   * email still sends if the portal URL isn't configured -- the ticket number
+   * in the body is the part that actually matters.
+   */
+  statusUrl?: string,
 ): { subject: string; html: string } {
   return {
     subject: `We received your request (${ticket.ticketNumber})`,
@@ -84,7 +90,13 @@ export function ticketConfirmationEmail(
        <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border-radius:8px;">
          <div style="font-size:12px;color:#5B6B7C;margin-bottom:6px;">What you told us</div>
          ${paragraphs(ticket.description)}
-       </div>`,
+       </div>
+       ${
+         statusUrl
+           ? button(statusUrl, "Check the status of this request", branding.accentColor) +
+             `<p style="margin:0;font-size:13px;color:#5B6B7C;">You'll need ${escapeHtml(ticket.ticketNumber)} and this email address.</p>`
+           : ""
+       }`,
     ),
   };
 }

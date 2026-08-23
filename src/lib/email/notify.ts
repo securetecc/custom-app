@@ -54,6 +54,18 @@ function appUrl(path: string): string {
   return `${base}${path}`;
 }
 
+/**
+ * Public ticket portal (ticket.securetecc.com) -- a different host from
+ * NEXT_PUBLIC_APP_URL, which points at the staff app. Client-facing email
+ * must never link into manage.*, where they'd hit a login screen.
+ * Returns undefined when unset so callers can omit the link entirely rather
+ * than emitting a broken relative URL.
+ */
+function portalUrl(path: string): string | undefined {
+  const base = process.env.NEXT_PUBLIC_TICKET_PORTAL_URL?.replace(/\/$/, "");
+  return base ? `${base}${path}` : undefined;
+}
+
 export async function notifyNewTicket(ticketId: string): Promise<{
   clientConfirmation: SendResult;
   internalAlert: SendResult;
@@ -77,7 +89,7 @@ export async function notifyNewTicket(ticketId: string): Promise<{
     issueType: ticket.issueType,
     urgency: ticket.urgency,
     description: ticket.description,
-  });
+  }, portalUrl("/status"));
 
   const alert = ticketInternalAlertEmail(
     branding,
