@@ -172,6 +172,12 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
         `Invoice ${result.data.invoiceNumber} created, but the PDF failed to render. ` +
           "Use Retry PDF on the invoice.",
       );
+    } else if (result.data.archiveWarning) {
+      // The invoice itself is fine -- only the Drive copy didn't land.
+      toast.warning(
+        `Invoice ${result.data.invoiceNumber} created, but archiving to Google Drive failed: ` +
+          result.data.archiveWarning,
+      );
     } else {
       toast.success(`Invoice ${result.data.invoiceNumber} created as Draft`);
     }

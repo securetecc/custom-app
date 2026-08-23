@@ -23,6 +23,7 @@ import {
 } from "@/lib/storage/invoices";
 import type { InvoicePdfData } from "@/lib/pdf/types";
 import { createGmailDraft } from "@/lib/google/gmail";
+import { archiveInvoiceToDrive } from "@/lib/google/archive-invoice";
 import { invoiceEmail } from "@/lib/email/templates";
 import type { BillingFrequency } from "@/generated/prisma/enums";
 
@@ -298,7 +299,14 @@ export async function loadBillingCandidates(
  */
 export async function generateInvoice(
   input: GenerateInvoiceValues,
-): Promise<ActionResult<{ invoiceId: string; invoiceNumber: string; pdfFailed: boolean }>> {
+): Promise<
+  ActionResult<{
+    invoiceId: string;
+    invoiceNumber: string;
+    pdfFailed: boolean;
+    archiveWarning?: string;
+  }>
+> {
   const parsed = generateInvoiceSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -554,6 +562,7 @@ export async function generateInvoice(
   // slow and shouldn't hold a DB transaction open. If it fails, the invoice is
   // still correct (line items are linked); the detail page offers a retry.
   let pdfFailed = false;
+  let archiveWarning: string | undefined;
   try {
     const pdf = await generateInvoicePdf(pdfInput.data);
     const path = invoicePdfPath(appUser.organizationId, clientId, invoiceId);
@@ -561,13 +570,25 @@ export async function generateInvoice(
     await withRLS(authUserId, (tx) =>
       tx.invoice.update({ where: { id: invoiceId }, data: { pdfUrl: path } }),
     );
+
+    // Drive archiving is best-effort and never throws -- a correctly billed
+    // invoice must not be undone because Drive was unreachable. Silently a
+    // no-op when Google isn't configured yet.
+    const archived = await archiveInvoiceToDrive({
+      invoiceNumber,
+      clientName: pdfInput.data.client.name,
+      year: periodEnd.getUTCFullYear(),
+      pdf,
+      data: pdfInput.data,
+    });
+    if (!archived.ok && !archived.skipped) archiveWarning = archived.error;
   } catch {
     pdfFailed = true;
   }
 
   revalidatePath("/invoices");
   revalidatePath("/time-entries");
-  return { ok: true, data: { invoiceId, invoiceNumber, pdfFailed } };
+  return { ok: true, data: { invoiceId, invoiceNumber, pdfFailed, archiveWarning } };
 }
 
 /** Re-renders the PDF for an invoice that has none (or a stale one). */

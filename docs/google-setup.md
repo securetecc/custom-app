@@ -21,9 +21,10 @@ with no warning. The tradeoff is a few more setup steps now, done once.
 
 1. Go to <https://console.cloud.google.com/> and create a project (e.g.
    `securetecc-platform`).
-2. **APIs & Services → Library** → enable the **Gmail API**.
-   (Also enable the **Google Drive API** now if you want invoice archiving
-   later — same service account will cover it.)
+2. **APIs & Services → Library** → enable all three:
+   - **Gmail API** (invoice drafts)
+   - **Google Drive API** (invoice archiving)
+   - **Google Sheets API** (the spreadsheet copy of each invoice)
 3. **IAM & Admin → Service Accounts → Create service account**
    - Name: `invoice-drafter`
    - Skip the optional role/user grants — domain-wide delegation is what
@@ -39,11 +40,16 @@ with no warning. The tradeoff is a few more setup steps now, done once.
    API controls → Domain-wide delegation → Manage domain-wide delegation**.
 2. **Add new**:
    - **Client ID**: the service account's Unique ID from step 1.5
-   - **OAuth scopes**: `https://www.googleapis.com/auth/gmail.compose`
-
-   > Add `https://www.googleapis.com/auth/drive.file` to the same entry if
-   > you're also doing Drive archiving.
+   - **OAuth scopes** — paste all three, comma-separated:
+     ```
+     https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/spreadsheets
+     ```
 3. Authorize.
+
+> **Why the broad `drive` scope and not `drive.file`?** `drive.file` only
+> grants access to files the app itself created. It cannot see an existing
+> "SecureTECC Master" folder, so the find-or-create step would make a
+> duplicate next to yours on every run instead of reusing it.
 
 `gmail.compose` lets the app **create drafts and send** but not read the
 mailbox. The app only ever calls the drafts endpoint — there is deliberately no
@@ -59,6 +65,7 @@ From the downloaded JSON key file:
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | the JSON's `client_email` |
 | `GOOGLE_PRIVATE_KEY` | the JSON's `private_key` |
 | `GOOGLE_IMPERSONATED_USER` | `tgregory@securetecc.com` |
+| `GOOGLE_DRIVE_ROOT_FOLDER_ID` | *(optional)* the folder ID of an existing "SecureTECC Master" — grab it from the folder's URL. Omit and the app matches by name, creating it if absent. |
 
 **Important formatting note:** `private_key` contains real newlines. Env vars
 can't hold those, so escape them as literal `\n`. The app unescapes at read
@@ -69,7 +76,22 @@ Vercel handles multi-line values fine — but keep it consistent with whatever
 Set all three in **Vercel → Project → Settings → Environment Variables** for
 the Production environment (and locally in `.env` if you want to test).
 
-## 4. Verify
+## 4. What lands in Drive
+
+Every generated invoice is archived automatically to:
+
+```
+SecureTECC Master / SecureTECC Invoices / {Client Name} / {Year} /
+    ALLENLAW-00012.pdf      the rendered invoice
+    ALLENLAW-00012          a Google Sheet replica of the same invoice
+```
+
+Regenerating an invoice replaces the existing files rather than piling up
+"(1)", "(2)" copies. Archiving is **best-effort**: if Drive is unreachable the
+invoice is still created and billed correctly, and the UI shows a warning
+rather than failing.
+
+## 5. Verify
 
 Generate a draft invoice in the app, open it, and click **Create Gmail draft**.
 A draft with the PDF attached should appear in `tgregory@securetecc.com`'s
@@ -83,6 +105,8 @@ Common failures:
 | `invalid_grant` | `GOOGLE_IMPERSONATED_USER` isn't a real user on this Workspace domain |
 | `Invalid JWT Signature` | The private key got mangled — usually the `\n` escaping |
 | Draft appears in the wrong mailbox | `GOOGLE_IMPERSONATED_USER` points at a different user |
+| Duplicate "SecureTECC Master" folders appear | The `drive` scope wasn't granted (only `drive.file`), so the app can't see your existing folder |
+| `Sheets create 403` | Google Sheets API not enabled, or the spreadsheets scope missing from delegation |
 
 ---
 
