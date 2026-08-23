@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -49,6 +49,49 @@ function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/**
+ * Both of the client-only values below are read through useSyncExternalStore
+ * rather than "useState + set it in an effect on mount". Same rendered
+ * result, but the effect version is a synchronous setState inside an effect,
+ * which cascades an extra render and is what react-hooks/set-state-in-effect
+ * flags. useSyncExternalStore is the intended tool for "a value that lives
+ * outside React and differs between server and client".
+ *
+ * The server snapshots (false / no particles) are what SSR emits; React swaps
+ * in the client snapshot after hydration.
+ */
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeReducedMotion(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const mql = window.matchMedia(REDUCED_MOTION_QUERY);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
+type Particle = { left: number; size: number; duration: number; delay: number };
+
+const NO_PARTICLES: Particle[] = [];
+
+/**
+ * Cached at module scope so the getSnapshot below returns a stable reference
+ * -- returning a fresh array each call would make useSyncExternalStore loop
+ * forever. Particles are decorative and never change after first paint, so
+ * the subscribe function is a deliberate no-op.
+ */
+let particlesCache: Particle[] | null = null;
+
+function getParticlesSnapshot(): Particle[] {
+  if (prefersReducedMotion()) return NO_PARTICLES;
+  particlesCache ??= Array.from({ length: 26 }, () => ({
+    left: Math.random() * 100,
+    size: 2 + Math.random() * 2.5,
+    duration: 14 + Math.random() * 14,
+    delay: Math.random() * 20,
+  }));
+  return particlesCache;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,55 +101,47 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [splashHiding, setSplashHiding] = useState(false);
-  const [splashGone, setSplashGone] = useState(false);
-  const [contentShown, setContentShown] = useState(false);
+  const reduceMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    prefersReducedMotion,
+    () => false,
+  );
+  // Ambient floating particles -- generated client-side so each load varies.
+  const particles = useSyncExternalStore(
+    subscribeReducedMotion,
+    getParticlesSnapshot,
+    () => NO_PARTICLES,
+  );
+
+  // Splash timers. With reduced motion there is no splash at all, so both
+  // derive to "already finished" below rather than being set in an effect.
+  const [splashHeld, setSplashHeld] = useState(false);
+  const [splashRemoved, setSplashRemoved] = useState(false);
   const [exiting, setExiting] = useState(false);
-  const [particles, setParticles] = useState<
-    { left: number; size: number; duration: number; delay: number }[]
-  >([]);
+
+  const contentShown = reduceMotion || splashHeld;
+  const splashHiding = reduceMotion || splashHeld;
+  const splashGone = reduceMotion || splashRemoved;
 
   const heroRef = useRef<HTMLElement>(null);
   const needleRef = useRef<HTMLDivElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
 
   // Splash intro: hold on the logo, then fade into the page -- identical
-  // timing to the v1 site (1.6s hold, 0.8s fade).
+  // timing to the v1 site (1.6s hold, 0.8s fade). setState inside setTimeout
+  // is asynchronous, so this doesn't cascade a render the way a synchronous
+  // setState in the effect body would.
   useEffect(() => {
-    if (prefersReducedMotion()) {
-      setReduceMotion(true);
-      setContentShown(true);
-      setSplashHiding(true);
-      setSplashGone(true);
-      return;
-    }
+    if (reduceMotion) return;
     const HOLD_MS = 1600;
     const FADE_MS = 800;
-    const holdTimer = setTimeout(() => {
-      setContentShown(true);
-      setSplashHiding(true);
-    }, HOLD_MS);
-    const goneTimer = setTimeout(() => setSplashGone(true), HOLD_MS + FADE_MS);
+    const holdTimer = setTimeout(() => setSplashHeld(true), HOLD_MS);
+    const goneTimer = setTimeout(() => setSplashRemoved(true), HOLD_MS + FADE_MS);
     return () => {
       clearTimeout(holdTimer);
       clearTimeout(goneTimer);
     };
-  }, []);
-
-  // Ambient floating particles -- generated client-side so each load varies.
-  useEffect(() => {
-    if (prefersReducedMotion()) return;
-    const COUNT = 26;
-    setParticles(
-      Array.from({ length: COUNT }, () => ({
-        left: Math.random() * 100,
-        size: 2 + Math.random() * 2.5,
-        duration: 14 + Math.random() * 14,
-        delay: Math.random() * 20,
-      })),
-    );
-  }, []);
+  }, [reduceMotion]);
 
   // Compass needle tracking the cursor within the hero.
   useEffect(() => {

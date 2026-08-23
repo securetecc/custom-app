@@ -43,7 +43,12 @@ const nextConfig: NextConfig = {
   // Note the glob covers src/generated/**, not just src/generated/prisma/**,
   // so the engine copy staged by scripts/stage-prisma-engine.mjs is traced too.
   outputFileTracingIncludes: {
-    "/**": ["./src/generated/**/*"],
+    // public/securetecc-logo.png is read from disk at render time by
+    // src/lib/pdf/logo.ts (the invoice PDF's logo + watermark fallback when
+    // Organization.logoUrl isn't set). Static assets in public/ are served by
+    // the CDN, not traced into function bundles, so it has to be listed here
+    // or that read 404s in production and invoices silently lose their logo.
+    "/**": ["./src/generated/**/*", "./public/securetecc-logo.png"],
   },
   // ...but shipping the binary isn't sufficient on its own. Bundling
   // @prisma/client rewrites the __dirname its runtime uses to locate that
