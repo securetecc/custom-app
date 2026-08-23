@@ -14,20 +14,50 @@ import { NextResponse, type NextRequest } from "next/server";
 // "/support" (a startsWith prefix match below) already covers "/support/status".
 const PUBLIC_PATHS = ["/login", "/support", "/privacy", "/terms", "/api/tickets", "/api/cron"];
 
-// The client-facing ticket portal is meant to live at its own hostname
-// (support.securetecc.com) rather than a path under the internal app's
-// domain (manage.securetecc.com). Rewriting that host's root to /support
-// here means the public site's URL bar never shows /support, while reusing
-// the exact same page and backend as everything else -- no separate
-// deployment, no duplicated ticket-submission logic.
-const SUPPORT_HOST = "support.securetecc.com";
+// Client-facing ticket portal, on its own hostname rather than a path under
+// the internal app. Clients never see a domain called "manage", and the
+// public/staff split becomes structural instead of a path convention.
+//
+// support.securetecc.com stays on Hostinger as the marketing page and simply
+// links here. Add that host to this array if it ever moves to Vercel too --
+// the behaviour below is per-host, not per-domain.
+const PUBLIC_TICKET_HOSTS = ["ticket.securetecc.com"];
+
+// Pretty URLs on the ticket host: the public URL bar never shows /support.
+const TICKET_REWRITES: Record<string, string> = {
+  "/": "/support",
+  "/status": "/support/status",
+};
+
+// Served as-is on the ticket host. /_next must be here or the page ships
+// without its JS/CSS; the legal pages are linked from the portal footer.
+const TICKET_PASSTHROUGH = ["/_next", "/support", "/privacy", "/terms"];
 
 export async function proxy(request: NextRequest) {
   const host = request.headers.get("host")?.split(":")[0];
-  if (host === SUPPORT_HOST && request.nextUrl.pathname === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/support";
-    return NextResponse.rewrite(url);
+  if (host && PUBLIC_TICKET_HOSTS.includes(host)) {
+    const { pathname } = request.nextUrl;
+
+    const rewriteTo = TICKET_REWRITES[pathname];
+    if (rewriteTo) {
+      const url = request.nextUrl.clone();
+      url.pathname = rewriteTo;
+      // rewrite, not redirect: preserves method and body, so the form's
+      // Server Action POST to "/" still reaches /support intact.
+      return NextResponse.rewrite(url);
+    }
+
+    if (TICKET_PASSTHROUGH.some((prefix) => pathname.startsWith(prefix))) {
+      return NextResponse.next({ request });
+    }
+
+    // Everything else on this host is internal-app surface. Send visitors to
+    // the form rather than letting the staff app (or its login page) answer
+    // on a client-facing domain at all.
+    const home = request.nextUrl.clone();
+    home.pathname = "/";
+    home.search = "";
+    return NextResponse.redirect(home);
   }
 
   let response = NextResponse.next({ request });
