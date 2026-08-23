@@ -7,6 +7,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 export const organizationFormSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
   supportEmail: z.string().email("Enter a valid email"),
+  notificationFromEmail: z.string().email("Enter a valid email").or(z.literal("")),
   invoiceFromEmail: z.string().email("Enter a valid email").or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   logoUrl: z.string().url("Enter a valid URL").or(z.literal("")),

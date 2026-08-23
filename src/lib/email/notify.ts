@@ -20,6 +20,7 @@ type OrgRow = {
   id: string;
   name: string;
   supportEmail: string;
+  notificationFromEmail: string | null;
   invoiceFromEmail: string | null;
   phone: string | null;
   logoUrl: string | null;
@@ -27,6 +28,16 @@ type OrgRow = {
   brandColorAccent: string;
   emailDomainVerified: boolean;
 };
+
+/**
+ * The `from:` for automated mail -- a noreply sender on the alerts subdomain.
+ * NEVER use this for `to:` or `replyTo:`: nobody reads a noreply mailbox, so
+ * doing so silently black-holes internal alerts and client replies alike.
+ * Falls back to supportEmail so an unconfigured org still sends.
+ */
+function senderOf(org: OrgRow): string {
+  return org.notificationFromEmail ?? org.supportEmail;
+}
 
 function brandingOf(org: OrgRow): Branding {
   return {
@@ -86,7 +97,7 @@ export async function notifyNewTicket(ticketId: string): Promise<{
   const [clientConfirmation, internalAlert] = await Promise.all([
     sendEmail({
       to: ticket.contactEmail,
-      from: org.supportEmail,
+      from: senderOf(org),
       replyTo: org.supportEmail,
       subject: confirmation.subject,
       html: confirmation.html,
@@ -94,7 +105,7 @@ export async function notifyNewTicket(ticketId: string): Promise<{
     }),
     sendEmail({
       to: org.supportEmail,
-      from: org.supportEmail,
+      from: senderOf(org),
       replyTo: ticket.contactEmail,
       subject: alert.subject,
       html: alert.html,
@@ -136,7 +147,7 @@ export async function notifyTicketStatusChange(
 
   return sendEmail({
     to: ticket.contactEmail,
-    from: org.supportEmail,
+    from: senderOf(org),
     replyTo: org.supportEmail,
     subject: email.subject,
     html: email.html,

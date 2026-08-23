@@ -86,24 +86,30 @@ Common failures:
 
 ---
 
-## Separately: Resend + the SPF gotcha
+## Separately: Resend
 
-Ticket and digest email still go through **Resend**, which needs its own DNS
-records on `securetecc.com` before anything sends (`emailDomainVerified` in
-Settings → Organization is the gate).
+Ticket and digest email go through **Resend**, sending from
+`noreply@alerts.securetecc.com` — a **dedicated subdomain**, chosen so its DNS
+records stay completely independent of the root domain's Google Workspace
+setup. Verify `alerts.securetecc.com` (not `securetecc.com`) in Resend and add
+the SPF/DKIM/DMARC records it gives you *on that subdomain*.
 
-⚠️ **`securetecc.com` is on Google Workspace, so it already has an SPF record.
-A domain may only have ONE.** Adding a second standalone SPF record for Resend
-will break delivery of your existing Google Workspace mail.
+> Because it's a separate subdomain it gets its own SPF record, so there's no
+> conflict with the Google Workspace SPF record on `securetecc.com`. That
+> conflict would have been real if we'd sent from the root domain — a domain
+> may only have one SPF record, and adding a second breaks existing mail.
 
-Merge them into a single record instead — something of the shape:
+Then flip **Settings → Organization → Email domain verification** on. Nothing
+sends until that switch is on; every send is skipped rather than failing.
 
-```
-v=spf1 include:_spf.google.com include:amazonses.com ~all
-```
+### The three addresses, and why they're different
 
-(Use whatever `include:` Resend's dashboard actually tells you; the point is
-that it goes *inside* the existing record, not alongside it.)
+| Setting | Value | Role |
+|---|---|---|
+| Notification "from" | `noreply@alerts.securetecc.com` | `from:` on automated ticket/digest mail. Only this domain needs Resend verification. |
+| Support inbox | `tgregory@securetecc.com` | `to:` for internal new-ticket alerts, and `replyTo:` on client mail. **Must be a real monitored mailbox.** |
+| Invoice "from" | `tgregory@securetecc.com` | Sender on invoice Gmail drafts. Never goes through Resend. |
 
-DKIM and DMARC records are separate and can coexist normally — SPF is the only
-one with the single-record restriction.
+The split matters: if the noreply address were used as `to:`/`replyTo:`,
+internal alerts would land in an unread mailbox and client replies to ticket
+confirmations would vanish.

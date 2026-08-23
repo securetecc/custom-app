@@ -35,6 +35,7 @@ export async function updateOrganization(
         data: {
           name: data.name,
           supportEmail: data.supportEmail,
+          notificationFromEmail: data.notificationFromEmail || null,
           invoiceFromEmail: data.invoiceFromEmail || null,
           phone: data.phone || null,
           logoUrl: data.logoUrl || null,

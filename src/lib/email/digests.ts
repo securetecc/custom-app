@@ -50,7 +50,7 @@ export async function sendDailyReminders(): Promise<Result[]> {
       const email = dailyReminderEmail(brandingOf(org), user.name);
       const sent = await sendEmail({
         to: user.email,
-        from: org.supportEmail,
+        from: org.notificationFromEmail ?? org.supportEmail,
         subject: email.subject,
         html: email.html,
         emailDomainVerified: org.emailDomainVerified,
@@ -92,7 +92,7 @@ export async function sendWeeklyTicketDigests(): Promise<Result[]> {
     for (const user of staff) {
       const sent = await sendEmail({
         to: user.email,
-        from: org.supportEmail,
+        from: org.notificationFromEmail ?? org.supportEmail,
         subject: email.subject,
         html: email.html,
         emailDomainVerified: org.emailDomainVerified,
@@ -178,7 +178,7 @@ export async function sendMonthlySummaries(): Promise<Result[]> {
     for (const user of staff) {
       const sent = await sendEmail({
         to: user.email,
-        from: org.supportEmail,
+        from: org.notificationFromEmail ?? org.supportEmail,
         subject: email.subject,
         html: email.html,
         emailDomainVerified: org.emailDomainVerified,

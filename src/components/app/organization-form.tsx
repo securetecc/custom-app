@@ -82,20 +82,42 @@ export function OrganizationForm({ defaultValues }: { defaultValues: Organizatio
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="supportEmail">Support email</Label>
+            <Label htmlFor="supportEmail">Support inbox</Label>
             <Input id="supportEmail" type="email" {...register("supportEmail")} />
             <p className="text-xs text-muted-foreground">
-              Sender for ticket and digest email.
+              Must be a real, monitored mailbox — new-ticket alerts are sent here, and it&apos;s
+              what clients reach when they reply.
             </p>
             {errors.supportEmail && (
               <p className="text-xs text-destructive">{errors.supportEmail.message}</p>
             )}
           </div>
           <div className="space-y-2">
+            <Label htmlFor="notificationFromEmail">Notification &ldquo;from&rdquo; address</Label>
+            <Input
+              id="notificationFromEmail"
+              type="email"
+              placeholder="noreply@alerts.securetecc.com"
+              {...register("notificationFromEmail")}
+            />
+            <p className="text-xs text-muted-foreground">
+              The <span className="font-medium">from:</span> on automated ticket and digest
+              email. Safe to be a noreply address — replies go to the support inbox, not here.
+              Defaults to the support inbox if left blank.
+            </p>
+            {errors.notificationFromEmail && (
+              <p className="text-xs text-destructive">{errors.notificationFromEmail.message}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
             <Label htmlFor="invoiceFromEmail">Invoice &ldquo;from&rdquo; email</Label>
             <Input id="invoiceFromEmail" type="email" {...register("invoiceFromEmail")} />
             <p className="text-xs text-muted-foreground">
-              Invoices send from here instead of the shared support inbox.
+              Sender on invoice Gmail drafts. Should match the Google Workspace mailbox the
+              drafts are created in.
             </p>
             {errors.invoiceFromEmail && (
               <p className="text-xs text-destructive">{errors.invoiceFromEmail.message}</p>
@@ -220,15 +242,17 @@ export function OrganizationForm({ defaultValues }: { defaultValues: Organizatio
  */
 export function EmailDomainChecklist({
   verified,
-  supportEmail,
-  invoiceFromEmail,
+  notificationFromEmail,
 }: {
   verified: boolean;
-  supportEmail: string;
-  invoiceFromEmail: string | null;
+  /** Resend only ever sends from this address, so this is the only domain to verify. */
+  notificationFromEmail: string;
 }) {
   const [pending, setPending] = useState(false);
-  const domains = [...new Set([supportEmail, invoiceFromEmail].filter(Boolean).map((e) => e!.split("@")[1]))];
+  // Only the notification sender's domain. Deliberately NOT the invoice
+  // sender's: invoices go out as Gmail drafts now, never through Resend, so
+  // listing that domain here would send you to verify one Resend never uses.
+  const domains = [notificationFromEmail.split("@")[1]].filter(Boolean) as string[];
 
   async function toggle(next: boolean) {
     setPending(true);

@@ -90,7 +90,18 @@ model Organization {
   logoUrl             String?
   brandColorPrimary   String   @default("#071E37")
   brandColorAccent    String   @default("#06E1DC")
+  /// The REAL, monitored inbox. Two distinct jobs, both of which need a human
+  /// reading them: it's the `to:` for internal new-ticket alerts, and the
+  /// `replyTo:` on client-facing mail. Deliberately NOT the `from:` — see
+  /// notificationFromEmail.
   supportEmail        String   @unique
+  /// The `from:` for automated Resend mail (ticket confirmations, status
+  /// changes, digests). Split out from supportEmail because outbound sending
+  /// moved to a dedicated subdomain (noreply@alerts.securetecc.com) so its SPF
+  /// record stays independent of the root domain's Google Workspace one.
+  /// A noreply sender must never be the to:/replyTo: — that black-holes both
+  /// internal alerts and client replies. Falls back to supportEmail when unset.
+  notificationFromEmail String?
   // From address used specifically for outbound invoice emails (may differ
   // from supportEmail — e.g. a named staff mailbox rather than a shared inbox).
   invoiceFromEmail    String?

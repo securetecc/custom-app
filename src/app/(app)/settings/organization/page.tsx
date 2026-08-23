@@ -34,6 +34,7 @@ export default async function OrganizationSettingsPage() {
         defaultValues={{
           name: organization.name,
           supportEmail: organization.supportEmail,
+          notificationFromEmail: organization.notificationFromEmail ?? "",
           invoiceFromEmail: organization.invoiceFromEmail ?? "",
           phone: organization.phone ?? "",
           logoUrl: organization.logoUrl ?? "",
@@ -54,8 +55,7 @@ export default async function OrganizationSettingsPage() {
 
       <EmailDomainChecklist
         verified={organization.emailDomainVerified}
-        supportEmail={organization.supportEmail}
-        invoiceFromEmail={organization.invoiceFromEmail}
+        notificationFromEmail={organization.notificationFromEmail ?? organization.supportEmail}
       />
 
       <StaffSection staff={staff} currentUserId={appUser.id} />
