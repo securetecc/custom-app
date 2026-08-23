@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/table";
 import {
   MarkPaidButton,
-  MarkSentButton,
   RetryPdfButton,
+  SendInvoiceActions,
   VoidInvoiceDialog,
 } from "@/components/app/invoice-actions";
+import { isGoogleConfigured } from "@/lib/google/auth";
 import { formatAddressLine, formatCurrency, formatDate, formatHours } from "@/lib/format";
 import { Download } from "lucide-react";
 
@@ -89,10 +90,7 @@ export default async function InvoiceDetailPage({
           )}
 
           {!voided && isAdmin && invoice.status === "Draft" && (
-            <MarkSentButton
-              invoiceId={invoice.id}
-              emailDomainVerified={invoice.organization.emailDomainVerified}
-            />
+            <SendInvoiceActions invoiceId={invoice.id} googleConfigured={isGoogleConfigured()} />
           )}
           {!voided && isAdmin && invoice.status === "Sent" && (
             <MarkPaidButton invoiceId={invoice.id} />

@@ -17,11 +17,13 @@ import { generateInvoicePdf } from "@/lib/pdf/generate-invoice-pdf";
 import { fetchLogoDataUri } from "@/lib/pdf/logo";
 import {
   archiveInvoicePdf,
+  downloadInvoicePdf,
   invoicePdfPath,
   uploadInvoicePdf,
 } from "@/lib/storage/invoices";
 import type { InvoicePdfData } from "@/lib/pdf/types";
-import { notifyInvoiceSent } from "@/lib/email/notify";
+import { createGmailDraft } from "@/lib/google/gmail";
+import { invoiceEmail } from "@/lib/email/templates";
 import type { BillingFrequency } from "@/generated/prisma/enums";
 
 export type ActionResult<T = undefined> =
@@ -675,6 +677,84 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Creates a Gmail DRAFT of the invoice, with the PDF attached, in the
+ * Workspace mailbox the service account impersonates.
+ *
+ * Deliberately does NOT touch invoice status: the draft is unsent until a
+ * human sends it from Gmail, and marking it Sent here would make the app
+ * claim something untrue about money owed. markInvoiceSent below is the
+ * separate, explicit confirmation step.
+ */
+export async function createInvoiceGmailDraft(
+  id: string,
+): Promise<ActionResult<{ draftUrl: string }>> {
+  await requireAdmin();
+  const { authUserId } = await requireOrgContext();
+
+  try {
+    const invoice = await withRLS(authUserId, (tx) =>
+      tx.invoice.findUniqueOrThrow({
+        where: { id },
+        include: { organization: true, client: true },
+      }),
+    );
+
+    if (invoice.voidedAt) throw new ConflictError("This invoice has been voided.");
+    if (!invoice.client.email) {
+      throw new ConflictError(`${invoice.client.name} has no billing email on file.`);
+    }
+    if (!invoice.pdfUrl) {
+      throw new ConflictError("This invoice has no PDF yet — use Retry PDF first.");
+    }
+
+    // The client actually needs the invoice document, not just a summary --
+    // the previous Resend path sent HTML with nothing attached.
+    const pdf = await downloadInvoicePdf(invoice.pdfUrl);
+    const email = invoiceEmail(
+      {
+        organizationName: invoice.organization.name,
+        primaryColor: invoice.organization.brandColorPrimary,
+        accentColor: invoice.organization.brandColorAccent,
+        logoUrl: invoice.organization.logoUrl,
+        phone: invoice.organization.phone,
+      },
+      {
+        invoiceNumber: invoice.invoiceNumber,
+        clientName: invoice.client.name,
+        periodStart: invoice.periodStart,
+        periodEnd: invoice.periodEnd,
+        totalAmount: Number(invoice.totalAmount),
+      },
+    );
+
+    const draft = await createGmailDraft({
+      to: invoice.client.email,
+      from: invoice.organization.invoiceFromEmail ?? invoice.organization.supportEmail,
+      subject: email.subject,
+      html: email.html,
+      attachment: {
+        filename: `${invoice.invoiceNumber}.pdf`,
+        content: pdf,
+        mimeType: "application/pdf",
+      },
+    });
+
+    revalidatePath(`/invoices/${id}`);
+    return { ok: true, data: { draftUrl: draft.url } };
+  } catch (err: unknown) {
+    return { ok: false, error: errorMessage(err) };
+  }
+}
+
+/**
+ * Records that an invoice has actually been sent.
+ *
+ * No longer sends anything itself: invoices go out as a reviewed Gmail draft
+ * (see createInvoiceGmailDraft), so this is purely the confirmation step the
+ * admin clicks once it's really gone out. Ticket and digest email still go
+ * through Resend -- that split is intentional.
+ */
 export async function markInvoiceSent(id: string): Promise<ActionResult> {
   // Admin-only, per the RLS split: only admins transition invoice status.
   await requireAdmin();
@@ -682,18 +762,10 @@ export async function markInvoiceSent(id: string): Promise<ActionResult> {
 
   try {
     await withRLS(authUserId, async (tx) => {
-      const invoice = await tx.invoice.findUniqueOrThrow({
-        where: { id },
-        include: { organization: true },
-      });
+      const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
       if (invoice.voidedAt) throw new ConflictError("This invoice has been voided.");
       if (invoice.status !== "Draft") {
         throw new ConflictError(`This invoice is already ${invoice.status}.`);
-      }
-      if (!invoice.organization.emailDomainVerified) {
-        throw new ConflictError(
-          "The organization's email domain isn't verified yet, so invoices can't be sent.",
-        );
       }
       await tx.invoice.update({
         where: { id },
@@ -704,17 +776,8 @@ export async function markInvoiceSent(id: string): Promise<ActionResult> {
     return { ok: false, error: errorMessage(err) };
   }
 
-  // Email after the status commits. If the send fails the invoice is still
-  // correctly marked Sent -- report the failure rather than silently leaving
-  // the two out of sync, so someone can follow up manually.
-  const sent = await notifyInvoiceSent(id);
-
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${id}`);
-
-  if (!sent.ok && !sent.skipped) {
-    return { ok: false, error: `Invoice marked Sent, but the email failed: ${sent.error}` };
-  }
   return { ok: true };
 }
 

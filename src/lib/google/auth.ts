@@ -1,0 +1,106 @@
+/**
+ * Google service-account auth with domain-wide delegation, for acting as
+ * tgregory@securetecc.com against the Gmail API.
+ *
+ * Service account + DWD rather than user OAuth, deliberately: securetecc.com
+ * is Google Workspace, so DWD is available, and it has no refresh token to
+ * silently expire months later and break invoice drafting with no warning.
+ * The tradeoff is one-time setup in the Workspace Admin console -- see
+ * docs/google-setup.md.
+ *
+ * Everything here FAILS CLOSED when the env vars are absent, matching how
+ * Resend sending and the cron routes already behave: an unconfigured
+ * integration must refuse loudly, never half-work.
+ */
+
+const TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+
+export type GoogleConfig = {
+  clientEmail: string;
+  privateKey: string;
+  /** The Workspace user the service account impersonates. */
+  impersonate: string;
+};
+
+export class GoogleNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "Google Workspace isn't connected yet. Set GOOGLE_SERVICE_ACCOUNT_EMAIL, " +
+        "GOOGLE_PRIVATE_KEY, and GOOGLE_IMPERSONATED_USER — see docs/google-setup.md.",
+    );
+  }
+}
+
+/** Null (rather than throwing) so UI can render a "not connected" state. */
+export function readGoogleConfig(): GoogleConfig | null {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  // Private keys carry literal newlines that .env files can't hold, so they're
+  // conventionally stored with escaped \n and unescaped at read time.
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const impersonate = process.env.GOOGLE_IMPERSONATED_USER;
+
+  if (!clientEmail || !privateKey || !impersonate) return null;
+  return { clientEmail, privateKey, impersonate };
+}
+
+export function isGoogleConfigured(): boolean {
+  return readGoogleConfig() !== null;
+}
+
+function base64Url(input: Buffer | string): string {
+  const buf = typeof input === "string" ? Buffer.from(input, "utf8") : input;
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Mints a short-lived access token via the JWT bearer flow.
+ *
+ * Signed with node:crypto rather than adding googleapis (~of dependency
+ * weight) for what is one RS256 signature and one fetch.
+ */
+export async function getGoogleAccessToken(scope = GMAIL_SCOPE): Promise<string> {
+  const config = readGoogleConfig();
+  if (!config) throw new GoogleNotConfiguredError();
+
+  const { createSign } = await import("node:crypto");
+  const now = Math.floor(Date.now() / 1000);
+
+  const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claims = base64Url(
+    JSON.stringify({
+      iss: config.clientEmail,
+      sub: config.impersonate, // the DWD impersonation target
+      scope,
+      aud: TOKEN_URL,
+      iat: now,
+      exp: now + 3600,
+    }),
+  );
+
+  const signer = createSign("RSA-SHA256");
+  signer.update(`${header}.${claims}`);
+  const signature = base64Url(signer.sign(config.privateKey));
+  const assertion = `${header}.${claims}.${signature}`;
+
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) {
+    // Google's error body names the actual cause (bad key, DWD not granted,
+    // scope not authorized) -- surfacing it beats a generic failure, and it
+    // contains no secret material.
+    throw new Error(`Google token request failed (${response.status}): ${await response.text()}`);
+  }
+
+  const { access_token: accessToken } = (await response.json()) as { access_token?: string };
+  if (!accessToken) throw new Error("Google token response contained no access_token.");
+  return accessToken;
+}

@@ -44,6 +44,21 @@ export async function getInvoicePdfSignedUrl(path: string, expiresInSeconds = 60
 }
 
 /**
+ * Downloads a stored invoice PDF as a Buffer.
+ *
+ * Needed to attach the real PDF to the Gmail draft -- the bucket is private,
+ * so a Gmail draft can't just link to it, and a signed URL would expire.
+ */
+export async function downloadInvoicePdf(path: string): Promise<Buffer> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.storage.from(BUCKET).download(path);
+  if (error || !data) {
+    throw new Error(`Could not download invoice PDF: ${error?.message ?? "not found"}`);
+  }
+  return Buffer.from(await data.arrayBuffer());
+}
+
+/**
  * Moves a voided invoice's PDF under an `archived/` prefix.
  *
  * "Archive, don't hard-delete" is an explicit requirement -- the file stays in

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  createInvoiceGmailDraft,
   markInvoicePaid,
   markInvoiceSent,
   regenerateInvoicePdf,
@@ -21,19 +22,44 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/format";
 
-export function MarkSentButton({
+/**
+ * Two-step, deliberately: invoices leave as a Gmail draft that a human
+ * reviews and sends, then the status is confirmed here. "Mark as sent" is
+ * the only thing that flips the invoice to Sent -- creating a draft doesn't,
+ * because an unsent draft isn't a sent invoice.
+ */
+export function SendInvoiceActions({
   invoiceId,
-  emailDomainVerified,
+  googleConfigured,
 }: {
   invoiceId: string;
-  emailDomainVerified: boolean;
+  googleConfigured: boolean;
 }) {
-  const [pending, setPending] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [marking, setMarking] = useState(false);
 
-  async function handleClick() {
-    setPending(true);
+  async function handleDraft() {
+    setDrafting(true);
+    const result = await createInvoiceGmailDraft(invoiceId);
+    setDrafting(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Gmail draft created — review and send it, then Mark as sent.", {
+      action: {
+        label: "Open draft",
+        onClick: () => window.open(result.data.draftUrl, "_blank", "noopener,noreferrer"),
+      },
+      duration: 15_000,
+    });
+  }
+
+  async function handleMarkSent() {
+    if (!confirm("Confirm this invoice has actually been sent from Gmail?")) return;
+    setMarking(true);
     const result = await markInvoiceSent(invoiceId);
-    setPending(false);
+    setMarking(false);
     if (!result.ok) {
       toast.error(result.error);
       return;
@@ -41,21 +67,22 @@ export function MarkSentButton({
     toast.success("Invoice marked as Sent");
   }
 
-  if (!emailDomainVerified) {
-    return (
-      <div className="flex flex-col items-end gap-1">
-        <Button disabled>Send</Button>
-        <p className="text-xs text-muted-foreground">
-          Email domain not verified — see organization settings
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <Button onClick={handleClick} disabled={pending}>
-      {pending ? "Sending…" : "Send"}
-    </Button>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={handleDraft} disabled={drafting || !googleConfigured}>
+          {drafting ? "Creating draft…" : "Create Gmail draft"}
+        </Button>
+        <Button onClick={handleMarkSent} disabled={marking}>
+          {marking ? "Saving…" : "Mark as sent"}
+        </Button>
+      </div>
+      {!googleConfigured && (
+        <p className="text-xs text-muted-foreground">
+          Google Workspace not connected — see docs/google-setup.md
+        </p>
+      )}
+    </div>
   );
 }
 

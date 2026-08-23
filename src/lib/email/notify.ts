@@ -4,7 +4,6 @@ import {
   ticketConfirmationEmail,
   ticketInternalAlertEmail,
   ticketStatusChangeEmail,
-  invoiceEmail,
   type Branding,
 } from "@/lib/email/templates";
 
@@ -139,38 +138,6 @@ export async function notifyTicketStatusChange(
     to: ticket.contactEmail,
     from: org.supportEmail,
     replyTo: org.supportEmail,
-    subject: email.subject,
-    html: email.html,
-    emailDomainVerified: org.emailDomainVerified,
-  });
-}
-
-export async function notifyInvoiceSent(invoiceId: string): Promise<SendResult> {
-  const invoice = await prisma.invoice.findUnique({
-    where: { id: invoiceId },
-    include: { organization: true, client: true },
-  });
-  if (!invoice) return { ok: false, error: "Invoice not found." };
-
-  const org = invoice.organization as OrgRow;
-  if (!invoice.client.email) {
-    return { ok: false, error: `${invoice.client.name} has no billing email on file.` };
-  }
-
-  const email = invoiceEmail(brandingOf(org), {
-    invoiceNumber: invoice.invoiceNumber,
-    clientName: invoice.client.name,
-    periodStart: invoice.periodStart,
-    periodEnd: invoice.periodEnd,
-    totalAmount: Number(invoice.totalAmount),
-  });
-
-  // Invoices specifically send from invoiceFromEmail (a named staff mailbox),
-  // not the shared support inbox -- resolved decision in HANDOFF.md.
-  return sendEmail({
-    to: invoice.client.email,
-    from: org.invoiceFromEmail ?? org.supportEmail,
-    replyTo: org.invoiceFromEmail ?? org.supportEmail,
     subject: email.subject,
     html: email.html,
     emailDomainVerified: org.emailDomainVerified,
