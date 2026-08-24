@@ -33,15 +33,21 @@ export async function archiveInvoiceToDrive(args: {
     const token = await getGoogleAccessToken(`${DRIVE_SCOPE} ${SHEETS_SCOPE}`);
     const folderId = await ensureInvoiceFolder(args.clientName, args.year, token);
 
+    // "MWA-00002 - Muller Worthy Architects" -- matching how the previous
+    // system named these. The client folder already implies the client, but
+    // the files get downloaded and emailed out of that context, and every
+    // invoice already in Drive follows this shape.
+    const archiveName = `${args.invoiceNumber} - ${args.clientName}`;
+
     const pdfUpload = await uploadToDrive({
-      name: `${args.invoiceNumber}.pdf`,
+      name: `${archiveName}.pdf`,
       mimeType: "application/pdf",
       content: args.pdf,
       folderId,
       token,
     });
 
-    const sheetLink = await createInvoiceSheet(args.invoiceNumber, args.data, folderId, token);
+    const sheetLink = await createInvoiceSheet(archiveName, args.data, folderId, token);
 
     return { ok: true, folderId, pdfLink: pdfUpload.webViewLink, sheetLink };
   } catch (err) {
