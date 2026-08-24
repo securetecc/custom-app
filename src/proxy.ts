@@ -33,8 +33,27 @@ const TICKET_REWRITES: Record<string, string> = {
 // without its JS/CSS; the legal pages are linked from the portal footer.
 const TICKET_PASSTHROUGH = ["/_next", "/support", "/privacy", "/terms"];
 
+// Machine-to-machine routes, deliberately resolved BEFORE any host routing.
+//
+// The ticket-host branch below redirects everything it doesn't recognise to
+// "/". Vercel Cron invokes whichever production domain Vercel picks, and
+// ticket.securetecc.com is currently the only custom domain attached -- so a
+// cron hitting that host was being 307'd to the ticket form and silently
+// doing nothing, on a schedule, with a 200 in the logs.
+//
+// Safe to exempt from host routing because neither route relies on it for
+// access control: /api/cron verifies `Authorization: Bearer $CRON_SECRET`
+// and fails closed when the secret is unset (lib/cron/auth.ts), and
+// /api/tickets is the public submission endpoint the portal is for.
+const HOST_AGNOSTIC_PATHS = ["/api/cron", "/api/tickets"];
+
 export async function proxy(request: NextRequest) {
   const host = request.headers.get("host")?.split(":")[0];
+
+  if (HOST_AGNOSTIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p))) {
+    return NextResponse.next({ request });
+  }
+
   if (host && PUBLIC_TICKET_HOSTS.includes(host)) {
     const { pathname } = request.nextUrl;
 
