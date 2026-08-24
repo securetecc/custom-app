@@ -122,5 +122,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // "monitoring" is Sentry's tunnel route (next.config.ts tunnelRoute). It has
+  // to bypass this matcher entirely -- routed through the auth gate it would
+  // be redirected to /login and no error would ever reach Sentry.
+  matcher: ["/((?!monitoring|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

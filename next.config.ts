@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   // Stop announcing the framework in responses -- free, no functional effect.
@@ -68,4 +69,21 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@prisma/client", ".prisma/client"],
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: "securetecc",
+  project: "javascript-nextjs",
+
+  // Build-time secret, distinct from the DSN. Absent locally, so source-map
+  // upload simply no-ops here and runs in CI/Vercel where it's set.
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Better client stack traces at the cost of a slightly larger upload.
+  widenClientFileUpload: true,
+
+  // Proxies Sentry through our own origin so ad-blockers don't silently drop
+  // reports. NOTE: this path must be excluded from proxy.ts's matcher, or the
+  // auth gate redirects the tunnel to /login and nothing is ever reported.
+  tunnelRoute: "/monitoring",
+
+  silent: !process.env.CI,
+});
