@@ -169,6 +169,9 @@ export async function notifyTicketStatusChange(
       status: ticket.status,
     },
     notesForThisChange,
+    // Keeps the status checker reachable from every update, not just the
+    // original confirmation.
+    portalUrl("/status"),
   );
 
   return sendEmail({

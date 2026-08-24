@@ -32,26 +32,73 @@ function paragraphs(value: string): string {
     .join("");
 }
 
-function shell(branding: Branding, bodyHtml: string): string {
+/** Surfaces of the dark card. Fixed rather than derived from branding: the
+ *  panel has to sit a shade above the card, and a brand colour alone can't
+ *  say what "a shade above" is. */
+const CARD = "#0A1E33";
+const PANEL = "#0D2740";
+const TEXT = "#FFFFFF";
+const MUTED = "rgba(255,255,255,0.62)";
+
+/** Status wording carries its own colour, so state reads before the word does. */
+const STATUS_COLORS: Record<string, string> = {
+  New: "#06E1DC",
+  InProgress: "#F5B942",
+  "In Progress": "#F5B942",
+  Resolved: "#06E1DC",
+  Closed: "rgba(255,255,255,0.62)",
+};
+
+/** The teal-bordered callout: a small uppercase label over a large value. */
+function panel(label: string, value: string, valueColor = TEXT): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
+    <tr><td style="background:${PANEL};border-left:4px solid #06E1DC;border-radius:8px;padding:18px 20px;">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#06E1DC;margin-bottom:6px;">${escapeHtml(label)}</div>
+      <div style="font-size:22px;font-weight:700;color:${valueColor};">${escapeHtml(value)}</div>
+    </td></tr>
+  </table>`;
+}
+
+/** Teal uppercase section heading, e.g. "UPDATE DETAILS". */
+function sectionLabel(text: string): string {
+  return `<div style="font-size:12px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:#06E1DC;margin:22px 0 8px;">${escapeHtml(text)}</div>`;
+}
+
+/**
+ * The dark card every ticket email is built in.
+ *
+ * Dark rather than the white card this used to be, matching the design in
+ * use: the logo is light-on-dark artwork, and on a white ground it needed its
+ * own navy header band, which read as two separate blocks stacked together.
+ *
+ * `portalUrl` is threaded all the way down to the footer so the status
+ * checker stays reachable from every message, not just the ones with a
+ * button.
+ */
+function shell(branding: Branding, bodyHtml: string, portalUrl?: string): string {
   const logo = branding.logoUrl
-    ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(branding.organizationName)}" width="180" style="display:block;margin:0 auto;max-width:180px;height:auto;" />`
-    : `<div style="font-size:20px;font-weight:700;color:#ffffff;text-align:center;">${escapeHtml(branding.organizationName)}</div>`;
+    ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(branding.organizationName)}" width="240" style="display:block;margin:0 auto;max-width:240px;height:auto;" />`
+    : `<div style="font-size:22px;font-weight:700;color:${TEXT};text-align:center;">${escapeHtml(branding.organizationName)}</div>`;
+
+  const portalLink = portalUrl
+    ? ` · <a href="${escapeHtml(portalUrl)}" style="color:${MUTED};text-decoration:underline;">Support Portal</a>`
+    : "";
 
   return `<!doctype html>
 <html>
-  <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#071E37;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:24px 12px;">
+  <body style="margin:0;padding:0;background:#050F1D;font-family:Arial,Helvetica,sans-serif;color:${TEXT};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#050F1D;padding:24px 12px;">
       <tr><td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:${CARD};border-radius:16px;overflow:hidden;">
           <tr>
-            <td style="background:${escapeHtml(branding.primaryColor)};padding:22px 24px;border-bottom:3px solid ${escapeHtml(branding.accentColor)};">
+            <td style="padding:32px 24px 28px;border-bottom:2px solid #06E1DC;">
               ${logo}
             </td>
           </tr>
-          <tr><td style="padding:28px 24px;font-size:15px;line-height:1.6;">${bodyHtml}</td></tr>
+          <tr><td style="padding:28px 26px;font-size:15px;line-height:1.6;color:${TEXT};">${bodyHtml}</td></tr>
           <tr>
-            <td style="padding:18px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#5B6B7C;text-align:center;">
-              ${escapeHtml(branding.organizationName)}${branding.phone ? ` · ${escapeHtml(branding.phone)}` : ""}
+            <td style="padding:18px 24px;border-top:2px solid #06E1DC;font-size:13px;color:${MUTED};text-align:center;">
+              <span style="color:#06E1DC;font-weight:700;">${escapeHtml(branding.organizationName)}</span>${portalLink}${branding.phone ? ` · ${escapeHtml(branding.phone)}` : ""}
             </td>
           </tr>
         </table>
@@ -62,7 +109,11 @@ function shell(branding: Branding, bodyHtml: string): string {
 }
 
 function button(href: string, label: string, color: string): string {
-  return `<p style="margin:20px 0;"><a href="${escapeHtml(href)}" style="display:inline-block;background:${escapeHtml(color)};color:#071E37;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px;">${escapeHtml(label)}</a></p>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0 6px;">
+    <tr><td align="center">
+      <a href="${escapeHtml(href)}" style="display:inline-block;background:${escapeHtml(color)};color:#071E37;text-decoration:none;font-weight:700;font-size:15px;padding:15px 34px;border-radius:8px;">${escapeHtml(label)}</a>
+    </td></tr>
+  </table>`;
 }
 
 // --- tickets ---------------------------------------------------------------
@@ -78,29 +129,27 @@ export function ticketConfirmationEmail(
   statusUrl?: string,
 ): { subject: string; html: string } {
   return {
-    subject: `We received your request (${ticket.ticketNumber})`,
+    subject: `We have received your request (${ticket.ticketNumber})`,
     html: shell(
       branding,
-      `<h1 style="margin:0 0 12px;font-size:20px;">Thanks, ${escapeHtml(ticket.contactName)} — we've got it.</h1>
-       <p style="margin:0 0 16px;">Your request has been logged as <strong>${escapeHtml(ticket.ticketNumber)}</strong> and our team has been notified. We'll follow up by email as soon as there's an update.</p>
-       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;border-top:1px solid #e2e8f0;margin-top:8px;">
-         <tr><td style="padding:10px 0;color:#5B6B7C;width:120px;">Issue type</td><td style="padding:10px 0;">${escapeHtml(ticket.issueType)}</td></tr>
-         <tr><td style="padding:10px 0;color:#5B6B7C;border-top:1px solid #e2e8f0;">Urgency</td><td style="padding:10px 0;border-top:1px solid #e2e8f0;">${escapeHtml(ticket.urgency)}</td></tr>
-       </table>
-       <div style="margin-top:16px;padding:14px 16px;background:#f8fafc;border-radius:8px;">
-         <div style="font-size:12px;color:#5B6B7C;margin-bottom:6px;">What you told us</div>
-         ${paragraphs(ticket.description)}
-       </div>
-       ${
-         statusUrl
-           ? button(statusUrl, "Check the status of this request", branding.accentColor) +
-             `<p style="margin:0;font-size:13px;color:#5B6B7C;">You'll need ${escapeHtml(ticket.ticketNumber)} and this email address.</p>`
-           : ""
-       }`,
+      `<p style="margin:0 0 16px;">Hi ${escapeHtml(ticket.contactName)},</p>
+       <p style="margin:0;">Thanks for reaching out. Your support request has been logged.</p>
+       ${panel("Ticket number", ticket.ticketNumber)}
+       <p style="margin:0 0 12px;">${escapeHtml(branding.organizationName)} will respond <span style="color:#06E1DC;font-weight:700;">by the next business day</span>.</p>
+       <p style="margin:0;color:${MUTED};font-size:14px;">If you need to reference this request, just include the ticket number above.</p>
+       ${statusUrl ? button(statusUrl, "Visit Support Portal", branding.accentColor) : ""}`,
+      statusUrl,
     ),
   };
 }
 
+/**
+ * Internal new-ticket alert, to the shared support inbox.
+ *
+ * Same card as the client-facing mail, different priorities in the body: the
+ * urgency, who it's from and how to reach them come first, because this one
+ * is triaged rather than read.
+ */
 export function ticketInternalAlertEmail(
   branding: Branding,
   ticket: {
@@ -112,24 +161,23 @@ export function ticketInternalAlertEmail(
   // Urgency is always in the subject, not just for high-priority tickets:
   // the inbox is triaged by scanning subject lines, and "no prefix" reading as
   // "routine" only works if you already know the convention.
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:7px 0;color:${MUTED};width:110px;">${escapeHtml(label)}</td><td style="padding:7px 0;color:${TEXT};">${escapeHtml(value)}</td></tr>`;
+
   return {
     subject: `New ${ticket.urgency} ${ticket.ticketNumber} – ${ticket.clientCompanyName}`,
     html: shell(
       branding,
-      `<h1 style="margin:0 0 12px;font-size:20px;">New support request</h1>
+      `<p style="margin:0;">New support request.</p>
+       ${panel(`Ticket ${ticket.ticketNumber}`, ticket.urgency, STATUS_COLORS[ticket.urgency] ?? "#F5B942")}
        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">
-         <tr><td style="padding:8px 0;color:#5B6B7C;width:120px;">Ticket</td><td style="padding:8px 0;"><strong>${escapeHtml(ticket.ticketNumber)}</strong></td></tr>
-         <tr><td style="padding:8px 0;color:#5B6B7C;">Company</td><td style="padding:8px 0;">${escapeHtml(ticket.clientCompanyName)}</td></tr>
-         <tr><td style="padding:8px 0;color:#5B6B7C;">Contact</td><td style="padding:8px 0;">${escapeHtml(ticket.contactName)} &lt;${escapeHtml(ticket.contactEmail)}&gt;</td></tr>
-         ${
-           ticket.callbackNumber
-             ? `<tr><td style="padding:8px 0;color:#5B6B7C;">Callback</td><td style="padding:8px 0;">${escapeHtml(ticket.callbackNumber)}</td></tr>`
-             : ""
-         }
-         <tr><td style="padding:8px 0;color:#5B6B7C;">Issue</td><td style="padding:8px 0;">${escapeHtml(ticket.issueType)}</td></tr>
-         <tr><td style="padding:8px 0;color:#5B6B7C;">Urgency</td><td style="padding:8px 0;"><strong>${escapeHtml(ticket.urgency)}</strong></td></tr>
+         ${row("Company", ticket.clientCompanyName)}
+         ${row("Contact", `${ticket.contactName} <${ticket.contactEmail}>`)}
+         ${ticket.callbackNumber ? row("Callback", ticket.callbackNumber) : ""}
+         ${row("Issue", ticket.issueType)}
        </table>
-       <div style="margin-top:14px;padding:14px 16px;background:#f8fafc;border-radius:8px;">${paragraphs(ticket.description)}</div>
+       ${sectionLabel("What they told us")}
+       ${paragraphs(ticket.description)}
        ${button(ticketUrl, "Open ticket", branding.accentColor)}`,
     ),
   };
@@ -172,22 +220,36 @@ export function ticketStatusChangeEmail(
   ticket: { ticketNumber: string; contactName: string; status: string },
   /** Notes AS OF the moment of the change -- see changeTicketStatus. */
   notesForThisChange: string | null,
+  /** Status-lookup URL, so every update keeps a route back to the portal. */
+  statusUrl?: string,
 ): { subject: string; html: string } {
   const readable: Record<string, string> = {
-    New: "reopened", InProgress: "in progress", Resolved: "resolved", Closed: "closed",
+    New: "New", InProgress: "In Progress", Resolved: "Resolved", Closed: "Closed",
   };
+  const label = readable[ticket.status] ?? ticket.status;
+  const resolved = ticket.status === "Resolved";
+  const notes = notesForThisChange?.trim();
+
   return {
-    subject: `${ticket.ticketNumber} is now ${readable[ticket.status] ?? ticket.status}`,
+    subject: `Ticket ${ticket.ticketNumber} update: ${label}`,
     html: shell(
       branding,
-      `<h1 style="margin:0 0 12px;font-size:20px;">Update on ${escapeHtml(ticket.ticketNumber)}</h1>
-       <p style="margin:0 0 16px;">Hi ${escapeHtml(ticket.contactName)}, your request is now <strong>${escapeHtml(readable[ticket.status] ?? ticket.status)}</strong>.</p>
+      `<p style="margin:0 0 16px;">Hi ${escapeHtml(ticket.contactName)},</p>
+       <p style="margin:0;">There's an update on your support request.</p>
+       ${panel(`Ticket ${ticket.ticketNumber}`, label, STATUS_COLORS[ticket.status] ?? TEXT)}
        ${
-         notesForThisChange && notesForThisChange.trim().length > 0
-           ? `<div style="padding:14px 16px;background:#f8fafc;border-radius:8px;"><div style="font-size:12px;color:#5B6B7C;margin-bottom:6px;">Notes from our team</div>${paragraphs(notesForThisChange)}</div>`
+         notes
+           ? sectionLabel(resolved ? "What we did to resolve this" : "Update details") +
+             paragraphs(notes)
            : ""
        }
-       <p style="margin:16px 0 0;">Reply to this email if anything still isn't right.</p>`,
+       ${
+         resolved
+           ? `<p style="margin:16px 0 0;color:${MUTED};">Thank you for your patience — please let us know if this fully resolves the issue.</p>`
+           : ""
+       }
+       ${statusUrl ? button(statusUrl, "Visit Support Portal", branding.accentColor) : ""}`,
+      statusUrl,
     ),
   };
 }
