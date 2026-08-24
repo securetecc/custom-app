@@ -23,8 +23,8 @@ import { parseTimeEntryVoiceNote } from "@/app/(app)/time-entries/ai-actions";
  * /clients in the main app.
  */
 
-type ClientOption = { id: string; name: string; shortName: string };
-type ServiceTypeOption = {
+export type ClientOption = { id: string; name: string; shortName: string };
+export type ServiceTypeOption = {
   id: string;
   code: string;
   label: string;

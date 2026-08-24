@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { TimeEntryDialog } from "@/components/app/time-entry-dialog";
 import { DeleteTimeEntryButton } from "@/components/app/delete-time-entry-button";
+import { VoiceLoggerDialog } from "@/components/app/voice-logger-dialog";
 import { AiTimeEntryDialog } from "@/components/app/ai-time-entry-dialog";
 import { ReimbursableExpenseDialog } from "@/components/app/reimbursable-expense-dialog";
 import { DeleteReimbursableExpenseButton } from "@/components/app/delete-reimbursable-expense-button";
@@ -21,7 +22,7 @@ import { TimeEntryFilters, type EntryType } from "@/components/app/time-entry-fi
 import { BILLABLE_STATUS_LABELS } from "@/lib/validations/time-entry";
 import { formatCurrency } from "@/lib/format";
 import { isDateRangePreset, resolveDateRange, type DateRangePreset } from "@/lib/date-range";
-import { Plus, Pencil, Sparkles, Mic, Receipt, Upload } from "lucide-react";
+import { Plus, Pencil, Sparkles, Receipt, Upload } from "lucide-react";
 
 export default async function TimeEntriesPage({
   searchParams,
@@ -88,9 +89,7 @@ export default async function TimeEntriesPage({
         <div className="flex gap-2">
           {type === "time" ? (
             <>
-              <Button variant="outline" render={<Link href="/voice-logger" />}>
-                <Mic className="mr-1 h-4 w-4" /> Voice Logger
-              </Button>
+              <VoiceLoggerDialog clients={clientOptions} serviceTypes={serviceTypeOptions} />
               <Button variant="outline" render={<Link href="/time-entries/import" />}>
                 <Upload className="mr-1 h-4 w-4" /> Import CSV
               </Button>

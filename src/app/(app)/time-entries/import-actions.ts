@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import { parseCsv } from "@/lib/csv";
+import { mapCsvColumns, type CsvFieldMapping } from "@/lib/ai/csv-mapping";
 import {
-  importedTimeEntryRowSchema,
   resolvedImportRowSchema,
   BILLABLE_STATUS_ALIASES,
   type ResolvedImportRow,
@@ -51,67 +51,84 @@ export async function previewTimeEntryImport(formData: FormData): Promise<Previe
 
   const { authUserId, appUser } = await requireOrgContext();
 
+  // parseCsv lowercases header keys, so the mapping works against those.
+  const headers = Object.keys(records[0]);
+  const { mapping } = await mapCsvColumns(headers, records.slice(0, 3));
+
+  /** Reads a field from a row via the resolved mapping. */
+  const field = (row: Record<string, string>, key: keyof CsvFieldMapping): string =>
+    (mapping[key] ? row[mapping[key]] : "") ?? "";
+
   const rows = await withRLS(authUserId, async (tx) => {
     const [clients, serviceTypes] = await Promise.all([
       tx.client.findMany({ where: { organizationId: appUser.organizationId } }),
       tx.serviceType.findMany({ where: { organizationId: appUser.organizationId } }),
     ]);
-    const clientByShortName = new Map(clients.map((c) => [c.shortName.toLowerCase(), c]));
+    // A client can be identified three ways in the wild: short name, full
+    // name, or the master sheet's CLI-### reference. Accept all of them
+    // rather than making people transform the file first.
+    const clientLookup = new Map<string, (typeof clients)[number]>();
+    for (const c of clients) {
+      clientLookup.set(c.shortName.toLowerCase(), c);
+      clientLookup.set(c.name.toLowerCase(), c);
+      if (c.reference) clientLookup.set(c.reference.toLowerCase(), c);
+    }
     const serviceTypeByCode = new Map(serviceTypes.map((s) => [s.code.toLowerCase(), s]));
+    const defaultServiceType =
+      serviceTypes.find((s) => s.code.toUpperCase() === "R-S") ?? serviceTypes[0];
 
     return records.map((raw, i): PreviewRow => {
       const rowNumber = i + 1;
-      const parsed = importedTimeEntryRowSchema.safeParse(raw);
-      if (!parsed.success) {
-        return {
-          rowNumber,
-          raw,
-          resolved: null,
-          error: parsed.error.issues[0]?.message ?? "Missing a required column",
-        };
-      }
-      const r = parsed.data;
 
-      const client = clientByShortName.get(r.clientshortname.toLowerCase());
+      const clientValue = field(raw, "client").trim();
+      const descriptionValue =
+        field(raw, "description").trim() || field(raw, "rawVoiceInput").trim();
+      const dateValue = field(raw, "date").trim();
+      const hoursValue = field(raw, "durationHours").trim();
+
+      if (!clientValue || !descriptionValue || !dateValue || !hoursValue) {
+        return {
+          rowNumber,
+          raw,
+          resolved: null,
+          error: "Couldn't find a date, client, description and hours in this row",
+        };
+      }
+
+      const client = clientLookup.get(clientValue.toLowerCase());
       if (!client) {
-        return {
-          rowNumber,
-          raw,
-          resolved: null,
-          error: `Unknown client short name "${r.clientshortname}"`,
-        };
+        return { rowNumber, raw, resolved: null, error: `Unknown client "${clientValue}"` };
       }
-      const serviceType = serviceTypeByCode.get(r.servicetypecode.toLowerCase());
+
+      // The service type is inferable and often absent from an export, so a
+      // missing one defaults rather than failing the row -- it's the one field
+      // a person can correct afterwards without losing the entry.
+      const codeValue = field(raw, "serviceType").trim();
+      const serviceType = codeValue
+        ? serviceTypeByCode.get(codeValue.toLowerCase())
+        : defaultServiceType;
       if (!serviceType) {
-        return {
-          rowNumber,
-          raw,
-          resolved: null,
-          error: `Unknown service type code "${r.servicetypecode}"`,
-        };
+        return { rowNumber, raw, resolved: null, error: `Unknown service type "${codeValue}"` };
       }
-      const date = new Date(r.date);
+
+      const date = new Date(dateValue);
       if (Number.isNaN(date.getTime())) {
-        return { rowNumber, raw, resolved: null, error: `Unparseable date "${r.date}"` };
+        return { rowNumber, raw, resolved: null, error: `Unparseable date "${dateValue}"` };
       }
-      const hours = Number(r.durationhours);
+      const hours = Number(hoursValue);
       if (Number.isNaN(hours) || hours <= 0) {
-        return {
-          rowNumber,
-          raw,
-          resolved: null,
-          error: `Unparseable hours "${r.durationhours}"`,
-        };
+        return { rowNumber, raw, resolved: null, error: `Unparseable hours "${hoursValue}"` };
       }
-      const billableStatus = r.billablestatus
-        ? BILLABLE_STATUS_ALIASES[r.billablestatus.toLowerCase()]
+      const statusValue = field(raw, "billableStatus").trim();
+      const billableStatus = statusValue
+        ? BILLABLE_STATUS_ALIASES[statusValue.toLowerCase()]
         : "Billable";
       if (!billableStatus) {
         return {
           rowNumber,
           raw,
           resolved: null,
-          error: `Unrecognized billable status "${r.billablestatus}"`,
+          error: `Unrecognized billable status "${statusValue}"`,
         };
       }
 
@@ -123,7 +140,7 @@ export async function previewTimeEntryImport(formData: FormData): Promise<Previe
         serviceTypeId: serviceType.id,
         date: date.toISOString().slice(0, 10),
         durationHours,
-        description: r.description,
+        description: descriptionValue,
         billableStatus,
       };
       return { rowNumber, raw, resolved, error: null };
