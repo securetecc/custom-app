@@ -186,6 +186,11 @@ model Client {
   address1       String?
   address2       String?
   cityStateZip   String?
+  /// Human-readable id carried over from the Operations Master Sheet
+  /// ("CLI-016"). Distinct from `id` (a uuid) and from `shortName` (the
+  /// invoice-number prefix) -- this exists so rows can be reconciled against
+  /// the spreadsheet by eye. Null for clients the sheet never numbered.
+  reference      String?
   billingType    BillingType  @default(Hourly)
   billingRate    Decimal?     @db.Decimal(10, 2)
   activeStatus   Boolean      @default(true)
@@ -206,6 +211,7 @@ model Client {
   retainerPeriods      InvoiceRetainerPeriod[]
 
   @@unique([organizationId, shortName])
+  @@unique([organizationId, reference])
   @@index([organizationId])
   @@map("clients")
 }
@@ -293,8 +299,14 @@ model RecurringCharge {
   organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   clientId         String
   client           Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// "RC-001" from the master sheet; assigned sequentially for new charges.
+  reference        String?
   description      String
   amount           Decimal          @db.Decimal(10, 2)
+  /// Free-text context ("18 devices x $25 -- verify count monthly"). Kept on
+  /// the charge itself, not only in the audit log, because it's operational
+  /// detail someone needs while looking at the charge.
+  notes            String?
   billingFrequency BillingFrequency @default(Monthly)
   activeStatus     Boolean          @default(true)
   // Structured category + who signed off on it. Both optional -- older/plain
@@ -308,6 +320,7 @@ model RecurringCharge {
   invoiceOccurrences InvoiceRecurringCharge[]
   auditLog           RecurringChargeAuditLog[]
 
+  @@unique([organizationId, reference])
   @@index([organizationId])
   @@index([clientId])
   @@map("recurring_charges")

@@ -91,20 +91,21 @@ export async function sendWeeklyTicketDigests(): Promise<Result[]> {
     }));
 
     const email = weeklyTicketDigestEmail(brandingOf(org), rows);
-    const staff = await prisma.user.findMany({ where: { organizationId: org.id } });
 
-    for (const user of staff) {
-      const sent = await sendEmail({
-        to: user.email,
-        from: org.notificationFromEmail ?? org.supportEmail,
-        subject: email.subject,
-        html: email.html,
-        emailDomainVerified: org.emailDomainVerified,
-      });
-      if (sent.ok) result.sent++;
-      else if (sent.skipped) result.skipped++;
-      else result.errors.push(`${user.email}: ${sent.error}`);
-    }
+    // One send to the shared support inbox, not a copy per staff member.
+    // This is a queue summary the team acts on together -- fanning it out to
+    // three individual mailboxes just meant three people each assuming
+    // someone else had picked it up.
+    const sent = await sendEmail({
+      to: org.supportEmail,
+      from: org.notificationFromEmail ?? org.supportEmail,
+      subject: email.subject,
+      html: email.html,
+      emailDomainVerified: org.emailDomainVerified,
+    });
+    if (sent.ok) result.sent++;
+    else if (sent.skipped) result.skipped++;
+    else result.errors.push(`${org.supportEmail}: ${sent.error}`);
 
     results.push(result);
   }

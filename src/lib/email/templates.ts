@@ -109,10 +109,11 @@ export function ticketInternalAlertEmail(
   },
   ticketUrl: string,
 ): { subject: string; html: string } {
-  const urgent =
-    ticket.urgency === "Emergency" || ticket.urgency === "Critical" || ticket.urgency === "High";
+  // Urgency is always in the subject, not just for high-priority tickets:
+  // the inbox is triaged by scanning subject lines, and "no prefix" reading as
+  // "routine" only works if you already know the convention.
   return {
-    subject: `${urgent ? `[${ticket.urgency}] ` : ""}New ticket ${ticket.ticketNumber} — ${ticket.clientCompanyName}`,
+    subject: `New ${ticket.urgency} ${ticket.ticketNumber} – ${ticket.clientCompanyName}`,
     html: shell(
       branding,
       `<h1 style="margin:0 0 12px;font-size:20px;">New support request</h1>
