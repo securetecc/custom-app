@@ -565,3 +565,29 @@ model RateLimitHit {
   @@id([key, windowStart])
   @@map("rate_limit_hits")
 }
+
+/// One row per scheduled job per occurrence it has already handled.
+///
+/// Exists because the cron design fires each job at BOTH candidate UTC hours
+/// (the PST and PDT offsets) and lets a Pacific-local gate pick the right one.
+/// That's correct for DST but brittle for failure: when the primary firing was
+/// missed -- a deployment landed in the same second on 2026-08-24 -- the
+/// backup hour was gated out for being an hour late, and the week's digest was
+/// simply lost with nothing reporting it.
+///
+/// The unique constraint IS the lock. A firing claims its occurrence by
+/// inserting; a duplicate insert fails, which is how the second candidate hour
+/// discovers the first already ran. No read-then-write race.
+model CronRun {
+  id        String   @id @default(uuid())
+  /// Route name, e.g. "weekly-digest".
+  jobName   String
+  /// The Pacific date the occurrence belongs to (YYYY-MM-DD). Sufficient for
+  /// all four jobs: the schedule already pins weekly runs to a weekday and
+  /// monthly ones to the 1st, so the date alone identifies the occurrence.
+  periodKey String
+  ranAt     DateTime @default(now())
+
+  @@unique([jobName, periodKey])
+  @@map("cron_runs")
+}

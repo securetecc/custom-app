@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest, unauthorizedResponse } from "@/lib/cron/auth";
-import { shouldRunNow, skippedResponse, type Schedule } from "@/lib/cron/pacific";
+import type { Schedule } from "@/lib/cron/pacific";
+import { claimCronRun, skippedResponse } from "@/lib/cron/claim";
 import { sendWeeklyTicketDigests } from "@/lib/email/digests";
 
 /**
@@ -17,7 +18,10 @@ export const maxDuration = 120;
 
 export async function GET(request: Request) {
   if (!isAuthorizedCronRequest(request)) return unauthorizedResponse();
-  if (!shouldRunNow(SCHEDULE)) return NextResponse.json(skippedResponse(SCHEDULE));
+  // Claims this occurrence, so the second candidate UTC hour retries a missed
+  // run instead of being rejected for being an hour late.
+  const claim = await claimCronRun("weekly-digest", SCHEDULE);
+  if (!claim.run) return NextResponse.json(skippedResponse("weekly-digest", claim));
 
   const results = await sendWeeklyTicketDigests();
   return NextResponse.json({ ok: true, results });
