@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { InvoiceRowActions } from "@/components/app/invoice-actions";
 import { formatCurrency, formatDate, formatHours } from "@/lib/format";
 import { Plus } from "lucide-react";
 
@@ -71,6 +72,7 @@ export default async function InvoicesPage({
               <TableHead className="text-right">Hours</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="w-[9rem]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -100,11 +102,18 @@ export default async function InvoicesPage({
                     </Badge>
                   )}
                 </TableCell>
+                <TableCell>
+                  <InvoiceRowActions
+                    invoiceId={invoice.id}
+                    status={invoice.status}
+                    voided={!!invoice.voidedAt}
+                  />
+                </TableCell>
               </TableRow>
             ))}
             {invoices.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   No {active.toLowerCase()} invoices.
                 </TableCell>
               </TableRow>

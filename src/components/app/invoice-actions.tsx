@@ -7,10 +7,12 @@ import {
   createInvoiceGmailDraft,
   markInvoicePaid,
   markInvoiceSent,
+  unvoidInvoice,
   regenerateInvoicePdf,
   voidInvoice,
 } from "@/app/(app)/invoices/actions";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -235,5 +237,73 @@ export function VoidInvoiceDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Row-level actions for the invoice list.
+ *
+ * The list is where someone works through a month's invoices in sequence, so
+ * the single next step for each one belongs here rather than behind a click
+ * into the detail page. Which action that is depends entirely on status, so
+ * only one ever renders.
+ */
+export function InvoiceRowActions({
+  invoiceId,
+  status,
+  voided,
+}: {
+  invoiceId: string;
+  status: string;
+  voided: boolean;
+}) {
+  const [pending, setPending] = useState(false);
+
+  async function run(fn: () => Promise<{ ok: boolean; error?: string }>, done: string) {
+    setPending(true);
+    const result = await fn();
+    setPending(false);
+    if (result.ok) toast.success(done);
+    else toast.error(result.error ?? "Something went wrong.");
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <Link
+        href={`/invoices/${invoiceId}`}
+        className={buttonVariants({ variant: "ghost", size: "sm" })}
+      >
+        View
+      </Link>
+
+      {voided ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() => run(() => unvoidInvoice(invoiceId), "Invoice restored as a draft")}
+        >
+          Unvoid
+        </Button>
+      ) : status === "Sent" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() => run(() => markInvoicePaid(invoiceId), "Marked as paid")}
+        >
+          Mark paid
+        </Button>
+      ) : status === "Draft" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() => run(() => markInvoiceSent(invoiceId), "Marked as sent")}
+        >
+          Mark sent
+        </Button>
+      ) : null}
+    </div>
   );
 }

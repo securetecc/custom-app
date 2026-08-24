@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { InvoiceCustomItems } from "@/components/app/invoice-custom-items";
 import {
   MarkPaidButton,
   RetryPdfButton,
@@ -37,6 +38,7 @@ export default async function InvoiceDetailPage({
         timeEntries: { include: { serviceType: true }, orderBy: { date: "asc" } },
         recurringCharges: true,
         reimbursableExpenses: { orderBy: { date: "asc" } },
+        customItems: { orderBy: { sortOrder: "asc" } },
       },
     }),
   );
@@ -235,6 +237,23 @@ export default async function InvoiceDetailPage({
               ))}
             </TableBody>
           </Table>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card className="p-4">
+          <InvoiceCustomItems
+            invoiceId={invoice.id}
+            editable={!voided}
+            items={invoice.customItems.map((c) => ({
+              id: c.id,
+              date: c.date ? c.date.toISOString().slice(0, 10) : null,
+              description: c.description,
+              hours: c.hours === null ? null : Number(c.hours),
+              rate: c.rate === null ? null : Number(c.rate),
+              amount: Number(c.amount),
+            }))}
+          />
         </Card>
       )}
 

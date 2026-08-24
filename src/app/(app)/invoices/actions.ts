@@ -658,6 +658,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
           timeEntries: { include: { serviceType: true }, orderBy: { date: "asc" } },
           recurringCharges: true,
           reimbursableExpenses: { orderBy: { date: "asc" } },
+          customItems: { orderBy: { sortOrder: "asc" } },
         },
       });
       const isRetainer = invoice.client.billingType === "Retainer";
@@ -733,7 +734,23 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
             cityStateZip: invoice.client.cityStateZip,
             phone: invoice.client.phone,
           },
-          lineItems: [...lineItems, ...expenseRows, ...chargeRows, ...retainerRow],
+          // Hand-added lines render last, after everything derived, so an
+          // adjustment reads as an adjustment TO the work above it.
+          lineItems: [
+            ...lineItems,
+            ...expenseRows,
+            ...chargeRows,
+            ...retainerRow,
+            ...invoice.customItems.map((c) => ({
+              date: c.date ? c.date.toISOString().slice(0, 10) : null,
+              serviceCode: null,
+              groupLabel: null,
+              description: c.description,
+              hours: c.hours === null ? null : Number(c.hours),
+              rate: c.rate === null ? null : Number(c.rate),
+              amount: Number(c.amount),
+            })),
+          ],
           totalHours: Number(invoice.totalHours),
           totalAmount: Number(invoice.totalAmount),
         } satisfies InvoicePdfData,
@@ -966,4 +983,40 @@ function errorMessage(err: unknown): string {
     }
   }
   return err instanceof Error ? err.message : "Something went wrong.";
+}
+
+/**
+ * Reverses a void, putting the invoice back to Draft.
+ *
+ * Only the invoice row itself is restored. The time entries, expenses and
+ * charges the void released are NOT re-attached: they may well have been
+ * billed on another invoice by now, and silently pulling them back would
+ * either double-bill them or corrupt that other invoice. So this returns an
+ * empty Draft, and the work is re-selected by generating again -- which is
+ * also the only path that recomputes the total honestly.
+ *
+ * The invoice NUMBER is preserved, matching how the void kept it: an
+ * accounting sequence with a hole in it is a question someone has to answer
+ * later.
+ */
+export async function unvoidInvoice(id: string): Promise<ActionResult> {
+  const { authUserId } = await requireAdminContext();
+
+  try {
+    await withRLS(authUserId, async (tx) => {
+      const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+      if (!invoice.voidedAt) throw new ConflictError("This invoice isn't voided.");
+
+      await tx.invoice.update({
+        where: { id },
+        data: { voidedAt: null, status: "Draft", sentAt: null, paidAt: null },
+      });
+    });
+  } catch (err: unknown) {
+    return { ok: false, error: errorMessage(err) };
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
+  return { ok: true };
 }

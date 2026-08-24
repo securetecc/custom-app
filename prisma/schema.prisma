@@ -436,6 +436,7 @@ model Invoice {
   reimbursableExpenses ReimbursableExpense[]
   recurringCharges     InvoiceRecurringCharge[]
   retainerPeriods      InvoiceRetainerPeriod[]
+  customItems          InvoiceCustomItem[]
 
   @@unique([organizationId, clientId, invoiceNumber])
   @@index([organizationId])
@@ -451,6 +452,33 @@ model Invoice {
 /// snapshotted at billing time so a later change to Client.billingRate never
 /// rewrites history, and rows are deleted when an invoice is voided, which
 /// correctly re-opens that month.
+/// A line added to an invoice by hand, rather than derived from a time entry,
+/// expense or recurring charge.
+///
+/// Exists because those three sources can't express everything that ends up on
+/// a real invoice -- a one-off adjustment, a credit, a discount, work agreed
+/// verbally. Editing the derived lines instead would mean rewriting the
+/// underlying records, which are shared with reporting and other invoices.
+model InvoiceCustomItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  /// Optional so a credit or note can carry no date, matching how charge rows render.
+  date        DateTime? @db.Date
+  description String
+  /// Both nullable: a flat adjustment has no hours or rate, only an amount.
+  hours       Decimal? @db.Decimal(7, 2)
+  rate        Decimal? @db.Decimal(10, 2)
+  /// Signed on purpose -- a negative amount is how a discount or credit is expressed.
+  amount      Decimal  @db.Decimal(10, 2)
+  /// Keeps hand-added lines in the order they were entered.
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
+  @@map("invoice_custom_items")
+}
+
 model InvoiceRetainerPeriod {
   id             String       @id @default(uuid())
   organizationId String
