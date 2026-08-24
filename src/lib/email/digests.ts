@@ -1,3 +1,4 @@
+import { pacificDayStart } from "@/lib/cron/pacific";
 import { prisma } from "@/lib/db/prisma";
 import { sendEmail } from "@/lib/email/client";
 import {
@@ -31,8 +32,11 @@ function brandingOf(org: Awaited<ReturnType<typeof organizations>>[number]): Bra
 /** "You logged nothing today" — only to staff who actually logged nothing. */
 export async function sendDailyReminders(): Promise<Result[]> {
   const results: Result[] = [];
-  const startOfToday = new Date();
-  startOfToday.setUTCHours(0, 0, 0, 0);
+  // Pacific midnight, not UTC midnight. This job fires at 7pm Pacific, by
+  // which point the UTC date has already rolled over -- UTC midnight would be
+  // 5pm Pacific TODAY, so anyone who logged their time that morning looked
+  // like they hadn't logged at all and got a nag anyway.
+  const startOfToday = pacificDayStart();
 
   for (const org of await organizations()) {
     const result: Result = { organization: org.name, sent: 0, skipped: 0, errors: [] };

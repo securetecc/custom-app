@@ -40,6 +40,7 @@ export async function updateOrganization(
           logoUrl: data.logoUrl || null,
           brandColorPrimary: data.brandColorPrimary,
           brandColorAccent: data.brandColorAccent,
+          monthlyRevenueGoal: data.monthlyRevenueGoal,
           billerName: data.billerName || null,
           billerAddress1: data.billerAddress1 || null,
           billerAddress2: data.billerAddress2 || null,

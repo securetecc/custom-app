@@ -40,6 +40,7 @@ export default async function OrganizationSettingsPage() {
           logoUrl: organization.logoUrl ?? "",
           brandColorPrimary: organization.brandColorPrimary,
           brandColorAccent: organization.brandColorAccent,
+      monthlyRevenueGoal: Number(organization.monthlyRevenueGoal),
           billerName: organization.billerName ?? "",
           billerAddress1: organization.billerAddress1 ?? "",
           billerAddress2: organization.billerAddress2 ?? "",

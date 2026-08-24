@@ -154,6 +154,28 @@ export function OrganizationForm({ defaultValues }: { defaultValues: Organizatio
 
         <div className="space-y-4 border-t pt-6">
           <div>
+            <h2 className="font-medium">Targets</h2>
+            <p className="text-sm text-muted-foreground">
+              Drives the progress meter on the dashboard.
+            </p>
+          </div>
+          <div className="space-y-2 sm:max-w-xs">
+            <Label htmlFor="monthlyRevenueGoal">Monthly invoicing goal (USD)</Label>
+            <Input
+              id="monthlyRevenueGoal"
+              type="number"
+              min={0}
+              step={500}
+              {...register("monthlyRevenueGoal", { valueAsNumber: true })}
+            />
+            {errors.monthlyRevenueGoal && (
+              <p className="text-xs text-destructive">{errors.monthlyRevenueGoal.message}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4 border-t pt-6">
+          <div>
             <h2 className="font-medium">Invoice letterhead</h2>
             <p className="text-sm text-muted-foreground">
               The person and contact details printed on invoice PDFs — separate from the

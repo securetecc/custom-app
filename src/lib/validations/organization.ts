@@ -13,6 +13,15 @@ export const organizationFormSchema = z.object({
   logoUrl: z.string().url("Enter a valid URL").or(z.literal("")),
   brandColorPrimary: z.string().regex(HEX, "Use a hex colour like #071E37"),
   brandColorAccent: z.string().regex(HEX, "Use a hex colour like #06E1DC"),
+  // Plain number, not z.coerce: coercion widens the schema's INPUT type to
+  // unknown, which breaks react-hook-form's resolver typing. The form
+  // registers this field with valueAsNumber instead, so a real number arrives
+  // here. Capped well above any plausible target so a slipped keystroke can't
+  // make the dashboard meter permanently unreachable.
+  monthlyRevenueGoal: z
+    .number({ message: "Enter a number" })
+    .min(0, "Cannot be negative")
+    .max(10_000_000, "That looks like a typo"),
 
   // Invoice letterhead -- see Organization.billerName etc. in schema.prisma.
   billerName: z.string().optional().or(z.literal("")),

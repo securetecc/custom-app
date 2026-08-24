@@ -109,6 +109,10 @@ model Organization {
   // Manual onboarding checklist flag: domain/DKIM verified in Resend.
   // Sends are blocked until this is true — see lib/email.
   emailDomainVerified Boolean  @default(false)
+  /// Monthly invoicing target the dashboard meter reads against. A business
+  /// number, so it lives in the DB and is editable in Settings → Organization
+  /// rather than being a constant someone has to redeploy to change.
+  monthlyRevenueGoal  Decimal  @default(20000) @db.Decimal(10, 2)
   createdAt           DateTime @default(now())
 
   // --- Invoice letterhead -------------------------------------------------

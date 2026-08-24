@@ -76,3 +76,66 @@ export function skippedResponse(schedule: Schedule, at: Date = new Date()) {
     reason: `Not the scheduled Pacific time (now ${now.hour}:00 PT, scheduled ${schedule.hour}:00 PT).`,
   };
 }
+
+/** The Pacific calendar date `at` falls on. */
+function pacificYmd(at: Date): { y: number; m: number; d: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PACIFIC_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(at);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  return { y: get("year"), m: get("month"), d: get("day") };
+}
+
+/**
+ * UTC instant of Pacific midnight on a given Pacific calendar date.
+ *
+ * Pacific is UTC-7 or UTC-8 depending on DST, and which applies depends on the
+ * very date being resolved -- so guess with the larger offset, read back what
+ * that instant actually is in Pacific, and correct if we overshot.
+ */
+export function pacificMidnight(y: number, m: number, d: number): Date {
+  const guess = new Date(Date.UTC(y, m - 1, d, 8, 0, 0, 0));
+  const back = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PACIFIC_TZ, day: "2-digit", hour: "2-digit", hour12: false,
+  }).formatToParts(guess);
+  const hour = Number(back.find((p) => p.type === "hour")!.value) % 24;
+  // hour 1 means we landed at 01:00 PDT, an hour past midnight -> pull back.
+  return hour === 1 ? new Date(guess.getTime() - 3_600_000) : guess;
+}
+
+/**
+ * UTC instant of Pacific midnight for the day `at` falls on.
+ *
+ * "Did I log time today?" has to be asked in the timezone the person lives in.
+ * Using `setUTCHours(0,0,0,0)` instead looks right but silently isn't: at 7pm
+ * Pacific the UTC date has already rolled to tomorrow, so UTC midnight is 5pm
+ * Pacific *today* -- work logged that morning falls outside the window and the
+ * answer comes back "no" for someone who logged at 10am.
+ */
+export function pacificDayStart(at: Date = new Date()): Date {
+  const { y, m, d } = pacificYmd(at);
+  return pacificMidnight(y, m, d);
+}
+
+/** UTC instant of Pacific midnight on the 1st of `at`'s Pacific month. */
+export function pacificMonthStart(at: Date = new Date()): Date {
+  const { y, m } = pacificYmd(at);
+  return pacificMidnight(y, m, 1);
+}
+
+/**
+ * Start of each of the last `count` Pacific months, oldest first.
+ *
+ * Month arithmetic runs on the Pacific calendar (integers), never by shifting a
+ * UTC instant: Aug 1 00:00 PDT is 07:00Z, and 07:00Z in March is 11pm the
+ * PREVIOUS day, so shifting the instant back five months lands in February.
+ */
+export function pacificMonthStartsBack(count: number, at: Date = new Date()): Date[] {
+  const { y, m } = pacificYmd(at);
+  const out: Date[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const total = y * 12 + (m - 1) - i;
+    out.push(pacificMidnight(Math.floor(total / 12), (total % 12) + 1, 1));
+  }
+  return out;
+}

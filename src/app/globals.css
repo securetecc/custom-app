@@ -152,3 +152,36 @@
     letter-spacing: -0.01em;
   }
 }
+/* --- Data-viz palette -----------------------------------------------------
+   Validated categorical slots (adjacent-pair CVD ΔE 9.1 light / 8.4 dark,
+   normal-vision 19.6 / 19.3), not hand-picked. The dark column is the same
+   five hues re-stepped for a dark surface, not an automatic flip.
+
+   Light slots 3/4/5 sit under 3:1 against the card surface, so every chart
+   using them ships visible direct labels (the "relief rule") -- identity is
+   never carried by colour alone. */
+:root {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-other: oklch(0.72 0 0);
+  --viz-grid: oklch(0.922 0 0);
+  --viz-track: oklch(0.95 0 0);
+  --viz-good: #1baf7a;
+  --viz-warn: #eda100;
+}
+
+.dark {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-5: #d55181;
+  --viz-other: oklch(0.55 0 0);
+  --viz-grid: oklch(0.32 0 0);
+  --viz-track: oklch(0.28 0 0);
+  --viz-good: #199e70;
+  --viz-warn: #c98500;
+}
