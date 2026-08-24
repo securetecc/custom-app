@@ -15,7 +15,7 @@ export default async function OrganizationSettingsPage() {
   } = await requireOrgContext(async (tx, user) => [
     await tx.organization.findUniqueOrThrow({ where: { id: user.organizationId } }),
     await tx.user.findMany({
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, receivesDailyReminder: true },
       orderBy: { name: "asc" },
     }),
   ]);

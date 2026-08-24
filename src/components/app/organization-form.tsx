@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   organizationFormSchema,
   staffFormSchema,
@@ -15,6 +16,7 @@ import {
   setEmailDomainVerified,
   updateOrganization,
   updateStaffRole,
+  updateDailyReminderOptIn,
 } from "@/app/(app)/settings/organization/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -328,7 +330,7 @@ export function StaffSection({
   staff,
   currentUserId,
 }: {
-  staff: { id: string; name: string; email: string; role: string }[];
+  staff: { id: string; name: string; email: string; role: string; receivesDailyReminder: boolean }[];
   currentUserId: string;
 }) {
   return (
@@ -355,11 +357,45 @@ export function StaffSection({
               </p>
               <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
-            <StaffRoleSelect userId={user.id} role={user.role} />
+            <div className="flex items-center gap-4">
+              <DailyReminderToggle
+                userId={user.id}
+                initial={user.receivesDailyReminder}
+              />
+              <StaffRoleSelect userId={user.id} role={user.role} />
+            </div>
           </div>
         ))}
       </div>
     </Card>
+  );
+}
+
+function DailyReminderToggle({ userId, initial }: { userId: string; initial: boolean }) {
+  const [on, setOn] = useState(initial);
+  const [pending, setPending] = useState(false);
+
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+      <Checkbox
+        checked={on}
+        disabled={pending}
+        onCheckedChange={async (next: boolean | "indeterminate") => {
+          const previous = on;
+          const value = next === true;
+          setOn(value); // optimistic -- reverted below if the write fails
+          setPending(true);
+          const result = await updateDailyReminderOptIn(userId, value);
+          setPending(false);
+          if (!result.ok) {
+            setOn(previous);
+            toast.error(result.error);
+          }
+        }}
+        aria-label="Send the daily time-logging reminder to this person"
+      />
+      Daily reminder
+    </label>
   );
 }
 

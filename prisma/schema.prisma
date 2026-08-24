@@ -163,6 +163,11 @@ model User {
   name           String
   email          String
   role           UserRole     @default(technician)
+  /// Whether the 7pm Pacific "you haven't logged time today" nag goes to this
+  /// person. Off by default and deliberately per-user rather than sent to
+  /// every staff row: it's addressed to whoever actually logs billable hours,
+  /// and mailing it to people who don't just trains them to ignore it.
+  receivesDailyReminder Boolean @default(false)
   createdAt      DateTime     @default(now())
 
   loggedTimeEntries          TimeEntry[]            @relation("LoggedByUser")

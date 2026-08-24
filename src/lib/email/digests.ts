@@ -40,7 +40,12 @@ export async function sendDailyReminders(): Promise<Result[]> {
 
   for (const org of await organizations()) {
     const result: Result = { organization: org.name, sent: 0, skipped: 0, errors: [] };
-    const staff = await prisma.user.findMany({ where: { organizationId: org.id } });
+    // Only people who actually log billable hours -- see
+    // User.receivesDailyReminder. Sending this to every staff row meant
+    // admins who never log time got a nightly nag they could only ignore.
+    const staff = await prisma.user.findMany({
+      where: { organizationId: org.id, receivesDailyReminder: true },
+    });
 
     for (const user of staff) {
       const logged = await prisma.timeEntry.count({

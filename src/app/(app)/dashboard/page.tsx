@@ -40,7 +40,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         </p>
       </div>
 
-      <TodayStatus today={metrics.today} firstName={firstName} />
+      <TodayStatus
+        today={metrics.today}
+        firstName={firstName}
+        remindersOn={appUser.receivesDailyReminder}
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireAdminContext } from "@/lib/auth";
+import { requireAdmin, requireAdminContext, requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { prisma } from "@/lib/db/prisma";
@@ -177,6 +177,34 @@ export async function updateStaffRole(
 
   try {
     await withRLS(authUserId, (tx) => tx.user.update({ where: { id: userId }, data: { role } }));
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+  }
+
+  revalidatePath("/settings/organization");
+  return { ok: true };
+}
+
+/**
+ * Toggles whether someone gets the 7pm "you haven't logged time" reminder.
+ *
+ * Not admin-only on purpose: this is a personal notification preference, and
+ * anyone should be able to turn their own nag off. Admins can set it for
+ * others, which the role check below enforces.
+ */
+export async function updateDailyReminderOptIn(
+  userId: string,
+  receives: boolean,
+): Promise<ActionResult> {
+  const { authUserId, appUser } = await requireOrgContext();
+  if (appUser.role !== "admin" && appUser.id !== userId) {
+    return { ok: false, error: "You can only change your own reminder setting." };
+  }
+
+  try {
+    await withRLS(authUserId, (tx) =>
+      tx.user.update({ where: { id: userId }, data: { receivesDailyReminder: receives } }),
+    );
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   }

@@ -12,7 +12,16 @@ import type { DashboardMetrics } from "@/lib/dashboard/metrics";
  *
  * Status is carried by an icon and a sentence, never by colour alone.
  */
-export function TodayStatus({ today, firstName }: { today: DashboardMetrics["today"]; firstName: string }) {
+export function TodayStatus({
+  today,
+  firstName,
+  remindersOn,
+}: {
+  today: DashboardMetrics["today"];
+  firstName: string;
+  /** Whether THIS user is opted into the 7pm reminder (Settings → Staff). */
+  remindersOn: boolean;
+}) {
   const done = today.hasLogged;
 
   return (
@@ -38,9 +47,13 @@ export function TodayStatus({ today, firstName }: { today: DashboardMetrics["tod
             : `No time logged today yet, ${firstName}.`}
         </p>
         <p className="text-xs text-muted-foreground">
-          {done
-            ? "You won't get the 7pm reminder."
-            : "The daily reminder goes out at 7pm Pacific if nothing is logged."}
+          {/* Only mention the reminder to people who actually receive it --
+              promising a 7pm nudge to someone opted out is just wrong. */}
+          {!remindersOn
+            ? "Daily reminders are off for you."
+            : done
+              ? "You won't get the 7pm reminder."
+              : "The daily reminder goes out at 7pm Pacific if nothing is logged."}
         </p>
       </div>
 
