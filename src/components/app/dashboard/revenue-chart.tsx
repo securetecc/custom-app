@@ -45,7 +45,11 @@ export function RevenueChart({ data, goal }: { data: RevenueBucket[]; goal: numb
   const hasData = data.some((d) => d.total > 0);
 
   return (
-    <div className="w-full">
+    // relative + an absolutely positioned tooltip: showing it must not change
+    // the container's height. In normal flow it did, which reflowed the page,
+    // moved the chart out from under the cursor, fired mouseleave, hid the
+    // tooltip, restored the layout, and re-entered the bar -- a flicker loop.
+    <div className="relative w-full">
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1">
         {SERIES.map((s) => (
           <span key={s.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -162,9 +166,12 @@ export function RevenueChart({ data, goal }: { data: RevenueBucket[]; goal: numb
       </svg>
 
       {hover !== null && data[hover] && (
-        <div className="mt-2 rounded-md border bg-popover px-3 py-2 text-xs shadow-sm">
+        // pointer-events-none matters as much as the positioning: a tooltip
+        // that can sit under the cursor steals the hover from the bar and
+        // reintroduces the same loop by a different route.
+        <div className="pointer-events-none absolute right-0 top-0 z-10 max-w-[min(20rem,100%)] rounded-md border bg-popover px-3 py-2 text-xs shadow-md">
           <div className="mb-1 font-medium">{data[hover].label}</div>
-          <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+          <div className="flex flex-col gap-0.5">
             {SERIES.map((s) => (
               <span key={s.key} className="flex items-center gap-1.5 tabular-nums">
                 <span className="h-2 w-2 rounded-sm" style={{ background: s.color }} />
