@@ -32,16 +32,51 @@ export class GoogleNotConfiguredError extends Error {
   }
 }
 
+/**
+ * Normalises however the private key survived its trip through a dashboard.
+ *
+ * The raw value reaches us in one of several shapes depending on how it was
+ * pasted, and every wrong one fails identically and unhelpfully at signing
+ * time with OpenSSL's "error:1E08010C:DECODER routines::unsupported":
+ *
+ *  - copied out of the JSON WITH its surrounding double quotes;
+ *  - escaped \n sequences (what a .env file must use);
+ *  - real newlines (what the Vercel dashboard stores);
+ *  - CRLF line endings, or the whole PEM collapsed onto one line.
+ *
+ * Rather than demand one exact format, accept them all and repair the body,
+ * because the failure is silent until someone clicks Create Gmail draft.
+ */
+function normalizePrivateKey(raw: string): string {
+  let key = raw.trim();
+
+  // Strip a wrapping pair of quotes -- the single most common paste mistake.
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+
+  key = key.replace(/\\n/g, "\n").replace(/\r\n/g, "\n").trim();
+
+  // A PEM whose newlines were eaten entirely: rebuild it by re-wrapping the
+  // base64 body at 64 characters, which is what the format requires.
+  const header = "-----BEGIN PRIVATE KEY-----";
+  const footer = "-----END PRIVATE KEY-----";
+  if (key.includes(header) && !key.includes("\n")) {
+    const body = key.slice(key.indexOf(header) + header.length, key.indexOf(footer)).replace(/\s+/g, "");
+    key = [header, ...(body.match(/.{1,64}/g) ?? []), footer].join("\n");
+  }
+
+  return key.endsWith("\n") ? key : `${key}\n`;
+}
+
 /** Null (rather than throwing) so UI can render a "not connected" state. */
 export function readGoogleConfig(): GoogleConfig | null {
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  // Private keys carry literal newlines that .env files can't hold, so they're
-  // conventionally stored with escaped \n and unescaped at read time.
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  const impersonate = process.env.GOOGLE_IMPERSONATED_USER;
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+  const rawKey = process.env.GOOGLE_PRIVATE_KEY;
+  const impersonate = process.env.GOOGLE_IMPERSONATED_USER?.trim();
 
-  if (!clientEmail || !privateKey || !impersonate) return null;
-  return { clientEmail, privateKey, impersonate };
+  if (!clientEmail || !rawKey || !impersonate) return null;
+  return { clientEmail, privateKey: normalizePrivateKey(rawKey), impersonate };
 }
 
 export function isGoogleConfigured(): boolean {
@@ -80,7 +115,22 @@ export async function getGoogleAccessToken(scope = GMAIL_SCOPE): Promise<string>
 
   const signer = createSign("RSA-SHA256");
   signer.update(`${header}.${claims}`);
-  const signature = base64Url(signer.sign(config.privateKey));
+
+  let signature: string;
+  try {
+    signature = base64Url(signer.sign(config.privateKey));
+  } catch (err) {
+    // OpenSSL reports a malformed key as "error:1E08010C:DECODER
+    // routines::unsupported", which says nothing about what to fix. Every
+    // realistic cause is the same one: GOOGLE_PRIVATE_KEY isn't a clean PEM.
+    throw new Error(
+      "GOOGLE_PRIVATE_KEY could not be read as a private key. Copy the " +
+        "`private_key` VALUE from the service-account JSON without the " +
+        "surrounding double quotes, starting at -----BEGIN PRIVATE KEY----- " +
+        "and ending at -----END PRIVATE KEY-----, then redeploy. " +
+        `(${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
   const assertion = `${header}.${claims}.${signature}`;
 
   const response = await fetch(TOKEN_URL, {
