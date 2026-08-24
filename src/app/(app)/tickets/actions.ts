@@ -8,7 +8,7 @@ import {
   type TicketStatusChangeValues,
 } from "@/lib/validations/ticket";
 import { getTicketAttachmentSignedUrl } from "@/lib/storage/ticket-attachments";
-import { notifyTicketStatusChange } from "@/lib/email/notify";
+import { notifyTicketAssigned, notifyTicketStatusChange } from "@/lib/email/notify";
 
 export type ActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -77,7 +77,7 @@ export async function assignTicket(
   id: string,
   assignedToUserId: string | null,
 ): Promise<ActionResult> {
-  const { authUserId } = await requireOrgContext();
+  const { authUserId, appUser } = await requireOrgContext();
 
   try {
     await withRLS(authUserId, (tx) =>
@@ -87,8 +87,15 @@ export async function assignTicket(
     return { ok: false, error: errorMessage(err) };
   }
 
+  // After the write, and not allowed to fail it: the assignment is what
+  // matters, the notification is a convenience.
+  const sent = await notifyTicketAssigned(id, appUser.id);
+
   revalidatePath("/tickets");
   revalidatePath(`/tickets/${id}`);
+  if (!sent.ok && !sent.skipped) {
+    return { ok: false, error: `Assigned, but the notification email failed: ${sent.error}` };
+  }
   return { ok: true };
 }
 

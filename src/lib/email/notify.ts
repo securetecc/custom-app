@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { sendEmail, type SendResult } from "@/lib/email/client";
 import {
+  ticketAssignedEmail,
   ticketConfirmationEmail,
   ticketInternalAlertEmail,
   ticketStatusChangeEmail,
@@ -49,9 +50,22 @@ function brandingOf(org: OrgRow): Branding {
   };
 }
 
+/**
+ * Absolute URL into the staff app, for "Open ticket" style buttons in mail.
+ *
+ * Falls back to Vercel's own production URL when NEXT_PUBLIC_APP_URL isn't
+ * configured. Without that fallback the base was "" and the button emitted a
+ * bare "/tickets/xyz" -- a relative href in an email client, which simply
+ * doesn't resolve. A working deployment URL beats a dead link while the real
+ * domain is still being attached.
+ */
 function appUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
-  return `${base}${path}`;
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (configured) return `${configured}${path}`;
+
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL ?? "";
+  return vercelHost ? `https://${vercelHost}${path}` : path;
 }
 
 /**
@@ -164,5 +178,57 @@ export async function notifyTicketStatusChange(
     subject: email.subject,
     html: email.html,
     emailDomainVerified: org.emailDomainVerified,
+  });
+}
+
+/**
+ * Emails a technician when a ticket is assigned to them.
+ *
+ * Goes to the person, not the support inbox: the point is that one named
+ * human now owns it, which a shared mailbox can't convey. Silently does
+ * nothing when a ticket is UNassigned, or when someone assigns a ticket to
+ * themselves -- they already know.
+ */
+export async function notifyTicketAssigned(
+  ticketId: string,
+  assignedByUserId: string,
+): Promise<SendResult> {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: { organization: true, assignedToUser: true },
+  });
+  // Unassigning notifies nobody, and assigning to yourself tells you what you
+  // just did -- both are "nothing to send", not failures.
+  if (!ticket?.assignedToUser) return { ok: false, skipped: true, error: "No assignee" };
+  if (ticket.assignedToUser.id === assignedByUserId) {
+    return { ok: false, skipped: true, error: "Self-assigned" };
+  }
+
+  const assignedBy = await prisma.user.findUnique({
+    where: { id: assignedByUserId },
+    select: { name: true },
+  });
+
+  const email = ticketAssignedEmail(
+    brandingOf(ticket.organization),
+    {
+      ticketNumber: ticket.ticketNumber,
+      clientCompanyName: ticket.clientCompanyName,
+      issueType: ticket.issueType,
+      urgency: ticket.urgency,
+      description: ticket.description,
+      assigneeName: ticket.assignedToUser.name,
+      assignedByName: assignedBy?.name ?? "Someone",
+    },
+    appUrl(`/tickets/${ticket.id}`),
+  );
+
+  return sendEmail({
+    to: ticket.assignedToUser.email,
+    from: senderOf(ticket.organization),
+    replyTo: ticket.organization.supportEmail,
+    subject: email.subject,
+    html: email.html,
+    emailDomainVerified: ticket.organization.emailDomainVerified,
   });
 }

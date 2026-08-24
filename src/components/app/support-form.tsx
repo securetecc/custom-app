@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { submitPublicTicket } from "@/app/support/actions";
@@ -29,13 +29,38 @@ export function SupportForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [urgency, setUrgency] = useState("Medium");
+  // Attachments are held in state rather than left on the native input: a
+  // file input offers no way to drop one file from a selection, so picking
+  // the wrong screenshot meant re-selecting the whole set.
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function addFiles(picked: FileList | null) {
+    if (!picked?.length) return;
+    setFiles((current) => {
+      const next = [...current];
+      for (const file of Array.from(picked)) {
+        // Same name AND size is the closest thing to identity a File gives us.
+        if (!next.some((f) => f.name === file.name && f.size === file.size)) next.push(file);
+      }
+      return next.slice(0, MAX_ATTACHMENTS);
+    });
+    // Clear the input so re-picking the same file still fires onChange.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
 
-    const result = await submitPublicTicket(new FormData(e.currentTarget));
+    // Built by hand rather than from the form, because the file input is
+    // cleared on every pick -- the real selection lives in `files`.
+    const formData = new FormData(e.currentTarget);
+    formData.delete("attachments");
+    for (const file of files) formData.append("attachments", file);
+
+    const result = await submitPublicTicket(formData);
     setSubmitting(false);
 
     if (!result.ok) {
@@ -170,15 +195,40 @@ export function SupportForm() {
         </label>
         <input
           id="attachments"
-          name="attachments"
+          ref={fileInputRef}
           type="file"
           multiple
           accept="image/png,image/jpeg,image/gif,image/webp,application/pdf"
+          onChange={(e) => addFiles(e.target.files)}
           className={`${FIELD} file:mr-3 file:rounded-md file:border-0 file:bg-[#06E1DC] file:px-3 file:py-1 file:text-sm file:font-semibold file:text-[#071E37]`}
         />
         <p className="mt-2 text-xs text-[rgba(255,255,255,0.55)]">
           Screenshots help a lot. Up to {MAX_ATTACHMENTS} images or PDFs, 10MB each.
         </p>
+
+        {files.length > 0 && (
+          <ul className="mt-3 space-y-2">
+            {files.map((file) => (
+              <li
+                key={`${file.name}-${file.size}`}
+                className="flex items-center gap-3 rounded-[10px] border border-[rgba(6,225,220,0.24)] bg-[rgba(6,225,220,0.05)] px-3 py-2 text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                <span className="shrink-0 text-xs text-[rgba(255,255,255,0.55)]">
+                  {(file.size / 1024 / 1024).toFixed(1)}MB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFiles((c) => c.filter((f) => f !== file))}
+                  aria-label={`Remove ${file.name}`}
+                  className="shrink-0 rounded px-2 py-0.5 text-[rgba(255,255,255,0.6)] transition-colors hover:bg-[rgba(255,255,255,0.08)] hover:text-white"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {error && (

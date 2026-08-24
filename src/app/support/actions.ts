@@ -176,7 +176,8 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
       select: { lastTicketSequence: true },
     });
     ticketNumber = `TKT-${String(org.lastTicketSequence).padStart(4, "0")}`;
-  } catch {
+  } catch (err) {
+    console.error("[support] ticket insert failed:", err);
     return { ok: false, error: "Something went wrong submitting your request. Please try again." };
   }
 
@@ -204,7 +205,8 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
         )
       `,
     );
-  } catch {
+  } catch (err) {
+    console.error("[support] ticket insert failed:", err);
     return { ok: false, error: "Something went wrong submitting your request. Please try again." };
   }
 
@@ -227,7 +229,11 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
           values (${crypto.randomUUID()}, ${ticketId}, ${path}, ${file.name}, now())
         `,
       );
-    } catch {
+    } catch (err) {
+      // Logged, not swallowed: this failure mode (an RLS policy gap on
+      // ticket_attachments) was invisible for weeks because the only signal
+      // was a generic "couldn't be attached" shown to the submitter.
+      console.error(`[ticket ${ticketNumber}] attachment "${file.name}" failed:`, err);
       failed.push(file.name);
     }
   }

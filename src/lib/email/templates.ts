@@ -135,6 +135,38 @@ export function ticketInternalAlertEmail(
   };
 }
 
+/**
+ * Tells a technician a ticket is now theirs.
+ *
+ * Internal, so it leads with what they need to act -- number, urgency,
+ * company and the issue itself -- rather than the reassurance a client-facing
+ * mail opens with.
+ */
+export function ticketAssignedEmail(
+  branding: Branding,
+  ticket: {
+    ticketNumber: string; clientCompanyName: string; issueType: string;
+    urgency: string; description: string; assigneeName: string; assignedByName: string;
+  },
+  ticketUrl: string,
+): { subject: string; html: string } {
+  return {
+    subject: `Assigned to you: ${ticket.ticketNumber} – ${ticket.clientCompanyName}`,
+    html: shell(
+      branding,
+      `<h1 style="margin:0 0 12px;font-size:20px;">${escapeHtml(ticket.ticketNumber)} is yours</h1>
+       <p style="margin:0 0 16px;">${escapeHtml(ticket.assignedByName)} assigned this to ${escapeHtml(ticket.assigneeName)}.</p>
+       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">
+         <tr><td style="padding:8px 0;color:#5B6B7C;width:120px;">Company</td><td style="padding:8px 0;">${escapeHtml(ticket.clientCompanyName)}</td></tr>
+         <tr><td style="padding:8px 0;color:#5B6B7C;">Issue</td><td style="padding:8px 0;">${escapeHtml(ticket.issueType)}</td></tr>
+         <tr><td style="padding:8px 0;color:#5B6B7C;">Urgency</td><td style="padding:8px 0;"><strong>${escapeHtml(ticket.urgency)}</strong></td></tr>
+       </table>
+       <p style="margin:16px 0;padding:12px;background:#f6f8fa;border-radius:6px;white-space:pre-wrap;">${escapeHtml(ticket.description)}</p>
+       ${button(ticketUrl, "Open ticket", branding.accentColor)}`,
+    ),
+  };
+}
+
 export function ticketStatusChangeEmail(
   branding: Branding,
   ticket: { ticketNumber: string; contactName: string; status: string },

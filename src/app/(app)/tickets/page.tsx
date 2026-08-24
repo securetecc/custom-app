@@ -34,7 +34,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default async function TicketsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; urgency?: string }>;
+  searchParams: Promise<{ status?: string; urgency?: string; q?: string }>;
 }) {
   const params = await searchParams;
   const status: StatusFilter = STATUS_FILTERS.includes(params.status as StatusFilter)
@@ -43,6 +43,7 @@ export default async function TicketsPage({
   const urgency: UrgencyFilter = URGENCY_FILTERS.includes(params.urgency as UrgencyFilter)
     ? (params.urgency as UrgencyFilter)
     : "All";
+  const q = (params.q ?? "").trim();
 
   const { data: tickets } = await requireOrgContext((tx) =>
     tx.ticket.findMany({
@@ -54,6 +55,20 @@ export default async function TicketsPage({
             ? {}
             : { status: status as TicketStatus }),
         ...(urgency === "All" ? {} : { urgency: urgency as TicketUrgency }),
+        // Ticket number, company, contact name and email -- the four things
+        // someone actually has to hand when hunting for a specific ticket.
+        // Description is deliberately excluded: it turns a search for a
+        // company name into a match on every ticket that mentions it.
+        ...(q
+          ? {
+              OR: [
+                { ticketNumber: { contains: q, mode: "insensitive" as const } },
+                { clientCompanyName: { contains: q, mode: "insensitive" as const } },
+                { contactName: { contains: q, mode: "insensitive" as const } },
+                { contactEmail: { contains: q, mode: "insensitive" as const } },
+              ],
+            }
+          : {}),
       },
       include: { assignedToUser: { select: { name: true } }, _count: { select: { attachments: true } } },
       orderBy: [{ createdAt: "desc" }],
@@ -68,6 +83,7 @@ export default async function TicketsPage({
           <p className="text-muted-foreground">
             {tickets.length} {STATUS_LABELS[status].toLowerCase()}
             {urgency !== "All" ? ` · ${urgency.toLowerCase()} urgency` : ""}
+            {q ? ` · matching “${q}”` : ""}
           </p>
         </div>
         <Button
@@ -88,7 +104,7 @@ export default async function TicketsPage({
         </Button>
       </div>
 
-      <TicketFilters status={status} urgency={urgency} />
+      <TicketFilters status={status} urgency={urgency} q={q} />
 
       <Card>
         <Table>

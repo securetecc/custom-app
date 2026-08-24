@@ -59,7 +59,11 @@ export const publicTicketSchema = z.object({
   callbackNumber: z.string().optional().or(z.literal("")),
   issueType: z.enum(ISSUE_TYPES),
   urgency: z.enum(URGENCY_ORDER),
-  description: z.string().min(10, "Please describe the issue in a little more detail"),
+  // 3 rather than 10: "Testing", "No wifi" and "PC dead" are all legitimate
+  // reports, and a portal that argues with someone about how much detail
+  // they've given is a portal they stop using. Enough to reject an empty or
+  // accidental submit, not enough to gatekeep a terse but real one.
+  description: z.string().trim().min(3, "Please describe the issue"),
 });
 
 export type PublicTicketValues = z.infer<typeof publicTicketSchema>;
