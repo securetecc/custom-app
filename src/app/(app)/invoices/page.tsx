@@ -15,7 +15,7 @@ import { InvoiceRowActions } from "@/components/app/invoice-actions";
 import { formatCurrency, formatDate, formatHours } from "@/lib/format";
 import { Plus } from "lucide-react";
 
-const FILTERS = ["Draft", "Sent", "Paid", "Voided"] as const;
+const FILTERS = ["Draft", "Sent", "Paid", "Voided", "All"] as const;
 type Filter = (typeof FILTERS)[number];
 
 export default async function InvoicesPage({
@@ -29,9 +29,11 @@ export default async function InvoicesPage({
   const { data: invoices } = await requireOrgContext((tx) =>
     tx.invoice.findMany({
       where:
-        active === "Voided"
-          ? { voidedAt: { not: null } }
-          : { status: active, voidedAt: null },
+        active === "All"
+          ? {} // includes voided -- "All" that hides some invoices isn't all
+          : active === "Voided"
+            ? { voidedAt: { not: null } }
+            : { status: active, voidedAt: null },
       include: { client: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -42,7 +44,9 @@ export default async function InvoicesPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
-          <p className="text-muted-foreground">{invoices.length} {active.toLowerCase()}</p>
+          <p className="text-muted-foreground">
+            {invoices.length} {active === "All" ? "total" : active.toLowerCase()}
+          </p>
         </div>
         <Button render={<Link href="/invoices/new" />}>
           <Plus className="mr-1 h-4 w-4" /> Generate invoice
@@ -114,7 +118,7 @@ export default async function InvoicesPage({
             {invoices.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No {active.toLowerCase()} invoices.
+                  {active === "All" ? "No invoices yet." : `No ${active.toLowerCase()} invoices.`}
                 </TableCell>
               </TableRow>
             )}
