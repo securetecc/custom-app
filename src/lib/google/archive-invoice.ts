@@ -195,7 +195,7 @@ async function createInvoiceSheet(
 }
 
 /** The template's A4 cell is one merged block holding the whole address. */
-function buildAddressBlock(org: InvoicePdfData["organization"]): string {
+export function buildAddressBlock(org: InvoicePdfData["organization"]): string {
   return [
     org.billerAddress1,
     org.billerAddress2,
@@ -217,7 +217,7 @@ function buildAddressBlock(org: InvoicePdfData["organization"]): string {
  * to be stripped first -- and stripping it before the merge step reads it is
  * exactly the bug that produced unmerged dividers.
  */
-function buildTemplateRows(data: InvoicePdfData): {
+export function buildTemplateRows(data: InvoicePdfData): {
   rows: (string | number)[][];
   dividerRows: number[];
 } {
