@@ -57,13 +57,26 @@ function normalizePrivateKey(raw: string): string {
 
   key = key.replace(/\\n/g, "\n").replace(/\r\n/g, "\n").trim();
 
-  // A PEM whose newlines were eaten entirely: rebuild it by re-wrapping the
-  // base64 body at 64 characters, which is what the format requires.
   const header = "-----BEGIN PRIVATE KEY-----";
   const footer = "-----END PRIVATE KEY-----";
+
+  // A PEM whose newlines were eaten entirely: rebuild it by re-wrapping the
+  // base64 body at 64 characters, which is what the format requires.
   if (key.includes(header) && !key.includes("\n")) {
     const body = key.slice(key.indexOf(header) + header.length, key.indexOf(footer)).replace(/\s+/g, "");
     key = [header, ...(body.match(/.{1,64}/g) ?? []), footer].join("\n");
+  }
+
+  // Markers missing entirely -- the value is the bare base64 body. That's a
+  // real paste outcome (selecting the key's contents without its first and
+  // last lines), and it decodes fine once the banners are put back. Guarded
+  // on the body actually being base64 so genuinely wrong values still fail
+  // loudly instead of being wrapped into a plausible-looking bad key.
+  if (!key.includes("-----BEGIN")) {
+    const body = key.replace(/\s+/g, "");
+    if (body.length > 100 && /^[A-Za-z0-9+/=]+$/.test(body)) {
+      key = [header, ...(body.match(/.{1,64}/g) ?? []), footer].join("\n");
+    }
   }
 
   return key.endsWith("\n") ? key : `${key}\n`;
