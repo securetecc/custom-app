@@ -161,22 +161,41 @@ export function ticketStatusChangeEmail(
 
 // --- invoices --------------------------------------------------------------
 
+/**
+ * Covering note for an invoice PDF, as plain text.
+ *
+ * Deliberately not the branded HTML shell the other templates use: this is a
+ * one-line note from Tony with the invoice attached, and the PDF already
+ * carries the letterhead, totals and payment terms. Anything more here just
+ * repeats the attachment in a worse format.
+ */
 export function invoiceEmail(
   branding: Branding,
   invoice: { invoiceNumber: string; clientName: string; periodStart: Date; periodEnd: Date; totalAmount: number },
-): { subject: string; html: string } {
+): { subject: string; text: string } {
+  const period = formatPeriodLabel(invoice.periodStart, invoice.periodEnd);
+  const signOff = branding.organizationName;
+
   return {
     subject: `Invoice ${invoice.invoiceNumber} from ${branding.organizationName}`,
-    html: shell(
-      branding,
-      `<h1 style="margin:0 0 12px;font-size:20px;">Invoice ${escapeHtml(invoice.invoiceNumber)}</h1>
-       <p style="margin:0 0 16px;">Attached is the invoice for ${escapeHtml(invoice.clientName)} covering ${escapeHtml(formatDate(invoice.periodStart))} – ${escapeHtml(formatDate(invoice.periodEnd))}.</p>
-       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:15px;border-top:1px solid #e2e8f0;">
-         <tr><td style="padding:14px 0;color:#5B6B7C;">Total due</td><td style="padding:14px 0;text-align:right;font-size:20px;font-weight:700;">${escapeHtml(formatCurrency(invoice.totalAmount))}</td></tr>
-       </table>
-       <p style="margin:16px 0 0;font-size:13px;color:#5B6B7C;">Questions about this invoice? Just reply to this email.</p>`,
-    ),
+    text: [
+      "Hi,",
+      "",
+      `Please see the attached invoice for ${period}.`,
+      "",
+      "Thank you,",
+      signOff,
+    ].join("\n"),
   };
+}
+
+/** "July 2026", or "July – September 2026" when a period spans months. */
+function formatPeriodLabel(start: Date, end: Date): string {
+  const fmt = (d: Date) =>
+    new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(d);
+  const a = fmt(start);
+  const b = fmt(end);
+  return a === b ? a : `${a} – ${b}`;
 }
 
 // --- staff digests ---------------------------------------------------------

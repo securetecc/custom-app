@@ -20,7 +20,13 @@ export type MimeMessage = {
   to: string;
   from: string;
   subject: string;
-  html: string;
+  /**
+   * Plain text, not HTML. Invoices go out as a short covering note with the
+   * PDF attached -- the invoice itself carries the branding, so a styled
+   * email body would only duplicate it, and a plain note reads like something
+   * a person actually wrote rather than a system notification.
+   */
+  text: string;
   attachment: { filename: string; content: Buffer; mimeType: string };
 };
 
@@ -54,10 +60,10 @@ export function buildMimeMessage(message: MimeMessage): string {
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     "",
     `--${boundary}`,
-    "Content-Type: text/html; charset=UTF-8",
+    "Content-Type: text/plain; charset=UTF-8",
     "Content-Transfer-Encoding: base64",
     "",
-    wrapBase64(Buffer.from(message.html, "utf8").toString("base64")),
+    wrapBase64(Buffer.from(message.text, "utf8").toString("base64")),
     "",
     `--${boundary}`,
     `Content-Type: ${message.attachment.mimeType}; name="${message.attachment.filename}"`,

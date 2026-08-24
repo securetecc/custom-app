@@ -809,7 +809,7 @@ export async function createInvoiceGmailDraft(
       to: invoice.client.email,
       from: invoice.organization.invoiceFromEmail ?? invoice.organization.supportEmail,
       subject: email.subject,
-      html: email.html,
+      text: email.text,
       attachment: {
         filename: `${invoice.invoiceNumber}.pdf`,
         content: pdf,
