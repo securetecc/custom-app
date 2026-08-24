@@ -8,6 +8,7 @@ import { RevenueChart } from "@/components/app/dashboard/revenue-chart";
 import { ClientShare } from "@/components/app/dashboard/client-share";
 import { RangeFilter } from "@/components/app/dashboard/range-filter";
 import { TodayStatus } from "@/components/app/dashboard/today-status";
+import { Collections, TicketAttention } from "@/components/app/dashboard/collections";
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -84,6 +85,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
           <RevenueChart data={metrics.revenue} goal={metrics.goal.target} />
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Collections
+          collections={metrics.collections}
+          awaitingPayment={metrics.awaitingPayment}
+        />
+        <TicketAttention tickets={metrics.tickets} />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

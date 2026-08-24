@@ -10,6 +10,7 @@ import {
   Clock,
   FileText,
   LifeBuoy,
+  PenLine,
   Settings,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
+  { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 

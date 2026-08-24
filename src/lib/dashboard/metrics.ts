@@ -166,8 +166,26 @@ export type DashboardMetrics = {
   revenue: RevenueBucket[];
   clientShare: { top: ClientShare[]; otherAmount: number; otherCount: number; total: number };
   hours: { billable: number; nonBillable: number; unbilledValue: number; unbilledHours: number };
-  tickets: { open: number; inProgress: number; newCount: number; resolvedInRange: number };
+  tickets: {
+    open: number;
+    inProgress: number;
+    newCount: number;
+    resolvedInRange: number;
+    /** Most recent unresolved tickets, for the dashboard's attention list. */
+    recent: { id: string; ticketNumber: string; company: string; urgency: string; ageDays: number }[];
+  };
   counts: { activeClients: number; draftInvoices: number };
+  /** Sent-but-unpaid invoices, worst-overdue first. */
+  awaitingPayment: {
+    id: string;
+    invoiceNumber: string;
+    clientName: string;
+    amount: number;
+    daysSinceSent: number;
+    /** Sent over 30 days ago -- the threshold for chasing. */
+    overdue: boolean;
+  }[];
+  collections: { sentValue: number; paidValue: number; overdueValue: number };
 };
 
 /** Prisma Decimal | number | null -> number. */
@@ -196,6 +214,9 @@ export async function loadDashboardMetrics(
     activeClients,
     draftInvoices,
     clients,
+    sentUnpaid,
+    paidInRange,
+    recentTickets,
   ] = await Promise.all([
     tx.timeEntry.aggregate({
       where: { loggedByUserId: userId, createdAt: { gte: dayStart } },
@@ -226,6 +247,22 @@ export async function loadDashboardMetrics(
     tx.client.count({ where: { activeStatus: true } }),
     tx.invoice.count({ where: { status: "Draft", voidedAt: null } }),
     tx.client.findMany({ select: { id: true, name: true } }),
+    // Sent but not paid: the invoices that are actually owed money.
+    tx.invoice.findMany({
+      where: { status: "Sent", voidedAt: null },
+      select: { id: true, invoiceNumber: true, totalAmount: true, sentAt: true, client: { select: { name: true } } },
+      orderBy: { sentAt: "asc" },
+    }),
+    tx.invoice.aggregate({
+      where: { status: "Paid", voidedAt: null, paidAt: { gte: range.start, lt: range.end } },
+      _sum: { totalAmount: true },
+    }),
+    tx.ticket.findMany({
+      where: { status: { in: ["New", "InProgress"] } },
+      select: { id: true, ticketNumber: true, clientCompanyName: true, urgency: true, createdAt: true },
+      orderBy: [{ createdAt: "desc" }],
+      take: 5,
+    }),
   ]);
 
   // --- revenue, bucketed by Pacific month -----------------------------------
@@ -310,6 +347,22 @@ export async function loadDashboardMetrics(
     Math.floor((dayStart.getTime() - monthStart.getTime()) / 86_400_000) + 1,
   );
 
+  // --- collections ----------------------------------------------------------
+  const OVERDUE_AFTER_DAYS = 30;
+  const awaitingPayment = sentUnpaid.map((inv) => {
+    const daysSinceSent = inv.sentAt
+      ? Math.floor((Date.now() - inv.sentAt.getTime()) / 86_400_000)
+      : 0;
+    return {
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      clientName: inv.client.name,
+      amount: num(inv.totalAmount),
+      daysSinceSent,
+      overdue: daysSinceSent >= OVERDUE_AFTER_DAYS,
+    };
+  });
+
   return {
     today: {
       loggedEntries: todayEntries._count,
@@ -333,7 +386,20 @@ export async function loadDashboardMetrics(
       inProgress: statusCount("InProgress"),
       newCount: statusCount("New"),
       resolvedInRange,
+      recent: recentTickets.map((t) => ({
+        id: t.id,
+        ticketNumber: t.ticketNumber,
+        company: t.clientCompanyName,
+        urgency: t.urgency,
+        ageDays: Math.floor((Date.now() - t.createdAt.getTime()) / 86_400_000),
+      })),
     },
     counts: { activeClients, draftInvoices },
+    awaitingPayment,
+    collections: {
+      sentValue: awaitingPayment.reduce((s, i) => s + i.amount, 0),
+      paidValue: num(paidInRange._sum.totalAmount),
+      overdueValue: awaitingPayment.filter((i) => i.overdue).reduce((s, i) => s + i.amount, 0),
+    },
   };
 }

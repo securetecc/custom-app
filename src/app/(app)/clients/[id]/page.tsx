@@ -98,74 +98,70 @@ export default async function EditClientPage({
             />
           </div>
 
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Frequency</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Authorized by</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-20" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {client.recurringCharges.map((charge) => (
-                  <TableRow key={charge.id}>
-                    <TableCell className="font-medium">{charge.description}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {charge.itemType ? ADDON_ITEM_TYPE_LABELS[charge.itemType] : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(Number(charge.amount))}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {charge.authorizedBy ?? "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={charge.activeStatus ? "default" : "secondary"}>
-                        {charge.activeStatus ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <RecurringChargeDialog
-                          clientId={client.id}
-                          recurringChargeId={charge.id}
-                          addonPricing={addonPricing}
-                          defaultValues={{
-                            description: charge.description,
-                            amount: Number(charge.amount),
-                            billingFrequency: charge.billingFrequency,
-                            activeStatus: charge.activeStatus,
-                            itemType: charge.itemType,
-                            authorizedBy: charge.authorizedBy ?? "",
-                          }}
-                          trigger={
-                            <Button variant="ghost" size="icon" aria-label="Edit charge">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                        <DeleteRecurringChargeButton id={charge.id} clientId={client.id} />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {client.recurringCharges.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                      No recurring charges for this client yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+          {/* A list rather than a table: seven columns don't fit this
+              column's width, and the result was a horizontal scrollbar on the
+              one screen where you're looking at a single client's charges.
+              Stacking the secondary details under the description keeps
+              everything readable without sideways movement. */}
+          <Card className="divide-y">
+            {client.recurringCharges.map((charge) => (
+              <div key={charge.id} className="flex items-start gap-3 p-4">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{charge.description}</span>
+                    <Badge variant={charge.activeStatus ? "default" : "secondary"}>
+                      {charge.activeStatus ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
+                    {charge.itemType ? ` · ${ADDON_ITEM_TYPE_LABELS[charge.itemType]}` : ""}
+                    {charge.reference ? ` · ${charge.reference}` : ""}
+                    {charge.authorizedBy ? ` · authorized by ${charge.authorizedBy}` : ""}
+                  </p>
+                  {charge.notes && (
+                    <p className="text-xs text-muted-foreground">{charge.notes}</p>
+                  )}
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold tabular-nums">
+                    {formatCurrency(Number(charge.amount))}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {charge.billingFrequency === "Annual" ? "per year" : "per month"}
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-1">
+                  <RecurringChargeDialog
+                    clientId={client.id}
+                    recurringChargeId={charge.id}
+                    addonPricing={addonPricing}
+                    defaultValues={{
+                      description: charge.description,
+                      amount: Number(charge.amount),
+                      billingFrequency: charge.billingFrequency,
+                      activeStatus: charge.activeStatus,
+                      itemType: charge.itemType,
+                      authorizedBy: charge.authorizedBy ?? "",
+                      notes: charge.notes ?? "",
+                    }}
+                    trigger={
+                      <Button variant="ghost" size="icon" aria-label="Edit charge">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                  <DeleteRecurringChargeButton id={charge.id} clientId={client.id} />
+                </div>
+              </div>
+            ))}
+            {client.recurringCharges.length === 0 && (
+              <p className="py-10 text-center text-muted-foreground">
+                No recurring charges for this client yet.
+              </p>
+            )}
           </Card>
         </TabsContent>
       </Tabs>

@@ -12,7 +12,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // $CRON_SECRET` themselves and fail closed when the secret is unset
 // (src/lib/cron/auth.ts).
 // "/support" (a startsWith prefix match below) already covers "/support/status".
-const PUBLIC_PATHS = ["/login", "/support", "/privacy", "/terms", "/api/tickets", "/api/cron"];
+const PUBLIC_PATHS = ["/login", "/support", "/privacy", "/terms", "/api/tickets", "/api/cron", "/reset-password"];
 
 // Client-facing ticket portal, on its own hostname rather than a path under
 // the internal app. Clients never see a domain called "manage", and the

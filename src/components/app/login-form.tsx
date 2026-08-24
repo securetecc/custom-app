@@ -100,6 +100,8 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const reduceMotion = useSyncExternalStore(
     subscribeReducedMotion,
@@ -185,6 +187,27 @@ export function LoginForm() {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  /**
+   * Sends a Supabase recovery email.
+   *
+   * The response is deliberately identical whether or not the address has an
+   * account: this form is reachable by anyone, and a distinct "no such user"
+   * would turn it into a way to test which emails are staff.
+   */
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      setError("Enter your email address first, then choose Forgot your password.");
+      return;
+    }
+    setSendingReset(true);
+    setError(null);
+    await createClient().auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSendingReset(false);
+    setResetSent(true);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -513,12 +536,27 @@ export function LoginForm() {
                 </p>
               )}
 
+              {resetSent && (
+                <p role="status" className="mb-3 text-sm text-[#06E1DC]">
+                  If that address has an account, a reset link is on its way.
+                </p>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
                 className="relative w-full overflow-hidden rounded-[10px] bg-[#06E1DC] px-10 py-[15px] text-base font-bold tracking-[0.2px] text-[#071E37] transition-transform hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-[#1a3050] disabled:text-[rgba(255,255,255,0.3)]"
               >
                 {loading ? "Unlocking…" : "Unlock"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={sendingReset}
+                className="mt-4 w-full text-[13px] text-[rgba(255,255,255,0.55)] underline underline-offset-4 transition-colors hover:text-[#06E1DC] disabled:cursor-not-allowed"
+              >
+                {sendingReset ? "Sending…" : "Forgot your password?"}
               </button>
             </form>
 
