@@ -90,7 +90,15 @@ export function AiTimeEntryDialog({
     setParsing(false);
 
     if (!result.ok) {
-      toast.error(result.error);
+      // Same reasoning as the Voice Logger: keep what was dictated/typed and
+      // let it be completed by hand rather than making the user start over.
+      toast.error(`${result.error} Your note was kept — fill in the rest manually.`);
+      setValue("description", rawInput.trim());
+      setWarning(
+        "AI parsing failed, so nothing was filled in automatically. Your note is in the " +
+          "description — set the client, service type, and hours yourself.",
+      );
+      setStep("review");
       return;
     }
 
@@ -113,7 +121,15 @@ export function AiTimeEntryDialog({
     setSubmitting(false);
 
     if (!result.ok) {
-      toast.error(result.error);
+      // Same reasoning as the Voice Logger: keep what was dictated/typed and
+      // let it be completed by hand rather than making the user start over.
+      toast.error(`${result.error} Your note was kept — fill in the rest manually.`);
+      setValue("description", rawInput.trim());
+      setWarning(
+        "AI parsing failed, so nothing was filled in automatically. Your note is in the " +
+          "description — set the client, service type, and hours yourself.",
+      );
+      setStep("review");
       return;
     }
 

@@ -70,7 +70,20 @@ export default async function TicketsPage({
             {urgency !== "All" ? ` · ${urgency.toLowerCase()} urgency` : ""}
           </p>
         </div>
-        <Button variant="outline" render={<a href="/support" target="_blank" rel="noreferrer" />}>
+        <Button
+          variant="outline"
+          render={
+            // The real client-facing portal (ticket.securetecc.com), not the
+            // /support path on this host -- staff should see exactly what a
+            // client sees. Falls back to the local route when the portal URL
+            // isn't configured (dev, or before the domain is attached).
+            <a
+              href={process.env.NEXT_PUBLIC_TICKET_PORTAL_URL ?? "/support"}
+              target="_blank"
+              rel="noreferrer"
+            />
+          }
+        >
           View public form
         </Button>
       </div>
@@ -88,6 +101,7 @@ export default async function TicketsPage({
               <TableHead>Status</TableHead>
               <TableHead>Assigned</TableHead>
               <TableHead>Submitted</TableHead>
+              <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -116,11 +130,16 @@ export default async function TicketsPage({
                 </TableCell>
                 <TableCell>{ticket.assignedToUser?.name ?? "—"}</TableCell>
                 <TableCell className="whitespace-nowrap">{formatDate(ticket.createdAt)}</TableCell>
+                <TableCell className="text-right">
+                  <Button variant="outline" size="sm" render={<Link href={`/tickets/${ticket.id}`} />}>
+                    View
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
             {tickets.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                   No tickets match this filter.
                 </TableCell>
               </TableRow>

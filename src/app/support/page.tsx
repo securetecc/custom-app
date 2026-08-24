@@ -39,8 +39,8 @@ export default function SupportPage() {
               How can we help?
             </h1>
             <p className="mt-3 text-[15px] leading-[1.6] text-[rgba(255,255,255,0.74)]">
-              Tell us what&apos;s going on and we&apos;ll get a technician on it. You&apos;ll get a
-              confirmation email with your ticket number.
+              Tell us what&apos;s going on and we&apos;ll get back to you. No account or login
+              needed.
             </p>
           </div>
 

@@ -143,6 +143,7 @@ model Organization {
   recurringChargeAuditLogs RecurringChargeAuditLog[]
   addonPricing           AddonPricing[]
   invoiceRecurringCharges InvoiceRecurringCharge[]
+  invoiceRetainerPeriods  InvoiceRetainerPeriod[]
   invoices               Invoice[]
   tickets                Ticket[]
 
@@ -198,6 +199,7 @@ model Client {
   reimbursableExpenses ReimbursableExpense[]
   recurringCharges     RecurringCharge[]
   invoices             Invoice[]
+  retainerPeriods      InvoiceRetainerPeriod[]
 
   @@unique([organizationId, shortName])
   @@index([organizationId])
@@ -407,11 +409,41 @@ model Invoice {
   timeEntries          TimeEntry[]
   reimbursableExpenses ReimbursableExpense[]
   recurringCharges     InvoiceRecurringCharge[]
+  retainerPeriods      InvoiceRetainerPeriod[]
 
   @@unique([organizationId, clientId, invoiceNumber])
   @@index([organizationId])
   @@index([clientId])
   @@map("invoices")
+}
+
+/// One row per "this client's flat retainer was billed for this calendar
+/// month". Retainer clients pay a flat rate per month regardless of hours, so
+/// without a ledger two invoices whose periods both touch March would each
+/// charge March's retainer -- the exact double-billing InvoiceRecurringCharge
+/// prevents for recurring charges. Same shape and same rules: the amount is
+/// snapshotted at billing time so a later change to Client.billingRate never
+/// rewrites history, and rows are deleted when an invoice is voided, which
+/// correctly re-opens that month.
+model InvoiceRetainerPeriod {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId      String
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// First/last day of the calendar month this row covers.
+  periodStart    DateTime     @db.Date
+  periodEnd      DateTime     @db.Date
+  /// Client.billingRate as it was when billed.
+  amount         Decimal      @db.Decimal(10, 2)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([invoiceId])
+  @@map("invoice_retainer_periods")
 }
 
 model Ticket {

@@ -442,14 +442,33 @@ export async function generateInvoice(
       const totalHours = Number(lineItems.reduce((s, l) => s + l.hours, 0).toFixed(2));
       const chargeTotal = selectedOccurrences.reduce((s, o) => s + o.amount, 0);
       const reimbursableTotal = reimbursables.reduce((s, e) => s + Number(e.amount), 0);
-      // Retainer: flat rate billed once per calendar month in the invoiced
-      // period, replacing the time-based total entirely. Known limitation:
-      // unlike recurring charges, retainer occurrences have no per-month
-      // snapshot ledger yet (no client currently uses Retainer), so
-      // generating two invoices whose periods both touch the same month
-      // isn't blocked the way recurring-charge double-billing is. Revisit
-      // once a real Retainer client exists.
-      const retainerMonths = isRetainer ? monthsInRange(periodStart, periodEnd).length : 0;
+
+      // Retainer: a flat rate billed once per calendar month, replacing the
+      // time-based total entirely. Months already billed on a non-voided
+      // invoice are excluded here -- without that, two invoices whose periods
+      // both touch March would each charge March's retainer. Same ledger
+      // approach InvoiceRetainerPeriod exists for, mirroring how
+      // expandRecurringOccurrences dedupes recurring charges.
+      let retainerOccurrences: { monthStart: Date; monthEnd: Date }[] = [];
+      if (isRetainer) {
+        const candidateMonths = monthsInRange(periodStart, periodEnd);
+        const alreadyBilled = await tx.invoiceRetainerPeriod.findMany({
+          where: { clientId, invoice: { voidedAt: null } },
+          select: { periodStart: true },
+        });
+        const billed = new Set(alreadyBilled.map((r) => toIsoDate(r.periodStart)));
+        retainerOccurrences = candidateMonths.filter(
+          (m) => !billed.has(toIsoDate(m.monthStart)),
+        );
+
+        if (retainerOccurrences.length === 0) {
+          throw new ConflictError(
+            `Every month in this period has already been billed to ${client.name}'s retainer. ` +
+              "Void the earlier invoice first, or choose a different period.",
+          );
+        }
+      }
+      const retainerMonths = retainerOccurrences.length;
       const retainerTotal = isRetainer ? (clientRate as number) * retainerMonths : 0;
       const timeTotal = isRetainer
         ? retainerTotal
@@ -487,6 +506,21 @@ export async function generateInvoice(
         await tx.reimbursableExpense.updateMany({
           where: { id: { in: reimbursables.map((e) => e.id) } },
           data: { invoiceId: invoice.id },
+        });
+      }
+
+      if (retainerOccurrences.length > 0) {
+        await tx.invoiceRetainerPeriod.createMany({
+          data: retainerOccurrences.map((m) => ({
+            organizationId: appUser.organizationId,
+            invoiceId: invoice.id,
+            clientId,
+            periodStart: m.monthStart,
+            periodEnd: m.monthEnd,
+            // Snapshot the rate, so a later change to Client.billingRate
+            // never rewrites what a past invoice charged.
+            amount: clientRate as number,
+          })),
         });
       }
 
@@ -853,6 +887,8 @@ export async function voidInvoice(
         data: { invoiceId: null },
       });
       await tx.invoiceRecurringCharge.deleteMany({ where: { invoiceId: id } });
+      // Re-opens those calendar months so the retainer can be billed again.
+      await tx.invoiceRetainerPeriod.deleteMany({ where: { invoiceId: id } });
       await tx.invoice.update({ where: { id }, data: { voidedAt: new Date() } });
 
       return { pdfUrl: invoice.pdfUrl, clientId: invoice.clientId };

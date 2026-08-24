@@ -205,7 +205,17 @@ export function VoiceLoggerApp({
     const parsed = await parseTimeEntryVoiceNote(transcript);
     setParsing(false);
     if (!parsed.ok) {
-      toast.error(parsed.error);
+      // Don't discard the dictation. Speaking it again is the expensive part,
+      // and a parse failure (missing GEMINI_API_KEY, malformed model JSON, API
+      // outage) says nothing about whether the transcript itself is good. Open
+      // the review form with the raw text in the description so it can be
+      // finished by hand instead of re-recorded.
+      toast.error(`${parsed.error} Your recording was kept — fill in the rest manually.`);
+      setReviewDraft({ ...emptyDraft, description: transcript.trim() });
+      setReviewWarning(
+        "AI parsing failed, so nothing was filled in automatically. Your transcript is in " +
+          "the description — set the client, service type, and hours yourself.",
+      );
       return;
     }
     setReviewDraft({ ...emptyDraft, ...parsed.values });
