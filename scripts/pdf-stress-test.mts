@@ -21,7 +21,7 @@ function makeLineItems(count: number): InvoicePdfLineItem[] {
     const hours = [0.25, 0.5, 1, 1.5, 2, 3.25][i % 6];
     const rate = i % 7 === 0 ? 150 : 125;
     return {
-      date: `2026-07-${String(day).padStart(2, "0")}`,
+      serviceCode: "R-S", groupLabel: null, date: `2026-07-${String(day).padStart(2, "0")}`,
       description:
         `${SERVICE_LABELS[i % SERVICE_LABELS.length]} — resolved workstation issue #${i + 1}: ` +
         "diagnosed failing update service, cleared the pending queue, reapplied patches, " +
@@ -34,7 +34,7 @@ function makeLineItems(count: number): InvoicePdfLineItem[] {
 }
 
 function chargeItem(description: string, amount: number): InvoicePdfLineItem {
-  return { date: null, description, hours: null, rate: null, amount };
+  return { date: null, serviceCode: null, groupLabel: null, description, hours: null, rate: null, amount };
 }
 
 function baseData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {

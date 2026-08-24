@@ -69,6 +69,43 @@ function normalizePrivateKey(raw: string): string {
   return key.endsWith("\n") ? key : `${key}\n`;
 }
 
+/**
+ * A description of the configured key that is safe to show in an error.
+ *
+ * Deliberately reports only structure -- total length, whether the PEM
+ * markers are present, how many lines it has, and the first line (which is
+ * the public "-----BEGIN ...-----" banner, not key material). Never any
+ * base64 from the body. Without this, a key that fails to decode gives no
+ * signal at all about WHY, and the value can't be read back out of Vercel to
+ * inspect by hand.
+ */
+export function describeConfiguredKey(): string {
+  const raw = process.env.GOOGLE_PRIVATE_KEY;
+  if (!raw) return "GOOGLE_PRIVATE_KEY is not set at all.";
+
+  const normalized = normalizePrivateKey(raw);
+  const rawFirstLine = normalized.split("\n")[0] ?? "";
+  const looksLikeJson = raw.trimStart().startsWith("{");
+  // Echo the first line ONLY when it's a PEM banner or JSON punctuation --
+  // both public. If the markers are missing, that first line IS base64 key
+  // material, so report its shape instead of its contents.
+  const firstLine =
+    rawFirstLine.startsWith("-----") || looksLikeJson
+      ? rawFirstLine.slice(0, 40)
+      : `<${rawFirstLine.length} chars of non-PEM text>`;
+
+  return [
+    `length=${raw.length}`,
+    `lines=${normalized.split("\n").length}`,
+    `hasBegin=${normalized.includes("-----BEGIN")}`,
+    `hasEnd=${normalized.includes("-----END")}`,
+    looksLikeJson ? "looksLikeWholeJsonObject=true" : null,
+    `startsWith=${JSON.stringify(firstLine)}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 /** Null (rather than throwing) so UI can render a "not connected" state. */
 export function readGoogleConfig(): GoogleConfig | null {
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
@@ -128,6 +165,7 @@ export async function getGoogleAccessToken(scope = GMAIL_SCOPE): Promise<string>
         "`private_key` VALUE from the service-account JSON without the " +
         "surrounding double quotes, starting at -----BEGIN PRIVATE KEY----- " +
         "and ending at -----END PRIVATE KEY-----, then redeploy. " +
+        `What is currently configured: ${describeConfiguredKey()}. ` +
         `(${err instanceof Error ? err.message : String(err)})`,
     );
   }

@@ -16,6 +16,19 @@
  */
 export type InvoicePdfLineItem = {
   date: string | null; // ISO date
+  /**
+   * ServiceType.code (e.g. "R-S"), shown in the summary page's work log the
+   * way the old system's summaries did. Null for charge/retainer/expense rows,
+   * which aren't tied to a service type.
+   */
+  serviceCode: string | null;
+  /**
+   * Section heading this row belongs under, e.g. "Monthly Recurring Charges".
+   * The renderer emits a full-width divider row whenever this changes, which
+   * is how the existing invoices group charges away from dated work. Null for
+   * ordinary time-entry rows, which need no heading.
+   */
+  groupLabel: string | null;
   description: string;
   hours: number | null;
   rate: number | null;

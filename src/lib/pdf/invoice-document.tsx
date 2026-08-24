@@ -1,193 +1,261 @@
-import { Document, Page, Text, View, Image, Link } from "@react-pdf/renderer";
-import { styles } from "./styles";
-import { formatAddressLine, formatCurrency, formatDate, formatHours } from "@/lib/format";
-import type { InvoicePdfData } from "./types";
+import { Fragment } from "react";
+import { Document, Image, Page, Text, View } from "@react-pdf/renderer";
+import { registerInvoiceFonts } from "./fonts";
+import { COL, styles, TEMPLATE_ROW_COUNT } from "./styles";
+import type { InvoicePdfData, InvoicePdfLineItem } from "./types";
 
 /**
- * Invoice PDF -- laid out to match the org's canonical invoice template
- * (a full-bleed navy header/footer band, a single grid-lined line-item table,
- * a watermark, and a SUBTOTAL/TAX/TOTAL block paired with payment info).
+ * Invoice PDF, laid out to match "Invoice Template MASTER" (sheet "Invoice").
  *
- * Multi-page handling:
- *  - The single <Page> paginates naturally; the line-item table is NOT
- *    chunked manually -- manual chunking is what usually causes duplicated
- *    headers and misplaced totals.
- *  - `headerBand` (logo + "INVOICE") and the letterhead/meta block render on
- *    page 1 only -- NOT `fixed`.
- *  - `footerBand` and `watermark` ARE `fixed`, so they repeat on every page.
- *  - The totals block is the last element in normal flow, so it renders once,
- *    on whatever page it naturally lands on. `wrap={false}` keeps it from
- *    splitting across a break, and `minPresenceAhead` stops it being orphaned
- *    at the very bottom of a page.
- *  - Each row is `wrap={false}` so a single row never splits across pages,
- *    while the containing list keeps default wrapping so the list itself can
- *    paginate.
+ * Structural decisions taken from the sheet rather than invented:
+ *  - the INVOICE band and the URL band span the CONTENT columns (A:E), not
+ *    the page edge -- they're bordered cells in the sheet, not full bleed;
+ *  - labels (DATE / INVOICE # / FOR: / BILL TO:) sit in column C with their
+ *    values right-aligned in column E;
+ *  - the line-item grid is a fixed 18 rows (14-31) and is padded with empty
+ *    bordered rows when the invoice is shorter, which is what gives the
+ *    template its consistent shape;
+ *  - only SUBTOTAL, SALES TAX and TOTAL carry the pale tint; individual
+ *    amount cells do not.
+ *
+ * Pagination: rows are wrap={false} so one never splits across a page break.
+ * When an invoice exceeds 18 rows the grid simply grows and flows onto page
+ * 2 -- the fixed count is a minimum, never a cap that would drop billable
+ * work off the invoice.
  */
 export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
-  const { organization: org } = data;
-  const clientAddressLine = formatAddressLine(data.client.address1, data.client.address2);
-  const billerAddressLine = formatAddressLine(org.billerAddress1, org.billerAddress2);
+  registerInvoiceFonts();
+
+  const { organization: org, client } = data;
+  const billerLines = [
+    org.billerAddress1,
+    org.billerAddress2,
+    org.billerCityStateZip,
+    org.officePhone ? `Office: ${org.officePhone}` : null,
+    org.mobilePhone ? `Mobile: ${org.mobilePhone}` : null,
+    org.billerEmail ? `Email: ${org.billerEmail}` : null,
+    org.website ? `Website: ${stripScheme(org.website)}` : null,
+  ].filter(Boolean) as string[];
+
+  const clientLines = [
+    "Attn: Accounting Department",
+    client.address1,
+    client.address2,
+    client.cityStateZip,
+    client.phone,
+  ].filter(Boolean) as string[];
+
+  // Divider rows occupy grid rows too -- count them so an invoice with a
+  // charge group doesn't render one row taller than one without.
+  const dividerCount = new Set(
+    data.lineItems.map((i) => i.groupLabel).filter((l): l is string => l !== null),
+  ).size;
+  const padding = Math.max(0, TEMPLATE_ROW_COUNT - data.lineItems.length - dividerCount);
 
   return (
     <Document title={`Invoice ${data.invoiceNumber}`}>
       <Page size="LETTER" style={styles.page}>
-        {/* Header band -- page 1 only, not fixed. */}
-        <View style={styles.headerBand}>
+        <View fixed>
+          <View style={styles.titleBand}>
           {org.logoDataUri ? (
-            // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf's Image is a drawing primitive, no alt prop.
+            /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image takes no alt */
             <Image src={org.logoDataUri} style={styles.logo} />
           ) : (
-            <Text style={styles.orgNameFallback}>{org.name}</Text>
+            <View />
           )}
-          <Text style={styles.invoiceTitle}>INVOICE</Text>
-        </View>
-
-        <View style={styles.content}>
-          {/* Watermark -- fixed so it repeats behind every page. */}
-          {org.logoDataUri && (
-            // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf's Image is a drawing primitive, no alt prop.
-            <Image src={org.logoDataUri} style={styles.watermark} fixed />
-          )}
-
-          {/* Letterhead (biller) + meta block. */}
-          <View style={styles.letterheadRow}>
-            <View style={styles.billerBlock}>
-              {org.billerName && <Text style={styles.billerName}>{org.billerName}</Text>}
-              {billerAddressLine.length > 0 && (
-                <Text style={styles.billerLine}>{billerAddressLine}</Text>
-              )}
-              {org.billerCityStateZip && (
-                <Text style={styles.billerLine}>{org.billerCityStateZip}</Text>
-              )}
-              {org.officePhone && <Text style={styles.billerLine}>Office: {org.officePhone}</Text>}
-              {org.mobilePhone && <Text style={styles.billerLine}>Mobile: {org.mobilePhone}</Text>}
-              {org.billerEmail && <Text style={styles.billerLine}>Email: {org.billerEmail}</Text>}
-              {org.website && <Text style={styles.billerLine}>Website: {org.website}</Text>}
-            </View>
-
-            <View style={styles.metaBlock}>
-              <View style={styles.metaRow}>
-                <Text style={styles.metaLabel}>DATE</Text>
-                <Text style={styles.metaValue}>{formatDate(data.issuedAt)}</Text>
-              </View>
-              <View style={styles.metaRow}>
-                <Text style={styles.metaLabel}>INVOICE #</Text>
-                <Text style={styles.metaValue}>{data.invoiceNumber}</Text>
-              </View>
-              <View style={[styles.metaRow, { marginTop: 8 }]}>
-                <Text style={styles.metaLabel}>FOR:</Text>
-                <Text style={styles.metaValueMuted}>{org.invoiceForLabel}</Text>
-              </View>
-              <View style={styles.metaRow}>
-                <Text style={styles.metaLabel}>PERIOD:</Text>
-                <Text style={styles.metaValueMuted}>
-                  {formatDate(data.periodStart)} – {formatDate(data.periodEnd)}
-                </Text>
-              </View>
-              <View style={[styles.metaRow, { marginTop: 8 }]}>
-                <Text style={styles.metaLabel}>BILL TO:</Text>
-                <Text style={styles.metaValue}>{data.client.name}</Text>
-              </View>
-              <Text style={styles.metaValueMuted}>Attn: Accounting Department</Text>
-              {clientAddressLine.length > 0 && (
-                <Text style={styles.metaValueMuted}>{clientAddressLine}</Text>
-              )}
-              {data.client.cityStateZip && (
-                <Text style={styles.metaValueMuted}>{data.client.cityStateZip}</Text>
-              )}
-              {data.client.phone && (
-                <Text style={styles.metaValueMuted}>{data.client.phone}</Text>
-              )}
-            </View>
+            <Text style={styles.invoiceWord}>INVOICE</Text>
           </View>
 
-          {/* Line-item table -- time entries, then any recurring/retainer rows. */}
-          <View style={styles.tableHeaderRow} wrap={false}>
-            <Text style={[styles.th, styles.colDate]}>DATE</Text>
-            <Text style={[styles.th, styles.colDesc]}>DESCRIPTION</Text>
-            <Text style={[styles.th, styles.colHours]}>HOURS</Text>
-            <Text style={[styles.th, styles.colRate]}>RATE</Text>
-            <Text style={[styles.th, styles.colAmount, { borderRightWidth: 0 }]}>AMOUNT</Text>
-          </View>
-          <View>
-            {data.lineItems.map((item, i) => (
-              <View key={i} style={styles.row} wrap={false}>
-                <Text style={[styles.cell, styles.colDate]}>
-                  {item.date ? formatDate(item.date) : ""}
-                </Text>
-                <Text style={[styles.cell, styles.colDesc]}>{item.description}</Text>
-                <Text style={[styles.cell, styles.colHours]}>
-                  {item.hours === null ? "" : formatHours(item.hours)}
-                </Text>
-                <Text style={[styles.cell, styles.colRate]}>
-                  {item.rate === null ? "" : formatCurrency(item.rate)}
-                </Text>
-                <Text style={[styles.cell, styles.amountCell, styles.colAmount]}>
-                  {item.amount === null ? "" : formatCurrency(item.amount)}
-                </Text>
-              </View>
+          <View style={styles.letterhead}>
+          <View style={styles.billerBlock}>
+            {org.billerName && <Text style={styles.billerName}>{org.billerName}</Text>}
+            {billerLines.map((line) => (
+              <Text key={line} style={styles.billerLine}>
+                {line}
+              </Text>
             ))}
           </View>
 
-          {/* Payment info (left) + totals (right). */}
-          <View style={styles.bottomRow} wrap={false} minPresenceAhead={110}>
-            <View style={styles.paymentInfo}>
-              {(org.checkPayableTo || org.acceptedPaymentMethods) && (
-                <>
-                  {org.checkPayableTo && (
-                    <Text style={styles.paymentLine}>
-                      <Text style={styles.paymentLabel}>Make all checks payable to: </Text>
-                      <Text style={styles.paymentValue}>{org.checkPayableTo}</Text>
-                    </Text>
-                  )}
-                  {org.acceptedPaymentMethods && (
-                    <Text style={styles.paymentLine}>
-                      <Text style={styles.paymentLabel}>We also accept </Text>
-                      <Text style={styles.paymentValue}>{org.acceptedPaymentMethods}</Text>
-                      <Text style={styles.paymentLabel}>.</Text>
-                    </Text>
-                  )}
-                </>
-              )}
-              <Text style={styles.thankYou}>THANK YOU FOR YOUR BUSINESS</Text>
+          <View style={styles.metaBlock}>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>DATE</Text>
+              <Text style={styles.metaValue}>{formatDate(data.issuedAt)}</Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>INVOICE #</Text>
+              <Text style={styles.metaValue}>{data.invoiceNumber}</Text>
             </View>
 
-            <View style={styles.totalsBlock}>
-              <View style={styles.totalsRowEmphasis}>
-                <Text style={styles.totalsLabelEmphasis}>SUBTOTAL</Text>
-                <Text style={styles.totalsValueEmphasis}>{formatCurrency(data.totalAmount)}</Text>
-              </View>
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>TAX RATE</Text>
-                <Text style={styles.totalsValue}>N/A</Text>
-              </View>
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>SALES TAX</Text>
-                <Text style={styles.totalsValue}>N/A</Text>
-              </View>
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsLabel}>OTHER</Text>
-                <Text style={styles.totalsValue}>—</Text>
-              </View>
-              <View style={[styles.totalsRowEmphasis, { borderBottomWidth: 0 }]}>
-                <Text style={styles.totalsLabelEmphasis}>TOTAL</Text>
-                <Text style={styles.totalsValueEmphasis}>{formatCurrency(data.totalAmount)}</Text>
-              </View>
+            <View style={styles.metaGap} />
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>FOR:</Text>
+              <Text style={styles.metaValue}>{org.invoiceForLabel}</Text>
             </View>
+
+            <View style={styles.metaGap} />
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>BILL TO:</Text>
+              <Text style={styles.metaValue}>{client.name}</Text>
+            </View>
+              {clientLines.map((line) => (
+                <Text key={line} style={styles.metaValue}>
+                  {line}
+                </Text>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.tableHeader} wrap={false}>
+            <Text style={[styles.th, { width: COL.date }]}>DATE</Text>
+            <Text style={[styles.th, { width: COL.description }]}>DESCRIPTION</Text>
+            <Text style={[styles.th, { width: COL.hours }]}>HOURS</Text>
+            <Text style={[styles.th, { width: COL.rate }]}>RATE</Text>
+            <Text style={[styles.th, styles.thLast, { width: COL.amount }]}>AMOUNT</Text>
           </View>
         </View>
 
-        {/* Footer band -- fixed, repeats on every page. */}
-        <View style={styles.footerBand} fixed>
-          {org.website ? (
-            <Link src={org.website} style={styles.footerLink}>
-              {org.website}
-            </Link>
-          ) : (
-            <Text style={styles.footerLink}>{org.name}</Text>
-          )}
+        {data.lineItems.map((item, i) => {
+          const previous = i > 0 ? data.lineItems[i - 1].groupLabel : null;
+          const opensGroup = item.groupLabel !== null && item.groupLabel !== previous;
+          return (
+            <Fragment key={i}>
+              {opensGroup && <GroupDividerRow label={item.groupLabel!} />}
+              <LineRow item={item} />
+            </Fragment>
+          );
+        })}
+        {Array.from({ length: padding }, (_, i) => (
+          <LineRow key={`pad-${i}`} item={null} />
+        ))}
+
+        <View wrap={false}>
+          {/* Tint, value emphasis and label emphasis vary independently across
+              these five rows in the template -- see each flag below. */}
+          <TotalRow label="SUBTOTAL" value={currency(data.totalAmount)} tinted boldValue />
+          <TotalRow label="TAX RATE" value="N/A" />
+          <TotalRow label="SALES TAX" value="N/A" tinted />
+          <TotalRow label="OTHER" value="—" />
+          <TotalRow label="TOTAL" value={currency(data.totalAmount)} tinted boldValue strongLabel />
         </View>
+
+        {org.website && (
+          <View style={styles.urlBand} wrap={false}>
+            <Text style={styles.urlText}>{org.website}</Text>
+          </View>
+        )}
+
+        {(org.checkPayableTo || org.acceptedPaymentMethods) && (
+          <View style={styles.payBlock} wrap={false}>
+            {org.checkPayableTo && (
+              <Text style={styles.payLine}>
+                Make all checks payable to:{" "}
+                <Text style={styles.payStrong}>{org.checkPayableTo}</Text>
+              </Text>
+            )}
+            {org.acceptedPaymentMethods && (
+              <Text style={styles.payLine}>
+                We also accept <Text style={styles.payStrong}>{org.acceptedPaymentMethods}</Text>
+              </Text>
+            )}
+            <Text style={styles.thanks}>THANK YOU FOR YOUR BUSINESS</Text>
+          </View>
+        )}
       </Page>
     </Document>
   );
+}
+
+function LineRow({ item }: { item: InvoicePdfLineItem | null }) {
+  // The existing invoices prefix the description with the service-type code,
+  // and print $0.00 (not blank) in the AMOUNT column of the padding rows.
+  const description = item
+    ? item.serviceCode
+      ? `${item.serviceCode} — ${item.description}`
+      : item.description
+    : " ";
+
+  return (
+    <View style={styles.row} wrap={false}>
+      <Text style={[styles.cell, styles.cellCenter, { width: COL.date }]}>
+        {item?.date ? formatDate(item.date) : " "}
+      </Text>
+      <Text style={[styles.cell, { width: COL.description }]}>{description}</Text>
+      <Text style={[styles.cell, styles.cellNumeric, { width: COL.hours }]}>
+        {item?.hours != null ? item.hours.toFixed(2) : " "}
+      </Text>
+      <Text style={[styles.cell, styles.cellNumeric, { width: COL.rate }]}>
+        {item?.rate != null ? currency(item.rate) : " "}
+      </Text>
+      <Text style={[styles.cell, styles.cellLast, styles.cellAmount, { width: COL.amount }]}>
+        {currency(item?.amount ?? 0)}
+      </Text>
+    </View>
+  );
+}
+
+/** Full-width heading row that opens a charge group inside the grid. */
+function GroupDividerRow({ label }: { label: string }) {
+  return (
+    <View style={styles.row} wrap={false}>
+      <Text style={[styles.groupCell, { width: COL.date + COL.description + COL.hours + COL.rate }]}>
+        — {label} —
+      </Text>
+      <Text style={[styles.cell, styles.cellLast, styles.cellAmount, { width: COL.amount }]}>
+        {currency(0)}
+      </Text>
+    </View>
+  );
+}
+
+function TotalRow({
+  label,
+  value,
+  tinted,
+  boldValue,
+  strongLabel,
+}: {
+  label: string;
+  value: string;
+  /** Pale-teal cell background (SUBTOTAL, SALES TAX, TOTAL). */
+  tinted?: boolean;
+  /** 12pt bold figure (SUBTOTAL, TOTAL). */
+  boldValue?: boolean;
+  /** 10pt navy label instead of 9pt blue (TOTAL only). */
+  strongLabel?: boolean;
+}) {
+  return (
+    <View style={styles.totalsRow} wrap={false}>
+      <View style={styles.totalsSpacer} />
+      <Text style={[styles.totalsLabel, ...(strongLabel ? [styles.totalsLabelStrong] : [])]}>
+        {label}
+      </Text>
+      <Text
+        style={[
+          styles.totalsValue,
+          ...(tinted ? [styles.totalsValueTint] : []),
+          ...(boldValue ? [styles.totalsValueStrong] : []),
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function currency(n: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
+function formatHours(n: number): string {
+  return String(n);
+}
+
+/** 7/13/2026 -- the existing invoices don't zero-pad. */
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${Number(m)}/${Number(d)}/${y}`;
+}
+
+function stripScheme(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }

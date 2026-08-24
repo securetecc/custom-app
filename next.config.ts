@@ -48,7 +48,14 @@ const nextConfig: NextConfig = {
     // Organization.logoUrl isn't set). Static assets in public/ are served by
     // the CDN, not traced into function bundles, so it has to be listed here
     // or that read 404s in production and invoices silently lose their logo.
-    "/**": ["./src/generated/**/*", "./public/securetecc-logo.png"],
+    "/**": [
+      "./src/generated/**/*",
+      "./public/securetecc-logo.png",
+      // Montserrat/Quattrocento Sans .woff files read at render time by
+      // src/lib/pdf/fonts.ts. Same reason as the logo: not traced otherwise,
+      // and without them every invoice silently falls back to Helvetica.
+      "./src/lib/pdf/fonts/*.woff",
+    ],
   },
   // ...but shipping the binary isn't sufficient on its own. Bundling
   // @prisma/client rewrites the __dirname its runtime uses to locate that

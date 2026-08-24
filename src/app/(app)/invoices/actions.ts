@@ -81,8 +81,17 @@ function monthLabel(date: Date): string {
 }
 
 /** A charge/retainer row for the PDF's flat line-item table -- no date, hours, or rate. */
-function chargeLineItem(description: string, amount: number): InvoicePdfData["lineItems"][number] {
-  return { date: null, description, hours: null, rate: null, amount };
+function chargeLineItem(
+  description: string,
+  amount: number,
+  groupLabel: string | null = null,
+): InvoicePdfData["lineItems"][number] {
+  return { date: null, serviceCode: null, groupLabel, description, hours: null, rate: null, amount };
+}
+
+/** "Monthly Recurring Charges" / "Annual Recurring Charges". */
+function chargeGroupLabel(frequency: "Monthly" | "Annual"): string {
+  return `${frequency} Recurring Charges`;
 }
 
 type PdfOrganizationRow = {
@@ -413,6 +422,8 @@ export async function generateInvoice(
         if (isRetainer) {
           return {
             date: entry.date.toISOString().slice(0, 10),
+            serviceCode: entry.serviceType.code,
+            groupLabel: null,
             description: entry.description,
             hours,
             rate: null as number | null,
@@ -432,6 +443,8 @@ export async function generateInvoice(
         }
         return {
           date: entry.date.toISOString().slice(0, 10),
+          serviceCode: entry.serviceType.code,
+          groupLabel: null,
           description: entry.description,
           hours,
           rate,
@@ -542,9 +555,13 @@ export async function generateInvoice(
       // Charge/retainer/expense rows fold into the same flat table as extra
       // rows, matching the org's canonical invoice template -- no separate
       // "Monthly/Annual Recurring Charges" or "Retainer" sections.
-      const chargeRows = selectedOccurrences.map((o) => chargeLineItem(o.description, o.amount));
+      const chargeRows = selectedOccurrences.map((o) =>
+        chargeLineItem(o.description, o.amount, chargeGroupLabel(o.billingFrequency)),
+      );
       const expenseRows = reimbursables.map((e) => ({
         date: e.date.toISOString().slice(0, 10),
+        serviceCode: null,
+        groupLabel: null,
         description: e.description,
         hours: null,
         rate: null,
@@ -649,6 +666,8 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
         if (isRetainer) {
           return {
             date: entry.date.toISOString().slice(0, 10),
+            serviceCode: entry.serviceType.code,
+            groupLabel: null,
             description: entry.description,
             hours,
             rate: null as number | null,
@@ -661,6 +680,8 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
         const rate = override ?? clientRate ?? 0;
         return {
           date: entry.date.toISOString().slice(0, 10),
+          serviceCode: entry.serviceType.code,
+          groupLabel: null,
           description: entry.description,
           hours,
           rate,
@@ -674,6 +695,8 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
       );
       const expenseRows = invoice.reimbursableExpenses.map((e) => ({
         date: e.date.toISOString().slice(0, 10),
+        serviceCode: null,
+        groupLabel: null,
         description: e.description,
         hours: null,
         rate: null,

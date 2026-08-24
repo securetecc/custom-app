@@ -1,199 +1,251 @@
 import { StyleSheet } from "@react-pdf/renderer";
-
-// These match the org's default brandColorPrimary/brandColorAccent exactly
-// (see Organization model) -- kept as static constants rather than piped
-// through per-render since nothing today overrides those defaults for PDFs.
-export const NAVY = "#071E37";
-export const TEAL = "#06E1DC";
-export const AMOUNT_TINT = "#BFFDFC";
-export const RULE = "#9FB2C2";
-export const MUTED = "#5B6B7C";
-
-export const BODY_FONT_SIZE = 9;
+import { AMOUNT_FONT, HEADING_FONT } from "./fonts";
 
 /**
- * Layout note: the master template's header and footer are full-bleed bands
- * that touch the page edge, which react-pdf's `Page` padding can't do (padding
- * insets the whole content box uniformly). So `page` itself carries zero
- * padding, `headerBand`/`footerBand` span it edge-to-edge, and everything
- * else lives inside `content`, which supplies its own horizontal inset.
+ * Geometry transcribed from the master template
+ * ("Invoice Template MASTER", sheet "Invoice", gid 529553600) rather than
+ * eyeballed, so the PDF and the spreadsheet agree cell for cell.
  *
- * Pagination discipline (unchanged from before this redesign): rows are
- * `wrap={false}` so one row never splits across a page break; the totals
- * block is `wrap={false}` with `minPresenceAhead` so it's never orphaned at a
- * page bottom, and it is NOT `fixed` -- it renders once, wherever it lands.
- * `headerBand` renders on page 1 only (not fixed); `footerBand` and
- * `watermark` are `fixed` so they repeat on every page.
+ *   columns  A:112  B:330  C:89  D:80  E:121  px  (732 total)
+ *   rows     1:9  2:103  3:48  4:22  5-12:17  13-36:26  37:34  px
+ *   colours  navy #071E37, teal #06E1DC, label #003366, tint #BFFDFC
+ *
+ * The sheet's pixels are converted to PDF points at 0.75 (96dpi -> 72dpi), so
+ * the 732px content block lands at 549pt -- comfortably inside LETTER's
+ * 612pt width with the 31.5pt side margins below.
  */
+export const NAVY = "#071E37";
+export const TEAL = "#06E1DC";
+export const LABEL_BLUE = "#003366";
+export const AMOUNT_TINT = "#BFFDFC";
+
+/**
+ * Sheet px -> PDF pt.
+ *
+ * 96dpi -> 72dpi is exactly 0.75, but the template's rows 1-37 come to 732pt
+ * at that ratio and LETTER only offers ~769pt once margins are taken -- which
+ * leaves no room for the payment block below the URL band, so the totals
+ * spilled onto a second page. The spreadsheet has the same problem and solves
+ * it the same way: Google Sheets prints this template with fit-to-page
+ * scaling. 0.715 is that scale factor, applied uniformly so every proportion
+ * in the template is preserved exactly.
+ */
+const SHEET_SCALE = 0.715;
+const px = (n: number) => n * SHEET_SCALE;
+
+export const COL = {
+  date: px(112),
+  description: px(330),
+  hours: px(89),
+  rate: px(80),
+  amount: px(121),
+};
+export const CONTENT_WIDTH = COL.date + COL.description + COL.hours + COL.rate + COL.amount;
+export const PAGE_MARGIN = (612 - CONTENT_WIDTH) / 2;
+
+/** The template shows a fixed 18-row grid (rows 14-31) whether or not it's full. */
+export const TEMPLATE_ROW_COUNT = 18;
+export const ROW_HEIGHT = px(26);
+
+const border = { borderWidth: 1, borderColor: NAVY, borderStyle: "solid" as const };
+
 export const styles = StyleSheet.create({
   page: {
-    paddingBottom: 60, // reserves room for the fixed footer band
-    fontSize: BODY_FONT_SIZE,
-    fontFamily: "Helvetica",
-    color: NAVY,
-  },
-  content: {
-    paddingHorizontal: 40,
-    paddingTop: 20,
-  },
-
-  bodyText: {
-    fontSize: BODY_FONT_SIZE,
-    lineHeight: 1.45,
-    color: NAVY,
-  },
-
-  // --- header band ----------------------------------------------------------
-  headerBand: {
-    backgroundColor: NAVY,
-    paddingHorizontal: 40,
-    paddingVertical: 22,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  logo: { width: 150 },
-  orgNameFallback: { fontSize: 16, fontFamily: "Helvetica-Bold", color: TEAL },
-  invoiceTitle: { fontSize: 26, fontFamily: "Helvetica-Bold", color: TEAL },
-
-  // --- letterhead / meta row --------------------------------------------------
-  letterheadRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 14,
-  },
-  billerBlock: { maxWidth: "55%" },
-  billerName: { fontSize: 18, fontFamily: "Helvetica-Bold", color: NAVY, marginBottom: 3 },
-  billerLine: { fontSize: 8, color: NAVY, lineHeight: 1.4 },
-
-  metaBlock: { alignItems: "flex-end" },
-  metaRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginBottom: 2,
-  },
-  metaLabel: {
-    fontSize: 9,
-    fontFamily: "Helvetica-BoldOblique",
-    color: "#003366",
-    marginRight: 8,
-  },
-  metaValue: { fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY, textAlign: "right" },
-  metaValueMuted: { fontSize: 9, color: NAVY, textAlign: "right" },
-
-  // --- watermark --------------------------------------------------------------
-  // Fixed pixel offsets (LETTER = 612x792pt) rather than percentages: this
-  // needs to clear the header band + letterhead/meta block and land centered
-  // in the table area below it, which a percentage of page height can't
-  // target precisely.
-  watermark: {
-    position: "absolute",
-    top: 330,
-    left: 176,
-    width: 260,
-    opacity: 0.05,
-  },
-
-  // --- line-item table (grid-lined, matching the source spreadsheet) --------
-  tableHeaderRow: {
-    flexDirection: "row",
-    backgroundColor: TEAL,
-    borderTopWidth: 1,
-    borderTopColor: NAVY,
-    borderBottomWidth: 1,
-    borderBottomColor: NAVY,
-  },
-  th: {
+    paddingTop: px(9),
+    // Trimmed from 36: the template's own rows 1-37 already consume ~732pt of
+    // LETTER's 792, so a generous bottom margin pushed the totals to page 2.
+    paddingBottom: 16,
+    paddingHorizontal: PAGE_MARGIN,
+    fontFamily: HEADING_FONT,
     fontSize: 8,
-    fontFamily: "Helvetica-Bold",
-    color: NAVY,
-    textAlign: "center",
-    paddingVertical: 5,
-    borderRightWidth: 0.5,
-    borderRightColor: NAVY,
-  },
-  row: {
-    flexDirection: "row",
-    borderBottomWidth: 0.5,
-    borderBottomColor: RULE,
-  },
-  cell: {
-    fontSize: BODY_FONT_SIZE,
-    color: NAVY,
-    paddingVertical: 4,
-    paddingHorizontal: 3,
-    borderRightWidth: 0.5,
-    borderRightColor: RULE,
-  },
-  amountCell: { backgroundColor: AMOUNT_TINT, borderRightWidth: 0 },
-
-  colDate: { width: "15%" },
-  colDesc: { width: "45%" },
-  colHours: { width: "12%", textAlign: "right" },
-  colRate: { width: "11%", textAlign: "right" },
-  colAmount: { width: "17%", textAlign: "right" },
-
-  // --- totals + payment info row ---------------------------------------------
-  bottomRow: {
-    marginTop: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-  },
-
-  paymentInfo: { maxWidth: "55%" },
-  paymentLine: { fontSize: 9, textAlign: "center", marginBottom: 2 },
-  paymentLabel: { fontFamily: "Helvetica-Bold", color: NAVY },
-  paymentValue: { fontFamily: "Helvetica-Bold", color: "#003366" },
-  thankYou: {
-    marginTop: 8,
-    fontSize: 11,
-    fontFamily: "Helvetica-BoldOblique",
-    textAlign: "center",
     color: NAVY,
   },
 
-  totalsBlock: { width: 200 },
-  totalsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderBottomWidth: 0.5,
-    borderBottomColor: RULE,
-    paddingVertical: 3,
-  },
-  totalsRowEmphasis: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    backgroundColor: AMOUNT_TINT,
-    borderBottomWidth: 0.5,
-    borderBottomColor: RULE,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  totalsLabel: { fontSize: 9, fontFamily: "Helvetica-BoldOblique", color: NAVY },
-  totalsLabelEmphasis: {
-    fontSize: 11,
-    fontFamily: "Helvetica-BoldOblique",
-    color: NAVY,
-  },
-  totalsValue: { fontSize: 9, color: NAVY },
-  totalsValueEmphasis: { fontSize: 13, fontFamily: "Helvetica-Bold", color: NAVY },
-
-  // --- footer band ------------------------------------------------------------
-  footerBand: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+  // --- row 2: the INVOICE band (merged A2:E2) ------------------------------
+  titleBand: {
+    height: px(103),
     backgroundColor: NAVY,
-    paddingVertical: 14,
+    ...border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
   },
-  footerLink: {
-    fontSize: 12,
-    fontFamily: "Helvetica-Bold",
+  logo: { height: px(52), objectFit: "contain" },
+  invoiceWord: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontSize: 26,
     color: TEAL,
+    textAlign: "right",
+  },
+
+  // --- rows 3-12: letterhead left, meta right ------------------------------
+  letterhead: { flexDirection: "row", marginTop: px(6) },
+  billerBlock: { width: COL.date + COL.description, paddingRight: 10 },
+  billerName: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: 20, color: NAVY },
+  billerLine: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontSize: 8,
+    color: NAVY,
+    lineHeight: 1.35,
+  },
+
+  metaBlock: { width: COL.hours + COL.rate + COL.amount },
+  metaRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 1 },
+  // Labels are bold-italic Montserrat in the template's #003366, not the body navy.
+  metaLabel: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontStyle: "italic",
+    fontSize: 9,
+    color: LABEL_BLUE,
+  },
+  metaValue: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: 8, textAlign: "right" },
+  metaGap: { height: px(11) },
+
+  // --- row 13: table header -------------------------------------------------
+  tableHeader: { flexDirection: "row", marginTop: px(10) },
+  th: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontSize: 9,
+    color: NAVY,
+    backgroundColor: TEAL,
     textAlign: "center",
-    textDecoration: "underline",
+    paddingVertical: (ROW_HEIGHT - 10.8) / 2,
+    ...border,
+    // Collapse the shared edge so adjacent cells don't render a 2pt rule.
+    borderRightWidth: 0,
+  },
+  thLast: { borderRightWidth: 1 },
+
+  // --- rows 14-31: the fixed 18-row grid ------------------------------------
+  row: { flexDirection: "row", minHeight: ROW_HEIGHT },
+  cell: {
+    fontSize: 8,
+    paddingHorizontal: 4,
+    // (ROW_HEIGHT - 8pt line box) / 2. Set by arithmetic rather than taste:
+    // padding drives the real row height here, and minHeight only acts as a
+    // floor, so an over-generous value silently makes every one of the 18
+    // rows taller and pushes the totals onto a second page.
+    paddingVertical: (ROW_HEIGHT - 9.6) / 2,
+    ...border,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+  },
+  cellLast: { borderRightWidth: 1 },
+  cellAmount: { fontFamily: AMOUNT_FONT, fontSize: 9, textAlign: "left" },
+  // The real invoices left-align the figure columns; only the template's
+  // blank master right-aligns them, and the filled output is what clients see.
+  cellNumeric: { textAlign: "left" },
+  cellCenter: { textAlign: "left" },
+
+  /** Full-width "— Monthly Recurring Charges —" divider inside the grid. */
+  groupCell: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontSize: 11,
+    textAlign: "center",
+    paddingVertical: (ROW_HEIGHT - 13.2) / 2,
+    paddingHorizontal: 4,
+    ...border,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+  },
+
+  // --- rows 32-36: totals ---------------------------------------------------
+  totalsRow: { flexDirection: "row", minHeight: ROW_HEIGHT },
+  totalsSpacer: { width: COL.date + COL.description },
+  totalsLabel: {
+    width: COL.hours + COL.rate,
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontStyle: "italic",
+    fontSize: 9,
+    color: LABEL_BLUE,
+    textAlign: "right",
+    paddingRight: 8,
+    paddingVertical: (ROW_HEIGHT - 10.8) / 2,
+  },
+  totalsLabelStrong: { fontSize: 10, color: NAVY },
+  totalsValue: {
+    width: COL.amount,
+    fontFamily: HEADING_FONT,
+    fontSize: 9,
+    textAlign: "right",
+    paddingHorizontal: 6,
+    paddingVertical: (ROW_HEIGHT - 10.8) / 2,
+    ...border,
+    borderTopWidth: 0,
+  },
+  // Tint and emphasis are SEPARATE in the template: SALES TAX is tinted but
+  // stays 9pt regular, while SUBTOTAL and TOTAL are tinted AND bold 12pt.
+  // Bundling them made SALES TAX shout "N/A" in 12pt bold.
+  totalsValueTint: { backgroundColor: AMOUNT_TINT },
+  totalsValueStrong: { fontWeight: 700, fontSize: 12 },
+
+  // --- row 37: the URL band (merged A37:E37) --------------------------------
+  urlBand: {
+    height: px(34),
+    backgroundColor: NAVY,
+    ...border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: px(10),
+  },
+  urlText: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: 14, color: TEAL },
+
+  // --- below the template: payment terms ------------------------------------
+  // Not part of the spreadsheet, kept deliberately: an invoice that doesn't
+  // say how to pay it gets paid slower.
+  payBlock: { marginTop: 9 },
+  payLine: { fontFamily: HEADING_FONT, fontSize: 8, color: NAVY, marginBottom: 2 },
+  payStrong: { fontWeight: 700 },
+  thanks: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontStyle: "italic",
+    fontSize: 10,
+    color: NAVY,
+    marginTop: 5,
+  },
+});
+
+/**
+ * Summary page (work log + prose summary + total due).
+ *
+ * Its own page, after the invoice grid, so a long invoice that spills across
+ * several pages doesn't interleave the narrative with the table.
+ */
+export const summaryStyles = StyleSheet.create({
+  orgName: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: 18, color: NAVY },
+  subLine: { fontFamily: HEADING_FONT, fontSize: 10, color: "#5B6B7C", marginTop: 5 },
+  rule: { height: 2, backgroundColor: TEAL, marginTop: 12, marginBottom: 14 },
+  sectionTitle: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontSize: 13,
+    color: NAVY,
+    marginBottom: 9,
+  },
+  bulletRow: { flexDirection: "row", marginBottom: 4 },
+  bullet: { width: 12, fontSize: 9, color: NAVY },
+  bulletText: { flex: 1, fontFamily: HEADING_FONT, fontSize: 9, color: NAVY, lineHeight: 1.4 },
+  paragraph: {
+    fontFamily: HEADING_FONT,
+    fontSize: 9,
+    color: NAVY,
+    lineHeight: 1.5,
+    marginBottom: 8,
+  },
+  totalDue: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontSize: 18,
+    color: NAVY,
+    textAlign: "right",
+    marginTop: 4,
   },
 });
