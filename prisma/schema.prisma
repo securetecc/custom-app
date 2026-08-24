@@ -421,6 +421,10 @@ model Invoice {
   pdfUrl         String?
   // Status alone can't answer "when was this sent?" once it moves to Paid,
   // and both dates are shown on the list/detail screens.
+  /// Gmail draft this invoice was written into, so a second click updates
+  /// that draft instead of leaving a pile of identical ones in the mailbox.
+  /// Cleared when the invoice is voided.
+  gmailDraftId   String?
   sentAt         DateTime?
   paidAt         DateTime?
   // Set when the invoice is voided/deleted instead of hard-deleting the row,

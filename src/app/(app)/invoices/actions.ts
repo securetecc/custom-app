@@ -766,7 +766,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
  */
 export async function createInvoiceGmailDraft(
   id: string,
-): Promise<ActionResult<{ draftUrl: string }>> {
+): Promise<ActionResult<{ draftUrl: string; reused: boolean }>> {
   const { authUserId } = await requireAdminContext();
 
   try {
@@ -805,20 +805,27 @@ export async function createInvoiceGmailDraft(
       },
     );
 
-    const draft = await createGmailDraft({
+    const draft = await createGmailDraft(
+      {
       to: invoice.client.email,
       from: invoice.organization.invoiceFromEmail ?? invoice.organization.supportEmail,
       subject: email.subject,
       text: email.text,
-      attachment: {
-        filename: `${invoice.invoiceNumber}.pdf`,
-        content: pdf,
-        mimeType: "application/pdf",
+        attachment: {
+          filename: `${invoice.invoiceNumber}.pdf`,
+          content: pdf,
+          mimeType: "application/pdf",
+        },
       },
-    });
+      invoice.gmailDraftId,
+    );
+
+    await withRLS(authUserId, (tx) =>
+      tx.invoice.update({ where: { id }, data: { gmailDraftId: draft.draftId } }),
+    );
 
     revalidatePath(`/invoices/${id}`);
-    return { ok: true, data: { draftUrl: draft.url } };
+    return { ok: true, data: { draftUrl: draft.url, reused: !!invoice.gmailDraftId } };
   } catch (err: unknown) {
     return { ok: false, error: errorMessage(err) };
   }
@@ -908,7 +915,13 @@ export async function voidInvoice(
       await tx.invoiceRecurringCharge.deleteMany({ where: { invoiceId: id } });
       // Re-opens those calendar months so the retainer can be billed again.
       await tx.invoiceRetainerPeriod.deleteMany({ where: { invoiceId: id } });
-      await tx.invoice.update({ where: { id }, data: { voidedAt: new Date() } });
+      // gmailDraftId is cleared too: a voided invoice's draft must not be
+      // refreshed by a later click, and the id would otherwise point at a
+      // draft for an invoice that no longer stands.
+      await tx.invoice.update({
+        where: { id },
+        data: { voidedAt: new Date(), gmailDraftId: null },
+      });
 
       return { pdfUrl: invoice.pdfUrl, clientId: invoice.clientId };
     });

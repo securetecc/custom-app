@@ -46,13 +46,18 @@ export function SendInvoiceActions({
       toast.error(result.error);
       return;
     }
-    toast.success("Gmail draft created — review and send it, then Mark as sent.", {
-      action: {
-        label: "Open draft",
-        onClick: () => window.open(result.data.draftUrl, "_blank", "noopener,noreferrer"),
+    toast.success(
+      result.data.reused
+        ? "Gmail draft updated — the existing draft was refreshed, not duplicated."
+        : "Gmail draft created — review and send it, then Mark as sent.",
+      {
+        action: {
+          label: "Open draft",
+          onClick: () => window.open(result.data.draftUrl, "_blank", "noopener,noreferrer"),
+        },
+        duration: 15_000,
       },
-      duration: 15_000,
-    });
+    );
   }
 
   async function handleMarkSent() {
