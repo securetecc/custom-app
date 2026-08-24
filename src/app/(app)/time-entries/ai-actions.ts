@@ -2,11 +2,18 @@
 
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
-import { parseTimeEntryWithGemini } from "@/lib/ai/gemini";
+import { parseTimeEntryWithGemini, type RawParsedMaterial } from "@/lib/ai/gemini";
+import { pacificDayStart, PACIFIC_TZ } from "@/lib/cron/pacific";
 import type { TimeEntryFormValues } from "@/lib/validations/time-entry";
 
 export type AiParseResult =
-  | { ok: true; values: Partial<TimeEntryFormValues>; warning?: string }
+  | {
+      ok: true;
+      values: Partial<TimeEntryFormValues>;
+      /** Parts/materials mentioned in the note, to be logged as reimbursables. */
+      materials?: RawParsedMaterial[];
+      warning?: string;
+    }
   | { ok: false; error: string };
 
 // Parses a voice/text note into draft time-entry fields for the technician to
@@ -108,18 +115,24 @@ export async function parseTimeEntryVoiceNote(rawInput: string): Promise<AiParse
       description: cleanDescription,
       billableStatus,
     },
+    materials: parsed.materials,
   };
 }
 
+/**
+ * Resolves the model's date word against the ORG's day, not the server's.
+ *
+ * `new Date().toISOString()` is UTC, and production runs in UTC: after 5pm
+ * Pacific the UTC date has already rolled over, so "today" resolved to
+ * tomorrow and every evening voice note was filed a day late.
+ */
 function resolveParsedDate(value: string | undefined): string {
-  const today = new Date();
-  const toISODate = (d: Date) => d.toISOString().slice(0, 10);
+  const toISODate = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: PACIFIC_TZ }).format(d);
+  const today = pacificDayStart();
 
   if (!value || value.toLowerCase() === "today") return toISODate(today);
   if (value.toLowerCase() === "yesterday") {
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    return toISODate(yesterday);
+    return toISODate(new Date(today.getTime() - 12 * 3_600_000));
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   return toISODate(today);

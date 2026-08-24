@@ -11,6 +11,7 @@ import {
 } from "@/lib/validations/time-entry";
 import { createTimeEntry } from "@/app/(app)/time-entries/actions";
 import { parseTimeEntryVoiceNote } from "@/app/(app)/time-entries/ai-actions";
+import { createReimbursableExpense } from "@/app/(app)/reimbursable-expenses/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,9 @@ export function AiTimeEntryDialog({
   const [parsing, setParsing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
+  // Parts/materials the note mentioned, logged as reimbursables after the
+  // time entry saves -- they're separate records, not part of the entry.
+  const [materials, setMaterials] = useState<{ cost: number; description: string }[]>([]);
 
   const {
     register,
@@ -81,6 +85,9 @@ export function AiTimeEntryDialog({
     setStep("input");
     setRawInput("");
     setWarning(null);
+    // Must be cleared: otherwise the next note re-logs the previous one's
+    // materials as fresh expenses on whichever client is saved next.
+    setMaterials([]);
     reset();
   }
 
@@ -111,6 +118,7 @@ export function AiTimeEntryDialog({
       setValue("description", result.values.description);
     if (result.values.billableStatus) setValue("billableStatus", result.values.billableStatus);
 
+    setMaterials(result.materials ?? []);
     setWarning(result.warning ?? null);
     setStep("review");
   }
@@ -133,7 +141,30 @@ export function AiTimeEntryDialog({
       return;
     }
 
-    toast.success("Time entry logged");
+    // Materials are separate ReimbursableExpense records, created only after
+    // the entry itself saved. Failures here are reported but don't discard the
+    // entry, which is already committed.
+    let expensesLogged = 0;
+    const failures: string[] = [];
+    for (const m of materials) {
+      const res = await createReimbursableExpense({
+        clientId: values.clientId,
+        date: values.date,
+        description: m.description,
+        amount: m.cost,
+      });
+      if (res.ok) expensesLogged++;
+      else failures.push(m.description);
+    }
+
+    toast.success(
+      expensesLogged > 0
+        ? `Time entry logged with ${expensesLogged} reimbursable ${expensesLogged === 1 ? "expense" : "expenses"}`
+        : "Time entry logged",
+    );
+    if (failures.length) {
+      toast.error(`Couldn't log ${failures.length} expense(s): ${failures.join(", ")}. Add them manually.`);
+    }
     setOpen(false);
     resetAll();
   }
@@ -190,6 +221,25 @@ export function AiTimeEntryDialog({
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              {materials.length > 0 && (
+                /* Shown because saving silently creates these as separate
+                   reimbursable expenses -- the technician should see what's
+                   about to be billed before it happens. */
+                <div className="rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-sm">
+                  <p className="mb-1 font-medium">
+                    Also logging {materials.length} reimbursable{" "}
+                    {materials.length === 1 ? "expense" : "expenses"}:
+                  </p>
+                  <ul className="space-y-0.5 text-muted-foreground">
+                    {materials.map((m, i) => (
+                      <li key={i} className="flex justify-between gap-3">
+                        <span className="truncate">{m.description}</span>
+                        <span className="shrink-0 tabular-nums">${m.cost.toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Client</Label>
