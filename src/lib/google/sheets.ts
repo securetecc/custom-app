@@ -1,4 +1,6 @@
 import type { InvoicePdfData } from "@/lib/pdf/types";
+import { buildServiceSummary, buildWorkLog, formatDate, periodLabel } from "@/lib/pdf/summary";
+import { TEMPLATE_ROW_COUNT } from "@/lib/pdf/styles";
 
 /**
  * Builds the Google Sheets `batchUpdate` requests that turn a blank
@@ -60,7 +62,7 @@ export function buildInvoiceSheetRows(data: InvoicePdfData) {
       cell({ text: org.billerName ?? org.name }, { ...BOLD, textFormat: { bold: true, fontSize: 16 } }),
       cell({ blank: true }),
       cell({ text: "DATE" }, { ...BOLD, ...RIGHT }),
-      cell({ text: data.issuedAt }, RIGHT),
+      cell({ text: formatDate(data.issuedAt) }, RIGHT),
     ]),
   );
   const addressLines = [
@@ -75,7 +77,6 @@ export function buildInvoiceSheetRows(data: InvoicePdfData) {
   const metaRight: [string, string][] = [
     ["INVOICE #", data.invoiceNumber],
     ["FOR:", org.invoiceForLabel],
-    ["PERIOD:", `${data.periodStart} – ${data.periodEnd}`],
     ["BILL TO:", data.client.name],
   ];
 
@@ -119,18 +120,55 @@ export function buildInvoiceSheetRows(data: InvoicePdfData) {
   );
 
   // --- line items ---------------------------------------------------------
-  for (const item of data.lineItems) {
+  // Mirrors the PDF exactly: service-code prefix, a full-width divider when a
+  // charge group opens, $0.00 rather than blank in the AMOUNT column, and the
+  // grid padded to the template's fixed row count.
+  let emitted = 0;
+  const groupsSeen = new Set<string>();
+
+  for (let i = 0; i < data.lineItems.length; i++) {
+    const item = data.lineItems[i];
+    const previous = i > 0 ? data.lineItems[i - 1].groupLabel : null;
+    if (item.groupLabel && item.groupLabel !== previous && !groupsSeen.has(item.groupLabel)) {
+      groupsSeen.add(item.groupLabel);
+      rows.push(
+        row([
+          cell({ text: `— ${item.groupLabel} —` }, {
+            ...BOLD,
+            horizontalAlignment: "CENTER",
+          }),
+          cell({ blank: true }),
+          cell({ blank: true }),
+          cell({ blank: true }),
+          cell({ number: 0 }, CURRENCY),
+        ]),
+      );
+      emitted++;
+    }
+
     rows.push(
       row([
-        cell(item.date ? { text: item.date } : { blank: true }),
-        cell({ text: item.description }, { wrapStrategy: "WRAP" }),
-        cell(item.hours === null ? { blank: true } : { number: item.hours }, RIGHT),
-        cell(item.rate === null ? { blank: true } : { number: item.rate }, { ...RIGHT, ...CURRENCY }),
-        cell(item.amount === null ? { blank: true } : { number: item.amount }, {
-          ...RIGHT,
-          ...CURRENCY,
-          backgroundColor: AMOUNT_TINT,
-        }),
+        cell(item.date ? { text: formatDate(item.date) } : { blank: true }),
+        cell(
+          { text: item.serviceCode ? `${item.serviceCode} — ${item.description}` : item.description },
+          { wrapStrategy: "WRAP" },
+        ),
+        cell(item.hours === null ? { blank: true } : { number: item.hours }),
+        cell(item.rate === null ? { blank: true } : { number: item.rate }, CURRENCY),
+        cell({ number: item.amount ?? 0 }, CURRENCY),
+      ]),
+    );
+    emitted++;
+  }
+
+  for (let i = emitted; i < TEMPLATE_ROW_COUNT; i++) {
+    rows.push(
+      row([
+        cell({ blank: true }),
+        cell({ blank: true }),
+        cell({ blank: true }),
+        cell({ blank: true }),
+        cell({ number: 0 }, CURRENCY),
       ]),
     );
   }
@@ -138,10 +176,12 @@ export function buildInvoiceSheetRows(data: InvoicePdfData) {
   rows.push(row([]));
 
   // --- totals -------------------------------------------------------------
+  // Tint and bold vary independently here exactly as in the template:
+  // SALES TAX is tinted but not bold; SUBTOTAL and TOTAL are both.
   const totals: [string, CellValue, boolean][] = [
     ["SUBTOTAL", { number: data.totalAmount }, true],
     ["TAX RATE", { text: "N/A" }, false],
-    ["SALES TAX", { text: "N/A" }, false],
+    ["SALES TAX", { text: "N/A" }, true],
     ["OTHER", { text: "—" }, false],
     ["TOTAL", { number: data.totalAmount }, true],
   ];
@@ -162,6 +202,59 @@ export function buildInvoiceSheetRows(data: InvoicePdfData) {
     );
   }
 
+  if (org.website) {
+    rows.push(row([]));
+    rows.push(
+      row([
+        cell({ text: org.website }, {
+          backgroundColor: NAVY,
+          textFormat: { bold: true, fontSize: 14, foregroundColor: TEAL },
+          horizontalAlignment: "CENTER",
+        }),
+      ]),
+    );
+  }
+
+  // --- summary: the same work log and prose the PDF's last page carries ----
+  // Built from the shared helpers in lib/pdf/summary so the spreadsheet and
+  // the PDF can never describe the same period differently.
+  const period = periodLabel(data.periodStart, data.periodEnd);
+  const SECTION = { ...BOLD, textFormat: { bold: true, fontSize: 13 } };
+
+  rows.push(row([]));
+  rows.push(row([cell({ text: "DETAILED WORK LOG" }, SECTION)]));
+  for (const entry of buildWorkLog(data.lineItems)) {
+    const code = entry.code ? ` — ${entry.code}` : "";
+    rows.push(row([cell({ text: `• ${entry.when}${code} — ${entry.description}` })]));
+  }
+
+  rows.push(row([]));
+  rows.push(row([cell({ text: "SERVICE SUMMARY" }, SECTION)]));
+  for (const paragraph of buildServiceSummary({
+    lineItems: data.lineItems,
+    clientName: data.client.name,
+    orgName: org.name,
+    periodLabel: period,
+  })) {
+    rows.push(row([cell({ text: paragraph }, { wrapStrategy: "WRAP" })]));
+  }
+
+  rows.push(row([]));
+  rows.push(
+    row([
+      cell({ blank: true }),
+      cell({ blank: true }),
+      cell({ blank: true }),
+      cell({ text: "Total Due:" }, { ...BOLD, ...RIGHT, textFormat: { bold: true, fontSize: 14 } }),
+      cell({ number: data.totalAmount }, {
+        ...CURRENCY,
+        ...RIGHT,
+        textFormat: { bold: true, fontSize: 14 },
+        backgroundColor: AMOUNT_TINT,
+      }),
+    ]),
+  );
+
   if (org.checkPayableTo) {
     rows.push(row([]));
     rows.push(row([cell({ text: `Make all checks payable to: ${org.checkPayableTo}` }, BOLD)]));
@@ -173,9 +266,9 @@ export function buildInvoiceSheetRows(data: InvoicePdfData) {
   return rows;
 }
 
-/** Column widths roughly matching the PDF's 15/45/12/11/17% split. */
+/** Column widths taken from the master template's own A-E (112/330/89/80/121). */
 export function buildSheetFormatRequests(sheetId: number) {
-  const widths = [110, 330, 80, 90, 110];
+  const widths = [112, 330, 89, 80, 121];
   return widths.map((pixelSize, index) => ({
     updateDimensionProperties: {
       range: { sheetId, dimension: "COLUMNS", startIndex: index, endIndex: index + 1 },
