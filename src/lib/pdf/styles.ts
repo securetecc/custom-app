@@ -196,7 +196,7 @@ export const styles = StyleSheet.create({
    * which is both where the eye already is and the only place they fit
    * without pushing the grid onto a second page.
    */
-  totalsSpacer: { width: COL.date + COL.description, paddingRight: 10, justifyContent: "flex-end" },
+  totalsSpacer: { width: COL.date + COL.description, paddingRight: 10, justifyContent: "center" },
   totalsLabel: {
     width: COL.hours + COL.rate,
     fontFamily: HEADING_FONT,
@@ -242,7 +242,7 @@ export const styles = StyleSheet.create({
   // the thank-you in bold italic underneath. Rendered as text rather than an
   // image so it stays sharp at any zoom, remains selectable, and keeps
   // reflecting whatever Settings → Organization holds.
-  payBlock: { paddingBottom: 4 },
+  payBlock: {},
   payLine: {
     fontFamily: HEADING_FONT,
     fontWeight: 700,
