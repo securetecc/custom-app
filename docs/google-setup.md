@@ -65,7 +65,7 @@ From the downloaded JSON key file:
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | the JSON's `client_email` |
 | `GOOGLE_PRIVATE_KEY` | the JSON's `private_key` |
 | `GOOGLE_IMPERSONATED_USER` | `tgregory@securetecc.com` |
-| `GOOGLE_DRIVE_ROOT_FOLDER_ID` | *(optional)* the folder ID of an existing "SecureTECC Master" — grab it from the folder's URL. Omit and the app matches by name, creating it if absent. |
+| `GOOGLE_DRIVE_ROOT_FOLDER_ID` | **Set this.** `14509-9VHOQi5ZwJ8yNyVc3Cz3kRHJd0S` — the id of the real "SecureTECC Master Folder" in Tony's My Drive. Anchoring by id is immune to renames; the name fallback is a last resort. |
 
 **Important formatting note:** `private_key` contains real newlines. Env vars
 can't hold those, so escape them as literal `\n`. The app unescapes at read
@@ -81,7 +81,7 @@ the Production environment (and locally in `.env` if you want to test).
 Every generated invoice is archived automatically to:
 
 ```
-SecureTECC Master / SecureTECC Invoices / {Client Name} / {Year} /
+SecureTECC Master Folder / SecureTECC Invoices / {Client Name} / {Year} /
     ALLENLAW-00012.pdf      the rendered invoice
     ALLENLAW-00012          a Google Sheet replica of the same invoice
 ```

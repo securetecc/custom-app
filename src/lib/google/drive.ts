@@ -4,12 +4,12 @@ import { getGoogleAccessToken } from "./auth";
  * Google Drive archiving for generated invoices.
  *
  * Target layout:
- *   SecureTECC Master / SecureTECC Invoices / {Client} / {Year} / {INV}.pdf
+ *   SecureTECC Master Folder / SecureTECC Invoices / {Client} / {Year} / {INV}.pdf
  *                                                              / {INV}  (Sheet)
  *
  * Scope note: this needs the broad `drive` scope, not `drive.file`.
  * `drive.file` only grants access to files the app itself created, so it
- * cannot see a "SecureTECC Master" folder that already exists in Tony's
+ * cannot see a "SecureTECC Master Folder" that already exists in Tony's
  * Drive -- the find-or-create below would create a duplicate alongside it
  * every time instead of reusing it.
  */
@@ -81,12 +81,11 @@ async function findOrCreateFolder(
 }
 
 /**
- * Walks/creates SecureTECC Master → SecureTECC Invoices → client → year and
+ * Walks/creates SecureTECC Master Folder → SecureTECC Invoices → client → year and
  * returns the leaf folder id.
  *
- * GOOGLE_DRIVE_ROOT_FOLDER_ID lets you anchor to an existing "SecureTECC
- * Master" by id instead of matching it by name, which is safer if there's any
- * chance of a same-named folder elsewhere in the Drive.
+ * GOOGLE_DRIVE_ROOT_FOLDER_ID lets you anchor to that root by id instead of
+ * matching it by name -- safer, and immune to the folder being renamed.
  */
 export async function ensureInvoiceFolder(
   clientName: string,
@@ -94,7 +93,13 @@ export async function ensureInvoiceFolder(
   token: string,
 ): Promise<string> {
   const configuredRoot = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-  const masterId = configuredRoot ?? (await findOrCreateFolder("SecureTECC Master", null, token));
+  // Name must match the folder that actually exists in Tony's Drive
+  // ("SecureTECC Master Folder", not "SecureTECC Master") -- getting this
+  // wrong doesn't error, it silently creates a second root beside the real
+  // one and archives every invoice into the wrong tree. Prefer anchoring by
+  // id via GOOGLE_DRIVE_ROOT_FOLDER_ID; this name is only the fallback.
+  const masterId =
+    configuredRoot ?? (await findOrCreateFolder("SecureTECC Master Folder", null, token));
   const invoicesId = await findOrCreateFolder("SecureTECC Invoices", masterId, token);
   const clientId = await findOrCreateFolder(clientName, invoicesId, token);
   return findOrCreateFolder(String(year), clientId, token);
