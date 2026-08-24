@@ -22,13 +22,11 @@ export const AMOUNT_TINT = "#BFFDFC";
 /**
  * Sheet px -> PDF pt.
  *
- * 96dpi -> 72dpi is exactly 0.75, but the template's rows 1-37 come to 732pt
- * at that ratio and LETTER only offers ~769pt once margins are taken -- which
- * leaves no room for the payment block below the URL band, so the totals
- * spilled onto a second page. The spreadsheet has the same problem and solves
- * it the same way: Google Sheets prints this template with fit-to-page
- * scaling. 0.715 is that scale factor, applied uniformly so every proportion
- * in the template is preserved exactly.
+ * 96dpi -> 72dpi is exactly 0.75, but at that ratio the template's columns
+ * come to 549pt and its rows to 732pt, which leaves too little room on
+ * LETTER. Google Sheets prints this template with fit-to-page scaling for the
+ * same reason; 0.715 is that factor, applied uniformly so every proportion in
+ * the template is preserved exactly.
  */
 const SHEET_SCALE = 0.715;
 const px = (n: number) => n * SHEET_SCALE;
@@ -40,10 +38,11 @@ export const COL = {
   rate: px(80),
   amount: px(121),
 };
+/** The template shows a fixed 18-row grid (rows 14-31) whether or not it's full. */
 export const CONTENT_WIDTH = COL.date + COL.description + COL.hours + COL.rate + COL.amount;
+/** Centres the template's own width on the page rather than imposing a margin. */
 export const PAGE_MARGIN = (612 - CONTENT_WIDTH) / 2;
 
-/** The template shows a fixed 18-row grid (rows 14-31) whether or not it's full. */
 export const TEMPLATE_ROW_COUNT = 18;
 export const ROW_HEIGHT = px(26);
 
@@ -77,8 +76,6 @@ export const styles = StyleSheet.create({
   page: {
     // Reserves the absolutely-positioned header block on every page.
     paddingTop: PAGE_TOP + HEADER_HEIGHT,
-    // Trimmed from 36: the template's own rows 1-37 already consume ~732pt of
-    // LETTER's 792, so a generous bottom margin pushed the totals to page 2.
     paddingBottom: 16,
     paddingHorizontal: PAGE_MARGIN,
     fontFamily: HEADING_FONT,
@@ -191,8 +188,15 @@ export const styles = StyleSheet.create({
   },
 
   // --- rows 32-36: totals ---------------------------------------------------
+  totalsBlock: { flexDirection: "row" },
   totalsRow: { flexDirection: "row", minHeight: ROW_HEIGHT },
-  totalsSpacer: { width: COL.date + COL.description },
+  /**
+   * The template leaves DATE+DESCRIPTION blank alongside the five totals
+   * rows. The payment terms live in that gap rather than below the invoice,
+   * which is both where the eye already is and the only place they fit
+   * without pushing the grid onto a second page.
+   */
+  totalsSpacer: { width: COL.date + COL.description, paddingRight: 10, justifyContent: "flex-end" },
   totalsLabel: {
     width: COL.hours + COL.rate,
     fontFamily: HEADING_FONT,
@@ -232,19 +236,30 @@ export const styles = StyleSheet.create({
   },
   urlText: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: 14, color: TEAL },
 
-  // --- below the template: payment terms ------------------------------------
-  // Not part of the spreadsheet, kept deliberately: an invoice that doesn't
-  // say how to pay it gets paid slower.
-  payBlock: { marginTop: 9 },
-  payLine: { fontFamily: HEADING_FONT, fontSize: 8, color: NAVY, marginBottom: 2 },
-  payStrong: { fontWeight: 700 },
+  // --- payment terms, inside the totals block's blank left-hand cell --------
+  // Styled to match the block the current template pastes in as an image:
+  // centred, labels in navy with the values picked out in the label blue, and
+  // the thank-you in bold italic underneath. Rendered as text rather than an
+  // image so it stays sharp at any zoom, remains selectable, and keeps
+  // reflecting whatever Settings → Organization holds.
+  payBlock: { paddingBottom: 4 },
+  payLine: {
+    fontFamily: HEADING_FONT,
+    fontWeight: 700,
+    fontSize: 8,
+    color: NAVY,
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  payValue: { color: LABEL_BLUE },
   thanks: {
     fontFamily: HEADING_FONT,
     fontWeight: 700,
     fontStyle: "italic",
     fontSize: 10,
     color: NAVY,
-    marginTop: 5,
+    textAlign: "center",
+    marginTop: 8,
   },
 });
 

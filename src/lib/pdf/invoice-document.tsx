@@ -129,14 +129,36 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
           <LineRow key={`pad-${i}`} item={null} />
         ))}
 
-        <View wrap={false}>
-          {/* Tint, value emphasis and label emphasis vary independently across
-              these five rows in the template -- see each flag below. */}
-          <TotalRow label="SUBTOTAL" value={currency(data.totalAmount)} tinted boldValue />
-          <TotalRow label="TAX RATE" value="N/A" />
-          <TotalRow label="SALES TAX" value="N/A" tinted />
-          <TotalRow label="OTHER" value="—" />
-          <TotalRow label="TOTAL" value={currency(data.totalAmount)} tinted boldValue strongLabel />
+        <View style={styles.totalsBlock} wrap={false}>
+          {/* The template leaves this half of the totals rows blank; the
+              payment terms occupy it instead of trailing below the invoice. */}
+          <View style={[styles.totalsSpacer, styles.payBlock]}>
+            {org.checkPayableTo && (
+              <Text style={styles.payLine}>
+                Make all checks payable to:{" "}
+                <Text style={styles.payValue}>{org.checkPayableTo}</Text>
+              </Text>
+            )}
+            {org.acceptedPaymentMethods && (
+              <Text style={styles.payLine}>
+                We also accept{" "}
+                <Text style={styles.payValue}>{org.acceptedPaymentMethods}.</Text>
+              </Text>
+            )}
+            {(org.checkPayableTo || org.acceptedPaymentMethods) && (
+              <Text style={styles.thanks}>THANK YOU FOR YOUR BUSINESS</Text>
+            )}
+          </View>
+
+          <View>
+            {/* Tint, value emphasis and label emphasis vary independently across
+                these five rows in the template -- see each flag below. */}
+            <TotalRow label="SUBTOTAL" value={currency(data.totalAmount)} tinted boldValue />
+            <TotalRow label="TAX RATE" value="N/A" />
+            <TotalRow label="SALES TAX" value="N/A" tinted />
+            <TotalRow label="OTHER" value="—" />
+            <TotalRow label="TOTAL" value={currency(data.totalAmount)} tinted boldValue strongLabel />
+          </View>
         </View>
 
         {org.website && (
@@ -200,22 +222,6 @@ function SummaryPage({ data }: { data: InvoicePdfData }) {
       <View style={summaryStyles.rule} />
       <Text style={summaryStyles.totalDue}>Total Due: {currency(data.totalAmount)}</Text>
 
-      {(data.organization.checkPayableTo || data.organization.acceptedPaymentMethods) && (
-        <View style={styles.payBlock} wrap={false}>
-          {data.organization.checkPayableTo && (
-            <Text style={styles.payLine}>
-              Make all checks payable to:{" "}
-              <Text style={styles.payStrong}>{data.organization.checkPayableTo}</Text>
-              </Text>
-          )}
-          {data.organization.acceptedPaymentMethods && (
-            <Text style={styles.payLine}>
-              We also accept <Text style={styles.payStrong}>{data.organization.acceptedPaymentMethods}</Text>
-              </Text>
-          )}
-            <Text style={styles.thanks}>THANK YOU FOR YOUR BUSINESS</Text>
-        </View>
-      )}
     </Page>
   );
 }
@@ -280,7 +286,6 @@ function TotalRow({
 }) {
   return (
     <View style={styles.totalsRow} wrap={false}>
-      <View style={styles.totalsSpacer} />
       <Text style={[styles.totalsLabel, ...(strongLabel ? [styles.totalsLabelStrong] : [])]}>
         {label}
       </Text>
