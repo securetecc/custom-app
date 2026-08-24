@@ -14,7 +14,7 @@ import {
   type InvoicePeriodValues,
 } from "@/lib/validations/invoice";
 import { generateInvoicePdf } from "@/lib/pdf/generate-invoice-pdf";
-import { fetchLogoDataUri } from "@/lib/pdf/logo";
+import { fetchLogoDataUri, readWatermarkDataUri } from "@/lib/pdf/logo";
 import {
   archiveInvoicePdf,
   downloadInvoicePdf,
@@ -114,6 +114,7 @@ function buildPdfOrganization(organization: PdfOrganizationRow): InvoicePdfData[
   return {
     name: organization.name,
     logoDataUri: null,
+    watermarkDataUri: null,
     billerName: organization.billerName,
     billerAddress1: organization.billerAddress1,
     billerAddress2: organization.billerAddress2,
@@ -605,6 +606,7 @@ export async function generateInvoice(
     // Fetch outside the transaction -- it's a network call, and the PDF render
     // below already runs after commit for the same reason.
     pdfInput.data.organization.logoDataUri = await fetchLogoDataUri(created.logoUrl);
+    pdfInput.data.organization.watermarkDataUri = await readWatermarkDataUri();
   } catch (err: unknown) {
     return { ok: false, error: errorMessage(err) };
   }
@@ -740,6 +742,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
 
     // Fetch outside the transaction -- it's a network call.
     data.pdf.organization.logoDataUri = await fetchLogoDataUri(data.invoice.organization.logoUrl);
+    data.pdf.organization.watermarkDataUri = await readWatermarkDataUri();
 
     const pdf = await generateInvoicePdf(data.pdf);
     const path = invoicePdfPath(appUser.organizationId, data.invoice.clientId, id);

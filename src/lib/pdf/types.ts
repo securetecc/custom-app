@@ -44,6 +44,8 @@ export type InvoicePdfData = {
   organization: {
     name: string;
     logoDataUri: string | null;
+    /** Dragon mark for the background watermark; null renders no watermark. */
+    watermarkDataUri: string | null;
 
     // Invoice letterhead -- an individual biller's info, distinct from `name`
     // above. Each is null until Settings → Organization → Invoice letterhead

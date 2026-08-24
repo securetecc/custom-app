@@ -51,6 +51,7 @@ const nextConfig: NextConfig = {
     "/**": [
       "./src/generated/**/*",
       "./public/securetecc-logo.png",
+      "./public/securetecc-watermark.png",
       // Montserrat/Quattrocento Sans .woff files read at render time by
       // src/lib/pdf/fonts.ts. Same reason as the logo: not traced otherwise,
       // and without them every invoice silently falls back to Helvetica.

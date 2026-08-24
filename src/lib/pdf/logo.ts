@@ -61,3 +61,24 @@ async function readBundledLogo(): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * The dragon mark, for the invoice's background watermark.
+ *
+ * This is the master template's own watermark asset, lifted from its resource
+ * folder rather than derived from the logo: it's the mark alone (no wordmark,
+ * which at watermark size would print "SecureTECC" across the middle of every
+ * invoice) and its ~15% fade is baked into the alpha channel, so it needs no
+ * opacity applied at render time.
+ *
+ * Bundled rather than read from Organization.logoUrl -- that URL points at the
+ * horizontal logo, which is the wrong artwork and the wrong shape for this.
+ */
+export async function readWatermarkDataUri(): Promise<string | null> {
+  try {
+    const buffer = await readFile(path.join(process.cwd(), "public", "securetecc-watermark.png"));
+    return `data:image/png;base64,${buffer.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}

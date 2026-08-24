@@ -56,6 +56,12 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
   return (
     <Document title={`Invoice ${data.invoiceNumber}`}>
       <Page size="LETTER" style={styles.page}>
+        {/* First in the tree so everything else paints over it. */}
+        {org.watermarkDataUri && (
+          /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image takes no alt */
+          <Image src={org.watermarkDataUri} style={styles.watermark} fixed />
+        )}
+
         <View style={styles.pageHeader} fixed>
           <View style={styles.titleBand}>
           {org.logoDataUri ? (

@@ -54,6 +54,7 @@ function baseData(overrides: Partial<InvoicePdfData> = {}): InvoicePdfData {
     organization: {
       name: "SecureTECC",
       logoDataUri: null,
+    watermarkDataUri: null,
       billerName: "Tony Gregory",
       billerAddress1: "365 E. Avenida De Los Arboles",
       billerAddress2: "MailBox 220",

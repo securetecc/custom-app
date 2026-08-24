@@ -88,6 +88,23 @@ export const styles = StyleSheet.create({
     color: NAVY,
   },
 
+  /**
+   * Background watermark, sized and placed to sit centred in the line-item
+   * grid the way the master template's does.
+   *
+   * Absolute + fixed so it repeats on every page without taking flow height,
+   * and declared BEFORE the header/content in the tree so it paints behind
+   * them -- react-pdf has no z-index, so paint order is document order.
+   */
+  watermark: {
+    position: "absolute",
+    top: 300,
+    left: (612 - 330) / 2,
+    width: 330,
+    // No opacity here: the asset's own alpha already carries the template's
+    // fade. Dimming it again would wash it out entirely.
+  },
+
   /** The repeating block. Absolute so `fixed` costs no flow height. */
   pageHeader: {
     position: "absolute",
