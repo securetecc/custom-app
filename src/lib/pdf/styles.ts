@@ -68,7 +68,12 @@ const LETTERHEAD_H = px(160);
 const TABLE_HEADER_H = ROW_HEIGHT + 2;
 export const HEADER_HEIGHT =
   TITLE_BAND_H + px(6) + LETTERHEAD_H + px(10) + TABLE_HEADER_H;
-export const PAGE_TOP = px(9);
+/**
+ * Breathing room above the INVOICE band. 32pt is the most the layout can give
+ * it: every point here comes out of the flow below, and 40 pushed the totals
+ * onto a second page.
+ */
+export const PAGE_TOP = 32;
 
 const border = { borderWidth: 1, borderColor: NAVY, borderStyle: "solid" as const };
 
@@ -246,7 +251,7 @@ export const styles = StyleSheet.create({
   payLine: {
     fontFamily: HEADING_FONT,
     fontWeight: 700,
-    fontSize: 8,
+    fontSize: 9.5,
     color: NAVY,
     textAlign: "center",
     marginBottom: 2,
@@ -256,7 +261,7 @@ export const styles = StyleSheet.create({
     fontFamily: HEADING_FONT,
     fontWeight: 700,
     fontStyle: "italic",
-    fontSize: 10,
+    fontSize: 12,
     color: NAVY,
     textAlign: "center",
     marginTop: 8,
