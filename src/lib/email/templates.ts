@@ -174,18 +174,12 @@ export function invoiceEmail(
   invoice: { invoiceNumber: string; clientName: string; periodStart: Date; periodEnd: Date; totalAmount: number },
 ): { subject: string; text: string } {
   const period = formatPeriodLabel(invoice.periodStart, invoice.periodEnd);
-  const signOff = branding.organizationName;
 
+  // No sign-off: Tony reviews and sends these from his own mailbox, where his
+  // Gmail signature is appended on send. Adding one here would double it up.
   return {
     subject: `Invoice ${invoice.invoiceNumber} from ${branding.organizationName}`,
-    text: [
-      "Hi,",
-      "",
-      `Please see the attached invoice for ${period}.`,
-      "",
-      "Thank you,",
-      signOff,
-    ].join("\n"),
+    text: ["Hi,", "", `Please see the attached invoice for ${period}.`, ""].join("\n"),
   };
 }
 
