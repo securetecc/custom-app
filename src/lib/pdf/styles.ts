@@ -77,6 +77,18 @@ export const PAGE_TOP = 32;
 
 const border = { borderWidth: 1, borderColor: NAVY, borderStyle: "solid" as const };
 
+/**
+ * What a grid row actually renders at. minHeight is only a floor -- the real
+ * height is the 8pt line box plus the vertical padding derived from it below.
+ */
+const RENDERED_ROW_H = 9.6 + 2 * ((ROW_HEIGHT - 9.6) / 2) + 1;
+const GRID_TOP = PAGE_TOP + HEADER_HEIGHT;
+const GRID_HEIGHT = RENDERED_ROW_H * TEMPLATE_ROW_COUNT;
+
+/** Watermark artwork is 900x1039; keep the aspect and fit inside the grid. */
+const WATERMARK_W = 260;
+const WATERMARK_H = WATERMARK_W * (1039 / 900);
+
 export const styles = StyleSheet.create({
   page: {
     // Reserves the absolutely-positioned header block on every page.
@@ -89,20 +101,26 @@ export const styles = StyleSheet.create({
   },
 
   /**
-   * Background watermark, sized and placed to sit centred in the line-item
-   * grid the way the master template's does.
+   * Background watermark, sized to sit INSIDE the line-item grid rather than
+   * bleeding past it into the totals.
    *
-   * Absolute + fixed so it repeats on every page without taking flow height,
-   * and declared BEFORE the header/content in the tree so it paints behind
-   * them -- react-pdf has no z-index, so paint order is document order.
+   * The numbers are derived, not eyeballed: the grid starts at
+   * PAGE_TOP + HEADER_HEIGHT and runs TEMPLATE_ROW_COUNT rows of RENDERED_ROW_H
+   * (which is padding-driven, so slightly taller than ROW_HEIGHT). The mark's
+   * height follows from its 900x1039 aspect, and the top centres it in what's
+   * left. Change the row count or the header and it re-centres itself.
+   *
+   * Absolute + fixed so it repeats per page without taking flow height, and
+   * declared BEFORE everything else in the tree so it paints behind them --
+   * react-pdf has no z-index, so paint order is document order.
    */
   watermark: {
     position: "absolute",
-    top: 300,
-    left: (612 - 330) / 2,
-    width: 330,
-    // No opacity here: the asset's own alpha already carries the template's
-    // fade. Dimming it again would wash it out entirely.
+    top: GRID_TOP + (GRID_HEIGHT - WATERMARK_H) / 2,
+    left: (612 - WATERMARK_W) / 2,
+    width: WATERMARK_W,
+    // No opacity: the asset's own alpha already carries the template's fade.
+    // Dimming it again would wash it out entirely.
   },
 
   /** The repeating block. Absolute so `fixed` costs no flow height. */
