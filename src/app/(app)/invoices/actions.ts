@@ -645,7 +645,19 @@ export async function generateInvoice(
 }
 
 /** Re-renders the PDF for an invoice that has none (or a stale one). */
-export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
+export async function regenerateInvoicePdf(
+  id: string,
+  /**
+   * Also push the PDF + Sheet copy to Drive.
+   *
+   * Off by default on purpose. Imported historical invoices already have real
+   * PDFs sitting in Drive from the old system, and the archiver REPLACES
+   * same-named files -- so an unguarded archive here would overwrite a genuine
+   * invoice with a regenerated approximation of it. Only the deliberate act of
+   * drafting the email turns this on.
+   */
+  options: { archiveToDrive?: boolean } = {},
+): Promise<ActionResult> {
   const { authUserId, appUser } = await requireOrgContext();
 
   try {
@@ -767,6 +779,18 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
     await withRLS(authUserId, (tx) =>
       tx.invoice.update({ where: { id }, data: { pdfUrl: path } }),
     );
+
+    if (options.archiveToDrive) {
+      // Best-effort, same as at generation time: Drive being unreachable must
+      // not fail an action whose real job succeeded.
+      await archiveInvoiceToDrive({
+        invoiceNumber: data.invoice.invoiceNumber,
+        clientName: data.invoice.client.name,
+        year: data.invoice.periodEnd.getUTCFullYear(),
+        pdf,
+        data: data.pdf,
+      });
+    }
   } catch (err: unknown) {
     return { ok: false, error: errorMessage(err) };
   }
@@ -802,7 +826,19 @@ export async function createInvoiceGmailDraft(
       throw new ConflictError(`${invoice.client.name} has no billing email on file.`);
     }
     if (!invoice.pdfUrl) {
-      throw new ConflictError("This invoice has no PDF yet — use Retry PDF first.");
+      // Imported invoices carry no PDF: the originals live in Drive already,
+      // so nothing is rendered at import time. Build one now -- this is the
+      // first moment the document is actually needed -- and archive it, since
+      // drafting the email is the deliberate act that says this invoice is
+      // going out.
+      const built = await regenerateInvoicePdf(id, { archiveToDrive: true });
+      if (!built.ok) throw new ConflictError(`Couldn't build the PDF: ${built.error}`);
+
+      const refreshed = await withRLS(authUserId, (tx) =>
+        tx.invoice.findUniqueOrThrow({ where: { id }, select: { pdfUrl: true } }),
+      );
+      if (!refreshed.pdfUrl) throw new ConflictError("The PDF was built but not stored.");
+      invoice.pdfUrl = refreshed.pdfUrl;
     }
 
     // The client actually needs the invoice document, not just a summary --

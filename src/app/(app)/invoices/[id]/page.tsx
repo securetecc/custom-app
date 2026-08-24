@@ -111,11 +111,17 @@ export default async function InvoiceDetailPage({
         </div>
       </div>
 
+      {/* A null pdfUrl means two opposite things. On a generated invoice
+          rendering failed and needs retrying; on an imported one the original
+          PDF is in Drive and nothing is wrong. Saying "rendering failed" to
+          someone looking at a correctly imported invoice sends them hunting
+          for a problem that isn't there. */}
       {!invoice.pdfUrl && !voided && (
-        <Card className="border-destructive/50 p-4">
-          <p className="text-sm text-destructive">
-            This invoice has no PDF — rendering failed after it was created. The line items below
-            are correct; use Retry PDF to render it.
+        <Card className={invoice.importedFrom ? "p-4" : "border-destructive/50 p-4"}>
+          <p className={`text-sm ${invoice.importedFrom ? "text-muted-foreground" : "text-destructive"}`}>
+            {invoice.importedFrom
+              ? "Imported from the master sheet — the original PDF is in Drive, so none was rendered here. Creating a Gmail draft will build one, or use Retry PDF to build it now."
+              : "This invoice has no PDF — rendering failed after it was created. The line items below are correct; use Retry PDF to render it."}
           </p>
         </Card>
       )}

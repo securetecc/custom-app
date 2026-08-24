@@ -421,6 +421,14 @@ model Invoice {
   pdfUrl         String?
   // Status alone can't answer "when was this sent?" once it moves to Paid,
   // and both dates are shown on the list/detail screens.
+  /// Set when the invoice came from the Operations Master Sheet rather than
+  /// being generated here -- holds the sheet's own identifier.
+  ///
+  /// Two jobs. It makes an import precisely reversible (delete exactly these
+  /// rows, nothing else), and it distinguishes "no PDF because the original
+  /// lives in Drive" from "no PDF because rendering failed", which are the
+  /// same null pdfUrl but opposite situations for the person looking at it.
+  importedFrom   String?
   /// Gmail draft this invoice was written into, so a second click updates
   /// that draft instead of leaving a pile of identical ones in the mailbox.
   /// Cleared when the invoice is voided.
