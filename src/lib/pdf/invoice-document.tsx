@@ -1,7 +1,8 @@
 import { Fragment } from "react";
 import { Document, Image, Page, Text, View } from "@react-pdf/renderer";
 import { registerInvoiceFonts } from "./fonts";
-import { COL, styles, TEMPLATE_ROW_COUNT } from "./styles";
+import { COL, styles, summaryStyles, TEMPLATE_ROW_COUNT } from "./styles";
+import { buildServiceSummary, buildWorkLog, periodLabel } from "./summary";
 import type { InvoicePdfData, InvoicePdfLineItem } from "./types";
 
 /**
@@ -55,7 +56,7 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
   return (
     <Document title={`Invoice ${data.invoiceNumber}`}>
       <Page size="LETTER" style={styles.page}>
-        <View fixed>
+        <View style={styles.pageHeader} fixed>
           <View style={styles.titleBand}>
           {org.logoDataUri ? (
             /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image takes no alt */
@@ -66,7 +67,7 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
             <Text style={styles.invoiceWord}>INVOICE</Text>
           </View>
 
-          <View style={styles.letterhead}>
+          <View style={[styles.letterhead, styles.letterheadBlock]}>
           <View style={styles.billerBlock}>
             {org.billerName && <Text style={styles.billerName}>{org.billerName}</Text>}
             {billerLines.map((line) => (
@@ -144,24 +145,78 @@ export function InvoicePdfDocument({ data }: { data: InvoicePdfData }) {
           </View>
         )}
 
-        {(org.checkPayableTo || org.acceptedPaymentMethods) && (
-          <View style={styles.payBlock} wrap={false}>
-            {org.checkPayableTo && (
-              <Text style={styles.payLine}>
-                Make all checks payable to:{" "}
-                <Text style={styles.payStrong}>{org.checkPayableTo}</Text>
-              </Text>
-            )}
-            {org.acceptedPaymentMethods && (
-              <Text style={styles.payLine}>
-                We also accept <Text style={styles.payStrong}>{org.acceptedPaymentMethods}</Text>
-              </Text>
-            )}
-            <Text style={styles.thanks}>THANK YOU FOR YOUR BUSINESS</Text>
-          </View>
-        )}
       </Page>
+
+      <SummaryPage data={data} />
     </Document>
+  );
+}
+
+/**
+ * Work log + prose summary + total due, on its own page.
+ *
+ * Separate page rather than appended below the grid: a long invoice already
+ * spills across several pages, and interleaving the narrative with the table
+ * would put it somewhere unpredictable. This way it's always the last page.
+ */
+function SummaryPage({ data }: { data: InvoicePdfData }) {
+  const period = periodLabel(data.periodStart, data.periodEnd);
+  const workLog = buildWorkLog(data.lineItems);
+  const paragraphs = buildServiceSummary({
+    lineItems: data.lineItems,
+    clientName: data.client.name,
+    orgName: data.organization.name,
+    periodLabel: period,
+  });
+
+  return (
+    <Page size="LETTER" style={summaryStyles.page}>
+      <Text style={summaryStyles.orgName}>{data.organization.name}</Text>
+      <Text style={summaryStyles.subLine}>
+        Invoice #{data.invoiceNumber}  |  {data.client.name}  |  {period}
+      </Text>
+      <Text style={summaryStyles.subLine}>Date: {formatDate(data.issuedAt)}</Text>
+
+      <View style={summaryStyles.rule} />
+      <Text style={summaryStyles.sectionTitle}>DETAILED WORK LOG</Text>
+      {workLog.map((entry, i) => (
+        <View key={i} style={summaryStyles.bulletRow} wrap={false}>
+          <Text style={summaryStyles.bullet}>•</Text>
+          <Text style={summaryStyles.bulletText}>
+            {entry.when}
+            {entry.code ? ` — ${entry.code}` : ""} — {entry.description}
+          </Text>
+        </View>
+      ))}
+
+      <View style={summaryStyles.rule} />
+      <Text style={summaryStyles.sectionTitle}>SERVICE SUMMARY</Text>
+      {paragraphs.map((p, i) => (
+        <Text key={i} style={summaryStyles.paragraph}>
+          {p}
+        </Text>
+      ))}
+
+      <View style={summaryStyles.rule} />
+      <Text style={summaryStyles.totalDue}>Total Due: {currency(data.totalAmount)}</Text>
+
+      {(data.organization.checkPayableTo || data.organization.acceptedPaymentMethods) && (
+        <View style={styles.payBlock} wrap={false}>
+          {data.organization.checkPayableTo && (
+            <Text style={styles.payLine}>
+              Make all checks payable to:{" "}
+              <Text style={styles.payStrong}>{data.organization.checkPayableTo}</Text>
+              </Text>
+          )}
+          {data.organization.acceptedPaymentMethods && (
+            <Text style={styles.payLine}>
+              We also accept <Text style={styles.payStrong}>{data.organization.acceptedPaymentMethods}</Text>
+              </Text>
+          )}
+            <Text style={styles.thanks}>THANK YOU FOR YOUR BUSINESS</Text>
+        </View>
+      )}
+    </Page>
   );
 }
 
@@ -246,9 +301,6 @@ function currency(n: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
 
-function formatHours(n: number): string {
-  return String(n);
-}
 
 /** 7/13/2026 -- the existing invoices don't zero-pad. */
 function formatDate(iso: string): string {

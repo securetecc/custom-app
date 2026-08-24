@@ -47,11 +47,36 @@ export const PAGE_MARGIN = (612 - CONTENT_WIDTH) / 2;
 export const TEMPLATE_ROW_COUNT = 18;
 export const ROW_HEIGHT = px(26);
 
+/**
+ * Height of the repeating header block (title band + letterhead + table
+ * header), reserved as page padding.
+ *
+ * It has to be a constant because the block is positioned absolutely: a
+ * `fixed` element left in normal flow gets its height counted on EVERY page
+ * including the first, which pushed a 3-row invoice onto a second page.
+ * Absolute + fixed draws it once per page without consuming flow, and this
+ * padding is what stops the rows rendering underneath it.
+ *
+ * Derived from the template's own row heights (rows 2-13), not measured by
+ * eye, so it stays correct if SHEET_SCALE changes.
+ */
+const TITLE_BAND_H = px(103) + 2;
+// The template allots rows 3-12 (206px) to the letterhead, but at our font
+// sizes the block only fills ~100pt of that, and reserving the full 206
+// pushed the 18-row grid onto a second page. 160px is the smallest value
+// that still clears the tallest letterhead (name + 7 detail lines).
+const LETTERHEAD_H = px(160);
+const TABLE_HEADER_H = ROW_HEIGHT + 2;
+export const HEADER_HEIGHT =
+  TITLE_BAND_H + px(6) + LETTERHEAD_H + px(10) + TABLE_HEADER_H;
+export const PAGE_TOP = px(9);
+
 const border = { borderWidth: 1, borderColor: NAVY, borderStyle: "solid" as const };
 
 export const styles = StyleSheet.create({
   page: {
-    paddingTop: px(9),
+    // Reserves the absolutely-positioned header block on every page.
+    paddingTop: PAGE_TOP + HEADER_HEIGHT,
     // Trimmed from 36: the template's own rows 1-37 already consume ~732pt of
     // LETTER's 792, so a generous bottom margin pushed the totals to page 2.
     paddingBottom: 16,
@@ -60,6 +85,16 @@ export const styles = StyleSheet.create({
     fontSize: 8,
     color: NAVY,
   },
+
+  /** The repeating block. Absolute so `fixed` costs no flow height. */
+  pageHeader: {
+    position: "absolute",
+    top: PAGE_TOP,
+    left: PAGE_MARGIN,
+    right: PAGE_MARGIN,
+  },
+  /** Fixed so the header's height never depends on how much text it holds. */
+  letterheadBlock: { height: LETTERHEAD_H },
 
   // --- row 2: the INVOICE band (merged A2:E2) ------------------------------
   titleBand: {
@@ -220,6 +255,8 @@ export const styles = StyleSheet.create({
  * several pages doesn't interleave the narrative with the table.
  */
 export const summaryStyles = StyleSheet.create({
+  /** Overrides the invoice page's reserved header space. */
+  page: { paddingTop: PAGE_TOP + 18, paddingBottom: 24, paddingHorizontal: PAGE_MARGIN, fontFamily: HEADING_FONT, color: NAVY },
   orgName: { fontFamily: HEADING_FONT, fontWeight: 700, fontSize: 18, color: NAVY },
   subLine: { fontFamily: HEADING_FONT, fontSize: 10, color: "#5B6B7C", marginTop: 5 },
   rule: { height: 2, backgroundColor: TEAL, marginTop: 12, marginBottom: 14 },
