@@ -15,7 +15,7 @@ import { InvoiceRowActions } from "@/components/app/invoice-actions";
 import { formatCurrency, formatDate, formatHours } from "@/lib/format";
 import { Plus } from "lucide-react";
 
-const FILTERS = ["Draft", "Sent", "Paid", "Voided", "All"] as const;
+const FILTERS = ["All", "Draft", "Sent", "Paid", "Voided"] as const;
 type Filter = (typeof FILTERS)[number];
 
 export default async function InvoicesPage({
@@ -24,7 +24,10 @@ export default async function InvoicesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status } = await searchParams;
-  const active: Filter = FILTERS.includes(status as Filter) ? (status as Filter) : "Draft";
+  // Defaults to All: landing on Draft meant the tab looked empty whenever
+  // everything had been sent, which reads as "no invoices" rather than
+  // "no drafts".
+  const active: Filter = FILTERS.includes(status as Filter) ? (status as Filter) : "All";
 
   const { data: invoices } = await requireOrgContext((tx) =>
     tx.invoice.findMany({
