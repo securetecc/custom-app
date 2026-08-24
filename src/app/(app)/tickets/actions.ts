@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireOrgContext } from "@/lib/auth";
+import { requireAdminContext, requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import {
   ticketStatusChangeSchema,
@@ -95,8 +95,7 @@ export async function assignTicket(
 export async function deleteTicket(id: string): Promise<ActionResult> {
   // Admin-only, matching the "tickets: staff can delete within org" policy,
   // which requires is_admin().
-  await requireAdmin();
-  const { authUserId } = await requireOrgContext();
+  const { authUserId } = await requireAdminContext();
 
   try {
     await withRLS(authUserId, (tx) => tx.ticket.delete({ where: { id } }));

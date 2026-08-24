@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { withRLS, type TxClient } from "@/lib/db/rls";
@@ -12,6 +13,7 @@ type AppUser = Prisma.UserGetPayload<{ include: { organization: true } }>;
 // navigation control-flow to how Prisma happens to propagate errors out of
 // $transaction().
 class AppUserNotFoundError extends Error {}
+class NotAdminError extends Error {}
 
 // Resolves the signed-in Supabase auth user to their app-side profile row
 // (organization + role). This is the single place request handlers should
@@ -26,15 +28,19 @@ class AppUserNotFoundError extends Error {}
 // a real network round trip, not a local decode. getCurrentAppUser() and
 // getCurrentAuthUserId() used to each call it independently, so
 // requireOrgContext() (used on every server-rendered page) fired it twice
-// per request on top of the middleware's own call. Centralizing it here so
-// a single request only ever pays for one verified lookup.
-async function getVerifiedAuthUser() {
+// per request on top of the middleware's own call.
+//
+// react's cache() now makes that structural rather than a convention the
+// callers have to keep: it dedupes for the lifetime of one request, so every
+// helper below can call this freely and only the first one pays the Auth API
+// round trip.
+const getVerifiedAuthUser = cache(async () => {
   const supabase = await createClient();
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
   return authUser;
-}
+});
 
 export async function getCurrentAppUser() {
   const authUser = await getVerifiedAuthUser();
@@ -108,8 +114,33 @@ export async function requireOrgContext<T>(fn?: (tx: TxClient, appUser: AppUser)
     });
   } catch (err) {
     if (err instanceof AppUserNotFoundError) redirect("/login");
+    if (err instanceof NotAdminError) redirect("/dashboard?error=admin-only");
     throw err;
   }
 
   return { authUserId: authUser.id, appUser: outcome.appUser, data: outcome.data as T };
+}
+
+// Admin-gated equivalent of requireOrgContext, for the write actions that
+// previously called requireAdmin() and then requireOrgContext() back to back.
+// That pattern cost two Auth round trips and two full withRLS transactions
+// (each paying its own connection acquisition, BEGIN, claims setup and
+// COMMIT) to answer one question. This does it once.
+//
+// The role check happens AFTER the lookup rather than in a separate pass,
+// which is also why it can share the callback's transaction: by the time the
+// callback runs we already know the caller is an admin.
+export async function requireAdminContext(): Promise<{
+  authUserId: string;
+  appUser: AppUser;
+}>;
+export async function requireAdminContext<T>(
+  fn: (tx: TxClient, appUser: AppUser) => Promise<T>,
+): Promise<{ authUserId: string; appUser: AppUser; data: T }>;
+export async function requireAdminContext<T>(fn?: (tx: TxClient, appUser: AppUser) => Promise<T>) {
+  const context = await requireOrgContext(async (tx, appUser) => {
+    if (appUser.role !== "admin") throw new NotAdminError();
+    return fn ? await fn(tx, appUser) : undefined;
+  });
+  return context;
 }

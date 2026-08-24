@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireOrgContext } from "@/lib/auth";
+import { requireAdmin, requireAdminContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { prisma } from "@/lib/db/prisma";
@@ -23,8 +23,7 @@ export async function updateOrganization(
   }
   const data = parsed.data;
 
-  const appUser = await requireAdmin();
-  const { authUserId } = await requireOrgContext();
+  const { authUserId, appUser } = await requireAdminContext();
 
   try {
     // The "org: admin can update own org" policy gates this at the DB level
@@ -77,8 +76,7 @@ export async function updateOrganization(
  * it on means.
  */
 export async function setEmailDomainVerified(verified: boolean): Promise<ActionResult> {
-  const appUser = await requireAdmin();
-  const { authUserId } = await requireOrgContext();
+  const { authUserId, appUser } = await requireAdminContext();
 
   try {
     await withRLS(authUserId, (tx) =>
@@ -164,8 +162,7 @@ export async function updateStaffRole(
   userId: string,
   role: "admin" | "technician",
 ): Promise<ActionResult> {
-  const appUser = await requireAdmin();
-  const { authUserId } = await requireOrgContext();
+  const { authUserId, appUser } = await requireAdminContext();
 
   if (userId === appUser.id && role !== "admin") {
     // Otherwise the last admin can lock the whole org out of settings.

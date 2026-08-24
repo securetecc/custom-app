@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireOrgContext } from "@/lib/auth";
+import { requireAdminContext, requireOrgContext } from "@/lib/auth";
 import { withRLS, type TxClient } from "@/lib/db/rls";
 import {
   generateInvoiceSchema,
@@ -744,8 +744,7 @@ export async function regenerateInvoicePdf(id: string): Promise<ActionResult> {
 export async function createInvoiceGmailDraft(
   id: string,
 ): Promise<ActionResult<{ draftUrl: string }>> {
-  await requireAdmin();
-  const { authUserId } = await requireOrgContext();
+  const { authUserId } = await requireAdminContext();
 
   try {
     const invoice = await withRLS(authUserId, (tx) =>
@@ -812,8 +811,7 @@ export async function createInvoiceGmailDraft(
  */
 export async function markInvoiceSent(id: string): Promise<ActionResult> {
   // Admin-only, per the RLS split: only admins transition invoice status.
-  await requireAdmin();
-  const { authUserId } = await requireOrgContext();
+  const { authUserId } = await requireAdminContext();
 
   try {
     await withRLS(authUserId, async (tx) => {
@@ -837,8 +835,7 @@ export async function markInvoiceSent(id: string): Promise<ActionResult> {
 }
 
 export async function markInvoicePaid(id: string): Promise<ActionResult> {
-  await requireAdmin();
-  const { authUserId } = await requireOrgContext();
+  const { authUserId } = await requireAdminContext();
 
   try {
     await withRLS(authUserId, async (tx) => {
@@ -870,8 +867,7 @@ export async function markInvoicePaid(id: string): Promise<ActionResult> {
 export async function voidInvoice(
   id: string,
 ): Promise<ActionResult<{ pdfArchived: boolean }>> {
-  await requireAdmin();
-  const { authUserId, appUser } = await requireOrgContext();
+  const { authUserId, appUser } = await requireAdminContext();
 
   let pdfUrl: string | null = null;
   let clientId = "";
