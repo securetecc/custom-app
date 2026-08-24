@@ -26,6 +26,9 @@ export const recurringChargeFormSchema = z.object({
   // never read by billing logic.
   itemType: z.enum(ADDON_ITEM_TYPES).nullable(),
   authorizedBy: z.string().min(1, "Enter who authorized this charge"),
+  // Operational context carried over from the master sheet's Notes column
+  // ("18 devices x $25 -- verify count monthly"). Never shown to the client.
+  notes: z.string(),
 });
 
 export type RecurringChargeFormValues = z.infer<typeof recurringChargeFormSchema>;

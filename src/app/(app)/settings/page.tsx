@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Wrench } from "lucide-react";
+import { Building2, Repeat, Wrench } from "lucide-react";
 
 export default async function SettingsPage() {
   await requireAdmin();
@@ -20,6 +20,19 @@ export default async function SettingsPage() {
               <div>
                 <CardTitle className="text-base">Organization</CardTitle>
                 <CardDescription>Branding, email senders, staff access</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent />
+          </Card>
+        </Link>
+
+        <Link href="/time-entries/recurring-charges">
+          <Card className="transition-colors hover:border-accent">
+            <CardHeader className="flex-row items-center gap-3 space-y-0">
+              <Repeat className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-base">Recurring charges</CardTitle>
+                <CardDescription>Monthly and annual charges, per client</CardDescription>
               </div>
             </CardHeader>
             <CardContent />

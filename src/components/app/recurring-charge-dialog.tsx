@@ -16,6 +16,7 @@ import {
 } from "@/app/(app)/clients/recurring-charge-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -94,6 +95,7 @@ export function RecurringChargeDialog({
       activeStatus: true,
       itemType: null,
       authorizedBy: "",
+      notes: "",
       ...defaultValues,
     },
   });
@@ -258,6 +260,19 @@ export function RecurringChargeDialog({
               {errors.authorizedBy && (
                 <p className="text-xs text-destructive">{errors.authorizedBy.message}</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes</Label>
+              <Textarea
+                id="notes"
+                rows={2}
+                placeholder="e.g. 18 devices x $25 — verify count monthly"
+                {...register("notes")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Internal only — never appears on an invoice.
+              </p>
             </div>
 
             <div className="space-y-2">

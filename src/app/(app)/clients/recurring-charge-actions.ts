@@ -24,10 +24,22 @@ export async function createRecurringCharge(
 
   try {
     await withRLS(authUserId, async (tx) => {
+      // Continue the master sheet's RC-### series rather than starting a
+      // parallel scheme -- the reference is how a charge is matched back to
+      // the spreadsheet by eye.
+      const last = await tx.recurringCharge.findFirst({
+        where: { reference: { startsWith: "RC-" } },
+        orderBy: { reference: "desc" },
+        select: { reference: true },
+      });
+      const nextNumber = last?.reference ? Number(last.reference.slice(3)) + 1 : 1;
+
       const charge = await tx.recurringCharge.create({
         data: {
           organizationId: appUser.organizationId,
           clientId,
+          reference: `RC-${String(nextNumber).padStart(3, "0")}`,
+          notes: data.notes || null,
           description: data.description,
           amount: data.amount,
           billingFrequency: data.billingFrequency,
@@ -49,6 +61,7 @@ export async function createRecurringCharge(
           amount: data.amount,
           billingFrequency: data.billingFrequency,
           authorizedBy: data.authorizedBy,
+          notes: data.notes || null,
         },
       });
     });
@@ -58,6 +71,7 @@ export async function createRecurringCharge(
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/time-entries/recurring-charges");
+  revalidatePath("/settings/recurring-charges");
   return { ok: true };
 }
 
@@ -89,6 +103,7 @@ export async function updateRecurringCharge(
           activeStatus: data.activeStatus,
           itemType: data.itemType,
           authorizedBy: data.authorizedBy,
+          notes: data.notes || null,
         },
       });
 
@@ -102,6 +117,7 @@ export async function updateRecurringCharge(
           amount: data.amount,
           billingFrequency: data.billingFrequency,
           authorizedBy: data.authorizedBy,
+          notes: data.notes || null,
         },
       });
     });
@@ -111,6 +127,7 @@ export async function updateRecurringCharge(
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/time-entries/recurring-charges");
+  revalidatePath("/settings/recurring-charges");
   return { ok: true };
 }
 
@@ -128,6 +145,7 @@ export async function deleteRecurringCharge(
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/time-entries/recurring-charges");
+  revalidatePath("/settings/recurring-charges");
   return { ok: true };
 }
 

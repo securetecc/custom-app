@@ -70,12 +70,17 @@ export default async function RecurringChargesPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              {/* Column set mirrors the Operations Master Sheet's
+                  RECURRING_CHARGES tab, so a row can be reconciled against the
+                  spreadsheet without translating between two schemes. */}
+              <TableHead>Charge ID</TableHead>
+              <TableHead>Client ID</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Frequency</TableHead>
               <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Authorized by</TableHead>
+              <TableHead>Notes</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-20" />
             </TableRow>
@@ -83,6 +88,12 @@ export default async function RecurringChargesPage() {
           <TableBody>
             {charges.map((charge) => (
               <TableRow key={charge.id}>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {charge.reference ?? "—"}
+                </TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {charge.client.reference ?? "—"}
+                </TableCell>
                 <TableCell>{charge.client.name}</TableCell>
                 <TableCell className="font-medium">{charge.description}</TableCell>
                 <TableCell className="text-muted-foreground">
@@ -94,8 +105,8 @@ export default async function RecurringChargesPage() {
                 <TableCell className="text-right">
                   {formatCurrency(Number(charge.amount))}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {charge.authorizedBy ?? "—"}
+                <TableCell className="max-w-[16rem] text-xs text-muted-foreground">
+                  {charge.notes ?? "—"}
                 </TableCell>
                 <TableCell>
                   <Badge variant={charge.activeStatus ? "default" : "secondary"}>
@@ -115,6 +126,7 @@ export default async function RecurringChargesPage() {
                         activeStatus: charge.activeStatus,
                         itemType: charge.itemType,
                         authorizedBy: charge.authorizedBy ?? "",
+                        notes: charge.notes ?? "",
                       }}
                       trigger={
                         <Button variant="ghost" size="icon" aria-label="Edit charge">
