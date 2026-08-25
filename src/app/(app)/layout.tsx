@@ -31,9 +31,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header
           className="app-header relative flex h-16 shrink-0 items-center justify-end px-6"
         >
-          {/* The teal rule is now a travelling one rather than a static 2px
-              band -- same brand cue, but it reads as a live system. */}
-          <span className="scanline" aria-hidden />
           {/* No org name here -- the sidebar logo already identifies the
               brand, so repeating "SecureTECC" in the header was redundant. */}
           <div className="flex items-center gap-3">

@@ -445,28 +445,4 @@
     text-shadow: 0 0 18px rgb(6 225 220 / 0.45);
   }
 
-  /* The header's travelling underline. Slow and low-contrast on purpose --
-     this sits above a tool people look at all day, and anything faster reads
-     as an alert demanding attention. */
-  .scanline {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -1px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--brand-teal), transparent);
-    animation: scan 9s linear infinite;
-    opacity: 0.75;
-  }
-
-  @keyframes scan {
-    0% { transform: translateX(-100%); opacity: 0; }
-    12% { opacity: 0.75; }
-    88% { opacity: 0.75; }
-    100% { transform: translateX(100%); opacity: 0; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .scanline { animation: none; opacity: 0.35; }
-  }
 }
