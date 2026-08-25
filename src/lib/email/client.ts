@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { safeMode, SAFE_MODE_NOTICE } from "@/lib/safe-mode";
 
 export type SendResult =
   | { ok: true; id: string | null; redirectedFrom?: string }
@@ -55,6 +56,13 @@ function testBanner(originalTo: string): string {
  * email is a side effect). Callers surface the returned error as a warning.
  */
 export async function sendEmail(args: SendArgs): Promise<SendResult> {
+  // First gate, ahead of everything: safe mode BLOCKS rather than redirects.
+  // A redirect still leaves a message in flight, and the point of safe mode
+  // is that nothing leaves the process at all.
+  if (safeMode()) {
+    return { ok: false, skipped: true, error: SAFE_MODE_NOTICE };
+  }
+
   if (!args.emailDomainVerified) {
     return {
       ok: false,

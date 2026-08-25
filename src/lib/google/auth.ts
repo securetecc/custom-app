@@ -13,6 +13,8 @@
  * integration must refuse loudly, never half-work.
  */
 
+import { safeMode } from "@/lib/safe-mode";
+
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
 
@@ -121,6 +123,13 @@ export function describeConfiguredKey(): string {
 
 /** Null (rather than throwing) so UI can render a "not connected" state. */
 export function readGoogleConfig(): GoogleConfig | null {
+  // Safe mode reports Google as unconfigured rather than blocking further
+  // down. Every caller already handles "not connected" gracefully -- the
+  // Drive/Gmail buttons disable themselves and archiving degrades to a
+  // warning -- so reusing that path means safe mode needs no new error
+  // handling anywhere, and getGoogleAccessToken inherits it too.
+  if (safeMode()) return null;
+
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
   const rawKey = process.env.GOOGLE_PRIVATE_KEY;
   const impersonate = process.env.GOOGLE_IMPERSONATED_USER?.trim();
