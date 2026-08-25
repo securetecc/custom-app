@@ -110,6 +110,13 @@ async function main() {
   const dirFlag = args.indexOf("--dir");
   const dir = dirFlag >= 0 ? args[dirFlag + 1] : "./sheets-export";
   const commit = args.includes("--commit");
+  // Stamped on every invoice this run creates so the import can be identified
+  // -- and undone -- later. Without it, an imported invoice is
+  // indistinguishable from one the app generated, and "remove the migration"
+  // would mean matching on invoice numbers by hand.
+  const tagFlag = args.indexOf("--tag");
+  const importTag =
+    tagFlag >= 0 ? args[tagFlag + 1] : `sheets-${new Date().toISOString().slice(0, 10)}`;
 
   if (!existsSync(dir)) {
     console.error(`Export directory not found: ${dir}`);
@@ -118,7 +125,8 @@ async function main() {
   }
 
   console.log(`Reading from ${dir}`);
-  console.log(commit ? "MODE: COMMIT (will write)\n" : "MODE: DRY RUN (no writes)\n");
+  console.log(commit ? "MODE: COMMIT (will write)" : "MODE: DRY RUN (no writes)");
+  console.log(`Invoices will be tagged importedFrom="${importTag}"\n`);
 
   const org = await prisma.organization.findFirst({ orderBy: { createdAt: "asc" } });
   if (!org) {
@@ -274,8 +282,10 @@ async function main() {
           sentAt: toDate(r.sentat, `invoice ${r.invoicenumber}`),
           paidAt: toDate(r.paidat, `invoice ${r.invoicenumber}`),
           voidedAt: toDate(r.voidedat, `invoice ${r.invoicenumber}`),
+          importedFrom: importTag,
           // pdfUrl stays null: the Sheets-era PDFs remain the archive of
-          // record and are not regenerated here.
+          // record and are not regenerated here. Nothing in this script
+          // touches Drive, Gmail or Resend -- it writes rows and stops.
         },
         select: { id: true },
       });
