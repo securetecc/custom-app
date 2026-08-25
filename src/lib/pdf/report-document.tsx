@@ -21,6 +21,16 @@ const usd = (n: number) =>
 const usd2 = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 
+/**
+ * Hours, formatted rather than interpolated raw.
+ *
+ * loadReports already rounds, so this is belt-and-braces -- but binary
+ * floating point turns 8.4 + 8.4 + 9.35 into 26.150000000000002, and a report
+ * that prints that once has lost the reader's trust in every other number on
+ * the page. Trailing zeros are dropped so whole hours stay "5h", not "5.00h".
+ */
+const hrs = (n: number) => `${Number(n.toFixed(2))}h`;
+
 const COL = { client: 168, invoiced: 78, share: 48, hours: 62, rate: 72, logged: 90 };
 
 const styles = StyleSheet.create({
@@ -145,12 +155,12 @@ export function ReportPdfDocument({ data }: { data: ReportPdfData }) {
           <Stat
             label="Effective rate"
             value={r.totals.effectiveRate === null ? "—" : usd2(r.totals.effectiveRate)}
-            hint={r.totals.effectiveRate === null ? "Nothing billed" : `across ${r.totals.billedHours}h billed`}
+            hint={r.totals.effectiveRate === null ? "Nothing billed" : `across ${hrs(r.totals.billedHours)} billed`}
           />
-          <Stat label="Billable logged" value={`${r.totals.loggedBillable}h`} hint="Time entries in period" />
+          <Stat label="Billable logged" value={hrs(r.totals.loggedBillable)} hint="Time entries in period" />
           <Stat
             label="Non-billable"
-            value={`${r.totals.loggedNonBillable}h`}
+            value={hrs(r.totals.loggedNonBillable)}
             hint={loggedTotal > 0 ? `${Math.round((r.totals.loggedNonBillable / loggedTotal) * 100)}% of time logged` : "No time logged"}
           />
         </View>
@@ -190,13 +200,13 @@ export function ReportPdfDocument({ data }: { data: ReportPdfData }) {
                   {c.share > 0 ? `${Math.round(c.share * 100)}%` : "—"}
                 </Text>
                 <Text style={[styles.cell, styles.right, { width: COL.hours }]}>
-                  {c.billedHours > 0 ? `${c.billedHours}h` : "—"}
+                  {c.billedHours > 0 ? hrs(c.billedHours) : "—"}
                 </Text>
                 <Text style={[styles.cell, styles.right, { width: COL.rate }]}>
                   {c.effectiveRate === null ? "—" : usd2(c.effectiveRate)}
                 </Text>
                 <Text style={[styles.cell, styles.right, styles.muted, { width: COL.logged }]}>
-                  {c.loggedBillable}h / {c.loggedNonBillable}h
+                  {hrs(c.loggedBillable)} / {hrs(c.loggedNonBillable)}
                 </Text>
               </View>
             ))}
@@ -207,13 +217,13 @@ export function ReportPdfDocument({ data }: { data: ReportPdfData }) {
               </Text>
               <Text style={[styles.cell, styles.right, { width: COL.share }]}>100%</Text>
               <Text style={[styles.cell, styles.right, { width: COL.hours, fontWeight: 700 }]}>
-                {r.totals.billedHours}h
+                {hrs(r.totals.billedHours)}
               </Text>
               <Text style={[styles.cell, styles.right, { width: COL.rate, fontWeight: 700 }]}>
                 {r.totals.effectiveRate === null ? "—" : usd2(r.totals.effectiveRate)}
               </Text>
               <Text style={[styles.cell, styles.right, { width: COL.logged }]}>
-                {r.totals.loggedBillable}h / {r.totals.loggedNonBillable}h
+                {hrs(r.totals.loggedBillable)} / {hrs(r.totals.loggedNonBillable)}
               </Text>
             </View>
           </>
@@ -239,7 +249,7 @@ export function ReportPdfDocument({ data }: { data: ReportPdfData }) {
               <View key={t.code} style={styles.row} wrap={false}>
                 <Text style={[styles.cell, { width: 60, fontWeight: 700 }]}>{t.code}</Text>
                 <Text style={[styles.cell, { width: 220 }]}>{t.label}</Text>
-                <Text style={[styles.cell, styles.right, { width: 80 }]}>{t.hours}h</Text>
+                <Text style={[styles.cell, styles.right, { width: 80 }]}>{hrs(t.hours)}</Text>
                 <Text style={[styles.cell, styles.right, styles.muted, { width: 80 }]}>{t.entries}</Text>
                 <Text style={[styles.cell, styles.right, styles.muted, { width: 78 }]}>
                   {Math.round(t.share * 100)}%
