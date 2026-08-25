@@ -168,6 +168,16 @@ model User {
   /// every staff row: it's addressed to whoever actually logs billable hours,
   /// and mailing it to people who don't just trains them to ignore it.
   receivesDailyReminder Boolean @default(false)
+  /// Storage path in the private "avatars" bucket, not a URL -- the bucket is
+  /// private, so what's shown is a short-lived signed URL minted per request.
+  avatarPath     String?
+  /// Birthday as month/day integers rather than a Date. Only the day matters
+  /// for a greeting, and storing a timestamp would mean a date-only value
+  /// crossing timezones -- the exact bug that shifted the digest window and
+  /// every imported time entry. Ints cannot drift. The year is deliberately
+  /// not collected: it isn't needed and it's the sensitive half.
+  birthMonth     Int?
+  birthDay       Int?
   createdAt      DateTime     @default(now())
 
   loggedTimeEntries          TimeEntry[]            @relation("LoggedByUser")

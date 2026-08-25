@@ -9,6 +9,7 @@ import { ClientShare } from "@/components/app/dashboard/client-share";
 import { RangeFilter } from "@/components/app/dashboard/range-filter";
 import { TodayStatus } from "@/components/app/dashboard/today-status";
 import { Collections, TicketAttention } from "@/components/app/dashboard/collections";
+import { buildGreeting } from "@/lib/greeting";
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -31,14 +32,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   );
 
   const firstName = appUser.name.split(" ")[0];
+  // Pacific, not server time: on Vercel the clock is UTC, so at 6pm Pacific
+  // it is already tomorrow there -- a greeting from server time would say
+  // "good morning" during Tony's evening and land his birthday a day early.
+  const greeting = buildGreeting({
+    firstName,
+    birthMonth: appUser.birthMonth,
+    birthDay: appUser.birthDay,
+    organizationName: appUser.organization.name,
+  });
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {firstName}</h1>
-        <p className="text-muted-foreground">
-          Here&apos;s what&apos;s happening at {appUser.organization.name}.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">{greeting.headline}</h1>
+        {greeting.subline && <p className="text-muted-foreground">{greeting.subline}</p>}
       </div>
 
       <TodayStatus

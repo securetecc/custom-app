@@ -1,4 +1,8 @@
+import Image from "next/image";
+import Link from "next/link";
 import { requireAppUser } from "@/lib/auth";
+import { getAvatarSignedUrl } from "@/lib/storage/avatars";
+import { initialsOf } from "@/lib/initials";
 import { AppSidebar } from "@/components/app/app-sidebar";
 import { SignOutButton } from "@/components/app/sign-out-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -6,12 +10,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const appUser = await requireAppUser();
 
-  const initials = appUser.name
-    .split(" ")
-    .map((part: string) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initials = initialsOf(appUser.name);
+  // Signed because the bucket is private; an hour's validity so it doesn't
+  // expire mid-session and leave a broken image in the header.
+  const avatarUrl = await getAvatarSignedUrl(appUser.avatarPath);
 
   return (
     <div className="flex min-h-screen">
@@ -36,11 +38,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <p className="font-medium leading-none">{appUser.name}</p>
               <p className="text-xs capitalize text-muted-foreground">{appUser.role}</p>
             </div>
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-accent text-accent-foreground text-xs">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            {/* Links to the profile: the avatar is where people expect to
+                click to change their own details. */}
+            <Link href="/settings/profile" aria-label="Your profile">
+              {avatarUrl ? (
+                <Image
+                  src={avatarUrl}
+                  alt=""
+                  width={32}
+                  height={32}
+                  unoptimized
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-accent text-accent-foreground text-xs">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+              )}
+            </Link>
             <SignOutButton />
           </div>
         </header>
