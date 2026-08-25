@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import {
   LayoutDashboard,
+  Sunrise,
   Users,
   Clock,
   FileText,
@@ -24,6 +25,9 @@ import {
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
+  // Directly under Dashboard: it is the other "where do I start" screen, and
+  // the two belong together rather than separated by the record-keeping tabs.
+  { href: "/today", label: "Today", icon: Sunrise, adminOnly: false, soon: true },
   { href: "/clients", label: "Clients", icon: Users, adminOnly: false },
   { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },

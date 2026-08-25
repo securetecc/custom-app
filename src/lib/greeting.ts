@@ -61,6 +61,19 @@ export function pacificAbbreviation(at: Date = new Date()): string {
   return parts.find((p) => p.type === "timeZoneName")?.value ?? "PT";
 }
 
+/**
+ * "Wednesday, August 26", in Pacific.
+ *
+ * A module-level formatter rather than one built per render: Intl.DateTimeFormat
+ * construction is the expensive part, and this one has no per-call variation.
+ */
+export const PACIFIC_LONG_DATE = new Intl.DateTimeFormat("en-US", {
+  timeZone: PACIFIC_TZ,
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
+
 export type TimeOfDay = "morning" | "afternoon" | "evening";
 
 /**
