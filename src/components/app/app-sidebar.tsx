@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
   { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
-  { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false, soon: true },
+  { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false },
   // Business-side sections: what SecureTECC spends, how it's reviewed and how
   // the site performs. Admin-only because none of it is a technician's
   // concern -- unlike Clients or Time Entries, which are the daily job.
