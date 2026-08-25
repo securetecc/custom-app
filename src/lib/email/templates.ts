@@ -84,10 +84,14 @@ function shell(branding: Branding, bodyHtml: string, portalUrl?: string): string
     ? ` · <a href="${escapeHtml(portalUrl)}" style="color:${MUTED};text-decoration:underline;">Support Portal</a>`
     : "";
 
+  // The PAGE is light; the card stays dark. The outer #050F1D filled the whole
+  // window in desktop Gmail, which read as a black slab around a navy box. A
+  // light ground lets the card read as a card -- and the card is what carries
+  // the branding, so nothing about the design it holds changes.
   return `<!doctype html>
 <html>
-  <body style="margin:0;padding:0;background:#050F1D;font-family:Arial,Helvetica,sans-serif;color:${TEXT};">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#050F1D;padding:24px 12px;">
+  <body style="margin:0;padding:0;background:#F4F6F8;font-family:Arial,Helvetica,sans-serif;color:${TEXT};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6F8;padding:24px 12px;">
       <tr><td align="center">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:${CARD};border-radius:16px;overflow:hidden;">
           <tr>

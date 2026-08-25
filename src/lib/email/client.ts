@@ -10,6 +10,8 @@ export type SendArgs = {
   html: string;
   /** Sender for this message. Invoices use invoiceFromEmail; everything else supportEmail. */
   from: string;
+  /** Display name shown in the inbox. Defaults to "SecureTECC Support". */
+  fromName?: string;
   replyTo?: string;
   /**
    * Hard gate. Every caller must pass the org's emailDomainVerified value --
@@ -43,7 +45,10 @@ export async function sendEmail(args: SendArgs): Promise<SendResult> {
   try {
     const resend = new Resend(apiKey);
     const { data, error } = await resend.emails.send({
-      from: args.from,
+      // Display name, so inboxes show "SecureTECC Support" rather than the
+      // bare "noreply" local-part. Only added when the caller passed a plain
+      // address -- a from that already carries a name is left alone.
+      from: args.from.includes("<") ? args.from : `${args.fromName ?? "SecureTECC Support"} <${args.from}>`,
       to: args.to,
       subject: args.subject,
       html: args.html,
