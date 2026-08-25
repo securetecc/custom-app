@@ -369,3 +369,90 @@ export function monthlySummaryEmail(
     ),
   };
 }
+
+const PRIORITY_COLORS: Record<string, string> = {
+  Low: "rgba(255,255,255,0.62)",
+  Medium: "#06E1DC",
+  High: "#F5B942",
+  Urgent: "#FF6B6B",
+};
+
+/**
+ * "Tony assigned you a task".
+ *
+ * Built on the same dark card as the ticket mail rather than a new design --
+ * this lands in the same inboxes, and a second visual language for internal
+ * mail would just look like a different company wrote it.
+ *
+ * The description is rendered with white-space:pre-wrap so a multi-line brief
+ * survives; it is escaped first, so a task written with angle brackets in it
+ * cannot inject markup into the message.
+ */
+export function taskAssignedEmail(
+  branding: Branding,
+  task: {
+    title: string;
+    description: string | null;
+    priority: string;
+    assigneeName: string;
+    assignedByName: string;
+    startDate: string | null;
+    dueDate: string | null;
+  },
+  taskUrl: string,
+): { subject: string; html: string } {
+  const rows: string[] = [
+    `<tr><td style="padding:8px 0;color:#8FA3B5;width:110px;">Priority</td><td style="padding:8px 0;"><strong style="color:${PRIORITY_COLORS[task.priority] ?? TEXT};">${escapeHtml(task.priority)}</strong></td></tr>`,
+  ];
+  if (task.startDate) {
+    rows.push(`<tr><td style="padding:8px 0;color:#8FA3B5;">Starts</td><td style="padding:8px 0;">${escapeHtml(task.startDate)}</td></tr>`);
+  }
+  if (task.dueDate) {
+    rows.push(`<tr><td style="padding:8px 0;color:#8FA3B5;">Due</td><td style="padding:8px 0;"><strong>${escapeHtml(task.dueDate)}</strong></td></tr>`);
+  }
+
+  return {
+    subject: `New task: ${task.title}`,
+    html: shell(
+      branding,
+      `<h1 style="margin:0 0 12px;font-size:20px;">Hi ${escapeHtml(task.assigneeName.split(" ")[0])},</h1>
+       <p style="margin:0 0 4px;">${escapeHtml(task.assignedByName)} has assigned you a task.</p>
+       ${panel("Task", task.title)}
+       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;">
+         ${rows.join("")}
+       </table>
+       ${
+         task.description
+           ? `${sectionLabel("Details")}
+              <p style="margin:0 0 16px;white-space:pre-wrap;">${escapeHtml(task.description)}</p>`
+           : ""
+       }
+       ${button(taskUrl, "Open task", branding.accentColor)}
+       <p style="margin:20px 0 0;font-size:13px;color:#8FA3B5;">Update the status there as you go — In progress, then For review when it's ready to be checked.</p>`,
+    ),
+  };
+}
+
+/**
+ * Tells the delegator that work is waiting on them.
+ *
+ * Without this, a task sitting in "For review" is invisible until someone
+ * happens to open the page -- which turns a delegation tool into something
+ * you have to remember to poll.
+ */
+export function taskForReviewEmail(
+  branding: Branding,
+  task: { title: string; assigneeName: string },
+  taskUrl: string,
+): { subject: string; html: string } {
+  return {
+    subject: `Ready for review: ${task.title}`,
+    html: shell(
+      branding,
+      `<h1 style="margin:0 0 12px;font-size:20px;">Ready for your review</h1>
+       <p style="margin:0 0 4px;">${escapeHtml(task.assigneeName)} has marked this task as done and ready to be checked.</p>
+       ${panel("Task", task.title)}
+       ${button(taskUrl, "Review task", branding.accentColor)}`,
+    ),
+  };
+}

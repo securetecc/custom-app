@@ -5,6 +5,8 @@ import {
   ticketConfirmationEmail,
   ticketInternalAlertEmail,
   ticketStatusChangeEmail,
+  taskAssignedEmail,
+  taskForReviewEmail,
   type Branding,
 } from "@/lib/email/templates";
 
@@ -233,5 +235,89 @@ export async function notifyTicketAssigned(
     subject: email.subject,
     html: email.html,
     emailDomainVerified: ticket.organization.emailDomainVerified,
+  });
+}
+
+/** yyyy-mm-dd -> "26 Aug 2026", read in UTC because the column is date-only. */
+function formatTaskDate(d: Date | null): string | null {
+  if (!d) return null;
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    // UTC, not Pacific: @db.Date values come back as UTC midnight, and
+    // rendering them in Pacific would show the previous day.
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * Emails the assignee when a task is delegated to them.
+ *
+ * Silent when someone assigns a task to themselves -- they already know, and
+ * a notification for your own action reads as a bug.
+ */
+export async function notifyTaskAssigned(taskId: string): Promise<SendResult> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { organization: true, assignedToUser: true, createdByUser: true },
+  });
+  if (!task) return { ok: false, error: "Task not found." };
+  if (task.assignedToUserId === task.createdByUserId) {
+    return { ok: false, skipped: true, error: "Self-assigned" };
+  }
+
+  const org = task.organization as OrgRow;
+  const email = taskAssignedEmail(
+    brandingOf(org),
+    {
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      assigneeName: task.assignedToUser.name,
+      assignedByName: task.createdByUser.name,
+      startDate: formatTaskDate(task.startDate),
+      dueDate: formatTaskDate(task.dueDate),
+    },
+    appUrl("/tasks"),
+  );
+
+  return sendEmail({
+    to: task.assignedToUser.email,
+    from: senderOf(org),
+    // Replies go to the person who delegated it, not into a noreply void --
+    // "quick question about this task" is the likeliest response.
+    replyTo: task.createdByUser.email,
+    subject: email.subject,
+    html: email.html,
+    emailDomainVerified: org.emailDomainVerified,
+  });
+}
+
+/** Tells the delegator that a task is waiting on their review. */
+export async function notifyTaskForReview(taskId: string): Promise<SendResult> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { organization: true, assignedToUser: true, createdByUser: true },
+  });
+  if (!task) return { ok: false, error: "Task not found." };
+  if (task.assignedToUserId === task.createdByUserId) {
+    return { ok: false, skipped: true, error: "Self-assigned" };
+  }
+
+  const org = task.organization as OrgRow;
+  const email = taskForReviewEmail(
+    brandingOf(org),
+    { title: task.title, assigneeName: task.assignedToUser.name },
+    appUrl("/tasks"),
+  );
+
+  return sendEmail({
+    to: task.createdByUser.email,
+    from: senderOf(org),
+    replyTo: task.assignedToUser.email,
+    subject: email.subject,
+    html: email.html,
+    emailDomainVerified: org.emailDomainVerified,
   });
 }

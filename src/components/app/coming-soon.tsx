@@ -19,12 +19,20 @@ export function ComingSoon({
   description,
   points,
   note,
+  preview,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   points: string[];
   note?: string;
+  /**
+   * A rough sketch of the layout this page will have. A list of features
+   * tells you what a page does; a shape tells you what it will look like,
+   * and the two answer different questions when you are deciding whether
+   * it is what you asked for.
+   */
+  preview?: React.ReactNode;
 }) {
   return (
     <Card>
@@ -46,6 +54,14 @@ export function ComingSoon({
             </li>
           ))}
         </ul>
+        {preview && (
+          <div className="space-y-2 border-t pt-4">
+            <p className="label-hud opacity-70">Roughly what you&apos;ll see</p>
+            <div aria-hidden className="select-none">
+              {preview}
+            </div>
+          </div>
+        )}
         {note && <p className="border-t pt-4 text-sm text-muted-foreground">{note}</p>}
       </CardContent>
     </Card>

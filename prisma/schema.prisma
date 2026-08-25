@@ -27,6 +27,25 @@ enum UserRole {
   technician
 }
 
+/// Task urgency. Named rather than numbered so the value reads the same in the
+/// database as it does in the UI.
+enum TaskPriority {
+  Low
+  Medium
+  High
+  Urgent
+}
+
+/// Where a delegated task is in its life. ForReview is the point the work is
+/// done but the delegator hasn't signed it off -- the distinction that makes
+/// this a delegation tool rather than a to-do list.
+enum TaskStatus {
+  NotStarted
+  InProgress
+  ForReview
+  Completed
+}
+
 enum BillingType {
   Hourly
   Retainer
@@ -150,6 +169,7 @@ model Organization {
   invoiceRetainerPeriods  InvoiceRetainerPeriod[]
   invoices               Invoice[]
   tickets                Ticket[]
+  tasks                  Task[]
 
   @@map("organizations")
 }
@@ -171,6 +191,11 @@ model User {
   /// Storage path in the private "avatars" bucket, not a URL -- the bucket is
   /// private, so what's shown is a short-lived signed URL minted per request.
   avatarPath     String?
+  /// Who may CREATE and ASSIGN tasks. A per-user flag rather than a role
+  /// check, because role=admin is already held by more than one person here
+  /// and delegation is specifically the business owner's function. Explicit
+  /// beats an email address hard-coded in application logic.
+  canDelegateTasks Boolean @default(false)
   /// Birthday as month/day integers rather than a Date. Only the day matters
   /// for a greeting, and storing a timestamp would mean a date-only value
   /// crossing timezones -- the exact bug that shifted the digest window and
@@ -181,6 +206,8 @@ model User {
   createdAt      DateTime     @default(now())
 
   loggedTimeEntries          TimeEntry[]            @relation("LoggedByUser")
+  assignedTasks              Task[]                 @relation("TaskAssignee")
+  delegatedTasks             Task[]                 @relation("TaskCreator")
   loggedReimbursableExpenses ReimbursableExpense[]
   assignedTickets            Ticket[]               @relation("AssignedToUser")
 
@@ -600,4 +627,41 @@ model CronRun {
 
   @@unique([jobName, periodKey])
   @@map("cron_runs")
+}
+
+/// A task delegated by the business owner to a VA or partner.
+///
+/// Visible to every staff member in the org by design -- the point is shared
+/// awareness of who is doing what, not private queues. Who may CREATE one is
+/// restricted (User.canDelegateTasks); who may READ one is not.
+model Task {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  priority    TaskPriority @default(Medium)
+  status      TaskStatus   @default(NotStarted)
+
+  /// Date-only. Stored as @db.Date so a deadline can't shift a day across
+  /// timezones the way a timestamp would.
+  startDate DateTime? @db.Date
+  dueDate   DateTime? @db.Date
+
+  assignedToUserId String
+  assignedToUser   User   @relation("TaskAssignee", fields: [assignedToUserId], references: [id])
+  createdByUserId  String
+  createdByUser    User   @relation("TaskCreator", fields: [createdByUserId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// Set when status first reaches Completed, so "finished on" survives a
+  /// later edit that isn't a status change.
+  completedAt DateTime?
+
+  @@index([organizationId])
+  @@index([assignedToUserId])
+  @@index([status])
+  @@map("tasks")
 }

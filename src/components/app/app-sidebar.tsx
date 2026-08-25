@@ -11,7 +11,9 @@ import {
   Clock,
   FileText,
   LifeBuoy,
+  ListChecks,
   PenLine,
+  CalendarDays,
   ChartNoAxesCombined,
   CreditCard,
   BookLock,
@@ -26,6 +28,9 @@ const NAV_ITEMS = [
   { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
+  // Visible to everyone: all tasks are visible to all staff by design. What
+  // differs is who can CREATE one, which the page decides, not the nav.
+  { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false, soon: true },
   { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
   { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false },
   // Business-side sections: what SecureTECC spends, how it's reviewed and how
@@ -34,6 +39,7 @@ const NAV_ITEMS = [
   { href: "/subscriptions", label: "Subscriptions", icon: CreditCard, adminOnly: true, soon: true },
   { href: "/reviews", label: "Reviews", icon: Star, adminOnly: true, soon: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true, soon: true },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true, soon: true },
   { href: "/documentation", label: "Docs", icon: BookLock, adminOnly: true, soon: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
