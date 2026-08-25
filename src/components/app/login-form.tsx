@@ -569,7 +569,9 @@ export function LoginForm() {
           </div>
         </section>
 
-        <section className="px-6 pb-24">
+        {/* pb-24 was there but nothing on top, so this section butted straight
+            against the sign-in card with no separation between them. */}
+        <section className="px-6 pt-16 pb-24 sm:pt-24">
           <div ref={revealRef} className="reveal">
             <div className="mx-auto mb-10 max-w-[680px] text-center">
               <p className="mb-[10px] text-xs font-bold uppercase tracking-[2px] text-[#06E1DC]">
