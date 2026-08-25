@@ -11,7 +11,9 @@ import {
   FileText,
   LifeBuoy,
   PenLine,
+  ChartNoAxesCombined,
   CreditCard,
+  BookLock,
   Star,
   ChartLine,
   Settings,
@@ -23,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
+  { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
   { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false, soon: true },
   // Business-side sections: what SecureTECC spends, how it's reviewed and how
   // the site performs. Admin-only because none of it is a technician's
@@ -30,6 +33,7 @@ const NAV_ITEMS = [
   { href: "/subscriptions", label: "Subscriptions", icon: CreditCard, adminOnly: true, soon: true },
   { href: "/reviews", label: "Reviews", icon: Star, adminOnly: true, soon: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true, soon: true },
+  { href: "/documentation", label: "Documentation", icon: BookLock, adminOnly: true, soon: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
