@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { Download } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { requireAdminContext } from "@/lib/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,6 +29,14 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   const { data } = await requireAdminContext((tx) => loadReports(tx, range));
   const { clients, serviceTypes, totals } = data!;
 
+  // The PDF route re-resolves the range from these same params, so the
+  // download is always the report on screen rather than a default period.
+  const pdfQuery = new URLSearchParams();
+  if (sp.range) pdfQuery.set("range", sp.range);
+  if (sp.from) pdfQuery.set("from", sp.from);
+  if (sp.to) pdfQuery.set("to", sp.to);
+  const pdfHref = `/reports/pdf${pdfQuery.size > 0 ? `?${pdfQuery}` : ""}`;
+
   return (
     <div className="space-y-6">
       <div>
@@ -38,9 +48,17 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold tracking-tight">{range.label}</h2>
-        <Suspense fallback={null}>
-          <RangeFilter current={range.key} from={sp.from} to={sp.to} />
-        </Suspense>
+        <div className="flex flex-wrap items-center gap-2">
+          <Suspense fallback={null}>
+            <RangeFilter current={range.key} from={sp.from} to={sp.to} />
+          </Suspense>
+          {/* A plain anchor, not a button: downloads want a real href so
+              open-in-new-tab and save-as behave. */}
+          <a href={pdfHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <Download className="h-4 w-4" />
+            Download PDF
+          </a>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
