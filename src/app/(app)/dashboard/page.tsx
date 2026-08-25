@@ -48,7 +48,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         {/* The greeting is the one heading that gets the glow -- it's the
             first thing on the first screen, and doing this to every h1 would
             make none of them feel special. */}
-        <h1 className="text-glow text-2xl font-semibold tracking-tight text-accent">
+        <h1 className="text-glow text-2xl font-semibold tracking-tight text-[var(--teal-ink)]">
           {greeting.headline}
         </h1>
         {greeting.subline && <p className="text-muted-foreground">{greeting.subline}</p>}

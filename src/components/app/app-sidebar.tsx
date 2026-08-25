@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/app/theme-toggle";
 import {
   LayoutDashboard,
   Users,
@@ -59,8 +60,6 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
           priority
           className="h-auto w-full max-w-[168px]"
         />
-        {/* Lit rule under the mark, matching the header's. */}
-        <span className="edge-glow pointer-events-none absolute inset-x-0 bottom-[-1px] h-px opacity-50" />
       </div>
       <nav className="flex-1 space-y-1 px-3 pt-4">
         <p className="label-hud px-3 pb-2 opacity-60">Operations</p>
@@ -97,6 +96,13 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
           );
         })}
       </nav>
+
+      {/* Footer rather than the header: the theme is set once and then left
+          alone, so it belongs below the navigation people use all day. */}
+      <div className="px-3 pb-4 pt-2">
+        <p className="label-hud px-1 pb-2 opacity-60">Appearance</p>
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }

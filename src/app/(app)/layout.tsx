@@ -29,12 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             doesn't belong in
             a data-dense daily-use tool. */}
         <header
-          className="relative flex h-16 shrink-0 items-center justify-end px-6"
-          style={{
-            borderBottom: "1px solid var(--edge-strong)",
-            background:
-              "linear-gradient(180deg, rgb(13 23 33 / 0.92), rgb(4 7 11 / 0.96))",
-          }}
+          className="app-header relative flex h-16 shrink-0 items-center justify-end px-6"
         >
           {/* The teal rule is now a travelling one rather than a static 2px
               band -- same brand cue, but it reads as a live system. */}
@@ -45,7 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <PacificClock />
             <div className="text-right text-sm">
               <p className="font-medium leading-none">{appUser.name}</p>
-              <p className="text-[10px] uppercase tracking-[0.14em] text-accent/70">{appUser.role}</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--teal-ink)]">{appUser.role}</p>
             </div>
             {/* Links to the profile: the avatar is where people expect to
                 click to change their own details. */}
