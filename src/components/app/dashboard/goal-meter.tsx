@@ -62,12 +62,12 @@ export function GoalMeter({ goal }: { goal: DashboardMetrics["goal"] }) {
             {goal.pipeline > 0 && (
               <div
                 className="absolute inset-y-0 left-0 rounded-full opacity-30"
-                style={{ width: `${pipelineEnd * 100}%`, background: "var(--viz-1)" }}
+                style={{ width: `${pipelineEnd * 100}%`, background: "var(--viz-teal)" }}
               />
             )}
             <div
               className="absolute inset-y-0 left-0 rounded-full"
-              style={{ width: `${filled * 100}%`, background: "var(--viz-1)" }}
+              style={{ width: `${filled * 100}%`, background: "var(--viz-teal)" }}
             />
             {/* Pace marker: where you'd be if invoicing were spread evenly. */}
             {pacePct > 0 && pacePct < 1 && (
@@ -97,7 +97,7 @@ export function GoalMeter({ goal }: { goal: DashboardMetrics["goal"] }) {
           <p className="border-t pt-3 text-xs text-muted-foreground">
             <span
               className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle opacity-30"
-              style={{ background: "var(--viz-1)" }}
+              style={{ background: "var(--viz-teal)" }}
             />
             {usd(goal.pipeline)} in unbilled billable time isn&apos;t counted above — invoicing it
             would put the month at {usd(goal.invoiced + goal.pipeline)}.

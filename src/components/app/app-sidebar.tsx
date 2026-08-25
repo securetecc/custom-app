@@ -33,7 +33,7 @@ const NAV_ITEMS = [
   { href: "/subscriptions", label: "Subscriptions", icon: CreditCard, adminOnly: true, soon: true },
   { href: "/reviews", label: "Reviews", icon: Star, adminOnly: true, soon: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true, soon: true },
-  { href: "/documentation", label: "Documentation", icon: BookLock, adminOnly: true, soon: true },
+  { href: "/documentation", label: "Docs", icon: BookLock, adminOnly: true, soon: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
@@ -46,7 +46,7 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
       style={{ backgroundColor: "var(--sidebar)", borderColor: "var(--sidebar-border)" }}
     >
       <div
-        className="flex items-center px-5 py-5"
+        className="relative flex items-center px-5 py-5"
         style={{ borderBottom: "1px solid var(--sidebar-border)" }}
       >
         {/* Same asset as /login and /support, so the logo is identical
@@ -59,8 +59,11 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
           priority
           className="h-auto w-full max-w-[168px]"
         />
+        {/* Lit rule under the mark, matching the header's. */}
+        <span className="edge-glow pointer-events-none absolute inset-x-0 bottom-[-1px] h-px opacity-50" />
       </div>
       <nav className="flex-1 space-y-1 px-3 pt-4">
+        <p className="label-hud px-3 pb-2 opacity-60">Operations</p>
         {NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin").map((item) => {
           const active = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -69,10 +72,13 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium tracking-wide transition-colors",
                 active
-                  ? "border-[rgba(6,225,220,0.4)] bg-[rgba(6,225,220,0.12)] text-[#06E1DC] shadow-[0_0_12px_rgba(6,225,220,0.25)]"
-                  : "border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                  // The active item is the one thing on screen allowed to
+                  // glow: a bar on the leading edge, a tinted fill and a soft
+                  // halo. Everything else stays quiet so this reads instantly.
+                  ? "border-[rgba(6,225,220,0.4)] bg-[rgba(6,225,220,0.12)] text-[#06E1DC] shadow-[0_0_16px_rgba(6,225,220,0.28)] before:absolute before:inset-y-1 before:left-[-1px] before:w-[2px] before:rounded-full before:bg-[#06E1DC] before:shadow-[0_0_10px_#06E1DC]"
+                  : "border-transparent text-sidebar-foreground/70 hover:border-[rgba(6,225,220,0.18)] hover:bg-sidebar-accent hover:text-sidebar-foreground",
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -83,7 +89,7 @@ export function AppSidebar({ role }: { role: "admin" | "technician" }) {
                   it's a caveat, and the accent is what marks the ACTIVE item,
                   so a bright pill would compete with that. */}
               {item.soon && (
-                <span className="shrink-0 rounded-full border border-current/25 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide opacity-60">
+                <span className="shrink-0 rounded-full border border-current/25 px-1.5 py-px text-[10px] font-medium uppercase tracking-[0.12em] opacity-60">
                   Soon
                 </span>
               )}

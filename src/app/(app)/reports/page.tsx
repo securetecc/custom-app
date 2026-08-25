@@ -168,7 +168,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
                   <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: "var(--viz-track)" }}>
                     <div
                       className="h-full rounded-full"
-                      style={{ width: `${Math.max(t.share * 100, 1)}%`, background: "var(--viz-1)" }}
+                      style={{ width: `${Math.max(t.share * 100, 1)}%`, background: "var(--viz-teal)" }}
                     />
                   </div>
                 </div>

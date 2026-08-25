@@ -5,6 +5,7 @@ import { getAvatarSignedUrl } from "@/lib/storage/avatars";
 import { initialsOf } from "@/lib/initials";
 import { AppSidebar } from "@/components/app/app-sidebar";
 import { SignOutButton } from "@/components/app/sign-out-button";
+import { PacificClock } from "@/components/app/pacific-clock";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -28,15 +29,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             doesn't belong in
             a data-dense daily-use tool. */}
         <header
-          className="flex h-16 shrink-0 items-center justify-end bg-background px-6"
-          style={{ borderBottom: "2px solid var(--brand-teal)" }}
+          className="relative flex h-16 shrink-0 items-center justify-end px-6"
+          style={{
+            borderBottom: "1px solid var(--edge-strong)",
+            background:
+              "linear-gradient(180deg, rgb(13 23 33 / 0.92), rgb(4 7 11 / 0.96))",
+          }}
         >
+          {/* The teal rule is now a travelling one rather than a static 2px
+              band -- same brand cue, but it reads as a live system. */}
+          <span className="scanline" aria-hidden />
           {/* No org name here -- the sidebar logo already identifies the
               brand, so repeating "SecureTECC" in the header was redundant. */}
           <div className="flex items-center gap-3">
+            <PacificClock />
             <div className="text-right text-sm">
               <p className="font-medium leading-none">{appUser.name}</p>
-              <p className="text-xs capitalize text-muted-foreground">{appUser.role}</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-accent/70">{appUser.role}</p>
             </div>
             {/* Links to the profile: the avatar is where people expect to
                 click to change their own details. */}
@@ -61,7 +70,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <SignOutButton />
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto bg-secondary/30 p-6">{children}</main>
+        {/* Transparent, not bg-secondary/30: the body's teal grid is the
+            surface now, and a translucent slab over it just muddied it. */}
+        <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   );

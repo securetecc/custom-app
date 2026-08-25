@@ -45,7 +45,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{greeting.headline}</h1>
+        {/* The greeting is the one heading that gets the glow -- it's the
+            first thing on the first screen, and doing this to every h1 would
+            make none of them feel special. */}
+        <h1 className="text-glow text-2xl font-semibold tracking-tight text-accent">
+          {greeting.headline}
+        </h1>
         {greeting.subline && <p className="text-muted-foreground">{greeting.subline}</p>}
       </div>
 
@@ -161,7 +166,7 @@ function StatCard({
 }) {
   return (
     <Link href={href}>
-      <Card className="h-full transition-colors hover:border-accent">
+      <Card className="brackets h-full transition-colors hover:border-accent">
         <CardHeader className="pb-2">
           <CardDescription>{label}</CardDescription>
           <CardTitle className="text-3xl tabular-nums">{value}</CardTitle>
