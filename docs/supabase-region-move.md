@@ -12,6 +12,20 @@ until the env vars are switched — and switching them back is the rollback.
 | `auth.users` + `auth.identities` | 4 + 4 |
 | Storage objects | 22 (18 invoice PDFs, 2 avatars, 2 ticket attachments) |
 
+## 0. Confirm the region FIRST
+
+A Supabase project's region cannot be changed after creation, so this is
+checked before anything moves into it — a wrong region means recreating the
+project, not editing it.
+
+```bash
+npx tsx scripts/check-region.mts
+```
+
+It reads the region out of the pooler hostname in the connection string
+(`aws-0-us-west-2.pooler.supabase.com`), so it reports where the project
+actually is rather than what was selected in a form.
+
 ## 1. Credentials
 
 Add these to `.env` — do not paste them into chat or a commit:
@@ -56,7 +70,20 @@ The script refuses to write into a database with no schema, copies
 parent-first so foreign keys resolve, and uses `on conflict do nothing` so an
 interrupted run can simply be repeated.
 
-## 4. Switch over
+## 4. Function region
+
+`vercel.json` sets `regions: ["pdx1"]` — Portland, the same metro as
+us-west-2 — so the functions sit next to the database. It was `sfo1`.
+
+This is the setting that matters for feel: a page can make several queries,
+and each one is a round trip. Static assets still come from the CDN edge
+nearest the visitor regardless, so this does not move anything else further
+away.
+
+Route-level `preferredRegion` is deprecated in Next 16, which is why this
+lives in `vercel.json` rather than in the route files.
+
+## 5. Switch over
 
 In Vercel, replace `DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` with the new
@@ -66,7 +93,7 @@ Set `SAFE_MODE=1` for the cutover deploy. A cron firing mid-switch against a
 half-populated database would email real clients from incomplete data.
 Remove it once you have checked the app.
 
-## 5. Verify before trusting it
+## 6. Verify before trusting it
 
 - Sign in as each of the four users — this is what proves the password copy worked
 - Open an invoice and download the PDF (storage + signed URLs)
