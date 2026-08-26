@@ -28,17 +28,44 @@ actually is rather than what was selected in a form.
 
 ## 1. Credentials
 
-Add these to `.env` — do not paste them into chat or a commit:
+Add these to `.env` — do not paste them into chat or a commit. `.env` is
+gitignored. Keep the existing values untouched: the scripts read the old
+project from them, and it stays the fallback.
 
 ```
-NEW_DATABASE_URL="postgresql://...pooler...:6543/postgres?pgbouncer=true"
-NEW_DIRECT_URL="postgresql://...:5432/postgres"
+NEW_DATABASE_URL="postgresql://postgres.<ref>:<password>@aws-0-us-west-2.pooler.supabase.com:6543/postgres?pgbouncer=true"
+NEW_DIRECT_URL="postgresql://postgres.<ref>:<password>@aws-0-us-west-2.pooler.supabase.com:5432/postgres"
 NEW_SUPABASE_URL="https://gmiznmzzzfltaffwjgcc.supabase.co"
 NEW_SERVICE_ROLE_KEY="..."
+NEW_ANON_KEY="..."
 ```
 
-`.env` is gitignored. Keep the existing values untouched — the scripts read
-the old project from them.
+Where each one lives in the Supabase dashboard, with the new project open:
+
+| Value | Where |
+|---|---|
+| `NEW_DATABASE_URL` | Connect (top bar) → **Transaction pooler**, port **6543** |
+| `NEW_DIRECT_URL` | Connect → **Session pooler**, port **5432** |
+| `NEW_SUPABASE_URL` | Settings → API → Project URL |
+| `NEW_SERVICE_ROLE_KEY` | Settings → API Keys → `service_role` (**secret** — never goes near the browser) |
+| `NEW_ANON_KEY` | Settings → API Keys → `anon` / publishable |
+
+Both connection strings show `[YOUR-PASSWORD]` as a placeholder. That is the
+database password set when the project was created; if it was not recorded,
+reset it under Settings → Database → Database password. Resetting it is
+harmless right now — nothing is connected to this project yet.
+
+## 1b. One command
+
+Once those five are in `.env`:
+
+```bash
+npx tsx scripts/go-live-oregon.mts            # checks only, writes nothing
+npx tsx scripts/go-live-oregon.mts --commit   # does the move
+```
+
+It sequences everything below and stops at the first failure. The individual
+steps are documented separately in case one needs re-running on its own.
 
 ## 2. Schema
 
