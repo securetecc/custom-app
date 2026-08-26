@@ -55,23 +55,72 @@ function quoteIdent(name: string) {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
-/** Columns the two databases have in common, so a version drift doesn't fail. */
+type Column = { column_name: string; data_type: string; udt_name: string; is_generated: string };
+
+/**
+ * Columns the two databases have in common, carrying their target type.
+ *
+ * The type matters, not just the name. Prisma sends every parameter as text,
+ * and Postgres will not implicitly cast text to an enum -- so inserting a
+ * status or a billing type fails with "column is of type X but expression is
+ * of type text". Every table with an enum column failed on the first run for
+ * exactly this reason. The cast is applied per column below.
+ */
 async function sharedColumns(
   from: PrismaClient,
   to: PrismaClient,
   schema: string,
   table: string,
-): Promise<string[]> {
+): Promise<Column[]> {
   const q = (db: PrismaClient) =>
-    db.$queryRawUnsafe<{ column_name: string }[]>(
-      `select column_name from information_schema.columns
+    db.$queryRawUnsafe<Column[]>(
+      `select column_name, data_type, udt_name, is_generated from information_schema.columns
        where table_schema = $1 and table_name = $2 order by ordinal_position`,
       schema,
       table,
     );
   const [a, b] = await Promise.all([q(from), q(to)]);
-  const inTarget = new Set(b.map((r) => r.column_name));
-  return a.map((r) => r.column_name).filter((c) => inTarget.has(c));
+  const inTarget = new Map(b.map((r) => [r.column_name, r]));
+  return (
+    a
+      .filter((c) => inTarget.has(c.column_name))
+      .map((c) => inTarget.get(c.column_name)!)
+      // Generated columns cannot be written to -- Postgres computes them.
+      // auth.users.confirmed_at and auth.identities.email are both generated,
+      // and including them fails the whole INSERT.
+      .filter((c) => c.is_generated !== "ALWAYS")
+  );
+}
+
+/**
+ * The placeholder for one column, cast where Postgres needs the help.
+ *
+ * USER-DEFINED is how information_schema reports an enum; udt_name is the
+ * type's own name. Arrays report as ARRAY with a leading underscore on the
+ * element type. Everything else Postgres infers correctly on its own.
+ */
+function placeholderFor(col: Column, index: number): string {
+  const p = `$${index}`;
+  // Enum type names are case-sensitive ("TicketStatus"), so they need quoting;
+  // built-in type names must NOT be quoted the same way.
+  if (col.data_type === "USER-DEFINED") return `${p}::${quoteIdent(col.udt_name)}`;
+  if (col.data_type === "ARRAY") return `${p}::${col.udt_name.replace(/^_/, "")}[]`;
+  // Everything else is cast to its own target type rather than left to
+  // inference. auth.users failed on the first attempt because jsonb and uuid
+  // columns were being handed text with nothing telling Postgres what it was.
+  return `${p}::${col.udt_name}`;
+}
+
+/**
+ * jsonb parameters have to arrive as JSON text, not as a JavaScript object --
+ * an object stringifies to "[object Object]" on its way into a text cast.
+ */
+function valueFor(col: Column, raw: unknown): unknown {
+  if (raw === null || raw === undefined) return null;
+  if ((col.udt_name === "jsonb" || col.udt_name === "json") && typeof raw === "object") {
+    return JSON.stringify(raw);
+  }
+  return raw;
 }
 
 async function copyTable(
@@ -83,31 +132,39 @@ async function copyTable(
 ): Promise<{ table: string; read: number; written: number; skipped: number; error?: string }> {
   const ref = `${quoteIdent(schema)}.${quoteIdent(table)}`;
   try {
-    const cols = await sharedColumns(from, to, schema, table);
-    if (cols.length === 0) return { table, read: 0, written: 0, skipped: 0, error: "table missing in target" };
-
     const rows = await from.$queryRawUnsafe<Record<string, unknown>[]>(`select * from ${ref}`);
     if (!commit) return { table, read: rows.length, written: 0, skipped: 0 };
 
+    const cols = await sharedColumns(from, to, schema, table);
+    if (cols.length === 0) return { table, read: rows.length, written: 0, skipped: 0, error: "table missing in target" };
+
+    const columnList = cols.map((c) => quoteIdent(c.column_name)).join(", ");
+    const placeholders = cols.map((c, i) => placeholderFor(c, i + 1)).join(", ");
+    // Re-runnable: a partially completed run can be repeated without
+    // duplicating what already landed.
+    const sql = `insert into ${ref} (${columnList}) values (${placeholders}) on conflict do nothing`;
+
     let written = 0;
     let skipped = 0;
+    let firstError: string | undefined;
     for (const row of rows) {
-      const values = cols.map((c) => row[c] ?? null);
-      const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
-      const sql =
-        `insert into ${ref} (${cols.map(quoteIdent).join(", ")}) values (${placeholders}) ` +
-        // Re-runnable: a partially completed run can be repeated without
-        // duplicating what already landed.
-        `on conflict do nothing`;
-      const affected = await to.$executeRawUnsafe(sql, ...values);
-      if (affected > 0) written++;
-      else skipped++;
+      const values = cols.map((c) => valueFor(c, row[c.column_name]));
+      try {
+        const affected = await to.$executeRawUnsafe(sql, ...values);
+        if (affected > 0) written++;
+        else skipped++;
+      } catch (err) {
+        // Report the row that failed rather than losing the whole table's
+        // progress -- and keep the read count, which the previous version
+        // discarded by returning a fresh object from the catch.
+        firstError ??= err instanceof Error ? err.message.split("\n").filter(Boolean).pop()!.trim() : String(err);
+      }
     }
-    return { table, read: rows.length, written, skipped };
+    return { table, read: rows.length, written, skipped, error: firstError?.slice(0, 140) };
   } catch (err) {
     return {
       table,
-      read: 0,
+      read: -1,
       written: 0,
       skipped: 0,
       error: err instanceof Error ? err.message.split("\n").pop()!.trim().slice(0, 140) : String(err),
@@ -183,12 +240,19 @@ async function main() {
   const existing = await to
     .$queryRawUnsafe<{ n: number }[]>(`select count(*)::int as n from public.organizations`)
     .catch(() => null);
-  if (existing === null) {
+  // A dry run must work against an empty target. Refusing here meant the
+  // preview -- the whole point of which is to run BEFORE anything exists --
+  // could only be used after the schema had already been created.
+  const targetReady = existing !== null;
+  if (!targetReady && commit) {
     console.error("Target has no public.organizations table — run `prisma migrate deploy` against it first.");
     process.exit(1);
   }
-
-  console.log(`target already holds ${existing[0].n} organization row(s)`);
+  if (!targetReady) {
+    console.log("target has no schema yet — it will be created by the migrate step");
+  } else {
+    console.log(`target already holds ${existing[0].n} organization row(s)`);
+  }
   console.log(commit ? "MODE: COMMIT\n" : "MODE: DRY RUN (nothing is written)\n");
 
   if (!storageOnly) {
@@ -212,7 +276,7 @@ async function main() {
     if (problems) console.log(`\n${problems} table(s) reported an error — nothing was rolled back, re-run after fixing.`);
   }
 
-  await copyStorage(commit);
+  if (storageOnly) await copyStorage(commit);
 
   await from.$disconnect();
   await to.$disconnect();
