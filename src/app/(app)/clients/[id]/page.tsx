@@ -60,7 +60,8 @@ export default async function EditClientPage({
             defaultValues={{
               name: client.name,
               shortName: client.shortName,
-              contactName: client.contactName ?? "",
+              ownerName: client.ownerName ?? "",
+              billingContactName: client.billingContactName ?? "",
               email: client.email ?? "",
               phone: client.phone ?? "",
               address1: client.address1 ?? "",

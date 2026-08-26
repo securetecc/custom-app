@@ -36,7 +36,7 @@ export default async function ClientsPage() {
             <TableRow>
               <TableHead>Company</TableHead>
               <TableHead>Short name</TableHead>
-              <TableHead>Contact</TableHead>
+              <TableHead>Billing email</TableHead>
               <TableHead>Billing</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
@@ -50,7 +50,18 @@ export default async function ClientsPage() {
                   </Link>
                 </TableCell>
                 <TableCell>{client.shortName}</TableCell>
-                <TableCell>{client.contactName || "—"}</TableCell>
+                {/* Billing email rather than a contact name: this list is
+                    scanned when working out who an invoice goes to, and the
+                    names live on the client's own page. */}
+                <TableCell className="max-w-[220px] truncate">
+                  {client.email ? (
+                    <a href={`mailto:${client.email}`} className="hover:underline">
+                      {client.email}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">No billing email</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {client.billingType}
                   {client.billingRate ? ` · $${client.billingRate.toString()}/hr` : ""}

@@ -11,7 +11,8 @@ const LABEL = "mb-2 block text-xs font-bold uppercase tracking-[1.5px] text-[#06
 const STATUS_LABELS: Record<string, string> = {
   New: "Received — not yet started",
   InProgress: "In progress",
-  Resolved: "Resolved",
+  WaitingOnClient: "Waiting on client",
+  Completed: "Completed",
   Closed: "Closed",
 };
 

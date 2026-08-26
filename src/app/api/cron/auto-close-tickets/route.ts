@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest, unauthorizedResponse } from "@/lib/cron/auth";
 import type { Schedule } from "@/lib/cron/pacific";
 import { claimCronRun, skippedResponse } from "@/lib/cron/claim";
-import { autoCloseResolvedTickets } from "@/lib/tickets/auto-close";
+import { autoCloseCompletedTickets } from "@/lib/tickets/auto-close";
 
 /**
  * Intended schedule: midnight Pacific, daily.
@@ -23,6 +23,6 @@ export async function GET(request: Request) {
   const claim = await claimCronRun("auto-close-tickets", SCHEDULE);
   if (!claim.run) return NextResponse.json(skippedResponse("auto-close-tickets", claim));
 
-  const result = await autoCloseResolvedTickets();
+  const result = await autoCloseCompletedTickets();
   return NextResponse.json({ ok: true, ...result });
 }

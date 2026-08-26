@@ -41,7 +41,8 @@ export function ClientForm({
     defaultValues: {
       name: "",
       shortName: "",
-      contactName: "",
+      ownerName: "",
+      billingContactName: "",
       email: "",
       phone: "",
       address1: "",
@@ -93,12 +94,22 @@ export function ClientForm({
             <p className="text-xs text-muted-foreground">Used in invoice numbers (ACME-00001).</p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="contactName">Contact name</Label>
-            <Input id="contactName" {...register("contactName")} />
+            <Label htmlFor="ownerName">Owner name</Label>
+            <Input id="ownerName" {...register("ownerName")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="billingContactName">Billing contact name</Label>
+            <Input id="billingContactName" {...register("billingContactName")} />
+            <p className="text-xs text-muted-foreground">
+              Who invoices are addressed to, if that isn&apos;t the owner.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Billing email</Label>
             <Input id="email" type="email" {...register("email")} />
+            {/* Named plainly: this is the address the invoice actually goes to
+                when a Gmail draft is created, not a general contact address. */}
+            <p className="text-xs text-muted-foreground">Where invoices are sent.</p>
             {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
           </div>
           <div className="space-y-2">

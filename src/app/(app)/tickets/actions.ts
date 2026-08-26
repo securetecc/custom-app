@@ -48,7 +48,12 @@ export async function changeTicketStatus(
           // reader needs to understand why a ticket moved.
           internalNotes: notes.length > 0 ? appendNote(ticket.internalNotes, status, notes) : ticket.internalNotes,
           // resolvedAt drives the 7-day auto-close, so it tracks the status.
-          resolvedAt: status === "Resolved" ? new Date() : status === "Closed" ? ticket.resolvedAt : null,
+          resolvedAt:
+            status === "Completed"
+              ? new Date()
+              : status === "Closed"
+                ? ticket.resolvedAt
+                : null,
         },
       });
     });

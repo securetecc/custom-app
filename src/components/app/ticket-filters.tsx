@@ -15,7 +15,8 @@ const STATUS_OPTIONS = [
   { value: "Open", label: "Open" },
   { value: "New", label: "New" },
   { value: "InProgress", label: "In progress" },
-  { value: "Resolved", label: "Resolved" },
+  { value: "WaitingOnClient", label: "Waiting on client" },
+  { value: "Completed", label: "Completed" },
   { value: "Closed", label: "Closed" },
   { value: "All", label: "All statuses" },
 ];

@@ -83,7 +83,13 @@ export async function sendWeeklyTicketDigests(): Promise<Result[]> {
     const result: Result = { organization: org.name, sent: 0, skipped: 0, errors: [] };
 
     const open = await prisma.ticket.findMany({
-      where: { organizationId: org.id, status: { in: ["New", "InProgress"] } },
+      // Includes WaitingOnClient: a ticket blocked on the client is exactly
+      // the kind that quietly ages for a month, so the digest is where it
+      // most needs to show up.
+      where: {
+        organizationId: org.id,
+        status: { in: ["New", "InProgress", "WaitingOnClient"] },
+      },
       orderBy: [{ urgency: "asc" }, { createdAt: "asc" }],
     });
 

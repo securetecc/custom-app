@@ -170,6 +170,8 @@ export type DashboardMetrics = {
     open: number;
     inProgress: number;
     newCount: number;
+    /** Blocked on the client -- open, but not waiting on us. */
+    waitingOnClient: number;
     resolvedInRange: number;
     /** Most recent unresolved tickets, for the dashboard's attention list. */
     recent: { id: string; ticketNumber: string; company: string; urgency: string; ageDays: number }[];
@@ -263,8 +265,11 @@ export async function loadDashboardMetrics(
       _sum: { totalAmount: true },
     }),
     tx.ticket.findMany({
-      where: { status: { in: ["New", "InProgress"] } },
-      select: { id: true, ticketNumber: true, clientCompanyName: true, urgency: true, createdAt: true },
+      where: { status: { in: ["New", "InProgress", "WaitingOnClient"] } },
+      select: {
+        id: true, ticketNumber: true, clientCompanyName: true, urgency: true,
+        createdAt: true, status: true,
+      },
       orderBy: [{ createdAt: "desc" }],
       take: 5,
     }),
@@ -395,9 +400,13 @@ export async function loadDashboardMetrics(
     clientShare,
     hours: { billable, nonBillable, unbilledValue, unbilledHours },
     tickets: {
-      open: statusCount("New") + statusCount("InProgress"),
+      // WaitingOnClient counts as open: the work isn't finished, and leaving
+      // it out of the total would make a blocked ticket disappear from the
+      // dashboard entirely rather than merely sit lower down it.
+      open: statusCount("New") + statusCount("InProgress") + statusCount("WaitingOnClient"),
       inProgress: statusCount("InProgress"),
       newCount: statusCount("New"),
+      waitingOnClient: statusCount("WaitingOnClient"),
       resolvedInRange,
       recent: recentTickets.map((t) => ({
         id: t.id,

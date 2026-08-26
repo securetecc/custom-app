@@ -45,7 +45,11 @@ const STATUS_COLORS: Record<string, string> = {
   New: "#06E1DC",
   InProgress: "#F5B942",
   "In Progress": "#F5B942",
-  Resolved: "#06E1DC",
+  // Amber like In Progress, because the state means the same thing to the
+  // reader: still open, not finished. The difference is who it is waiting on,
+  // and the wording carries that.
+  WaitingOnClient: "#F5B942",
+  Completed: "#06E1DC",
   Closed: "rgba(255,255,255,0.62)",
 };
 
@@ -228,10 +232,18 @@ export function ticketStatusChangeEmail(
   statusUrl?: string,
 ): { subject: string; html: string } {
   const readable: Record<string, string> = {
-    New: "New", InProgress: "In Progress", Resolved: "Resolved", Closed: "Closed",
+    New: "New",
+    InProgress: "In Progress",
+    WaitingOnClient: "Waiting on you",
+    Completed: "Completed",
+    Closed: "Closed",
   };
   const label = readable[ticket.status] ?? ticket.status;
-  const resolved = ticket.status === "Resolved";
+  const completed = ticket.status === "Completed";
+  // The one status that asks the reader to do something. It gets its own
+  // wording, because a client who is being waited on and isn't told so will
+  // assume the ball is still in our court.
+  const waiting = ticket.status === "WaitingOnClient";
   const notes = notesForThisChange?.trim();
 
   return {
@@ -243,14 +255,22 @@ export function ticketStatusChangeEmail(
        ${panel(`Ticket ${ticket.ticketNumber}`, label, STATUS_COLORS[ticket.status] ?? TEXT)}
        ${
          notes
-           ? sectionLabel(resolved ? "What we did to resolve this" : "Update details") +
+           ? sectionLabel(
+               completed
+                 ? "What we did to resolve this"
+                 : waiting
+                   ? "What we need from you"
+                   : "Update details",
+             ) +
              paragraphs(notes)
            : ""
        }
        ${
-         resolved
+         completed
            ? `<p style="margin:16px 0 0;color:${MUTED};">Thank you for your patience — please let us know if this fully resolves the issue.</p>`
-           : ""
+           : waiting
+             ? `<p style="margin:16px 0 0;color:${MUTED};">We've paused work on this until we hear back from you. Just reply to this email and we'll pick it straight back up.</p>`
+             : ""
        }
        ${statusUrl ? button(statusUrl, "Visit Support Portal", branding.accentColor) : ""}`,
       statusUrl,

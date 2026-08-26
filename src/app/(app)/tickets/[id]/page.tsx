@@ -16,7 +16,8 @@ import { URGENCY_BADGE_CLASS, URGENCY_RESPONSE_TIMES } from "@/lib/validations/t
 const STATUS_LABELS: Record<string, string> = {
   New: "New",
   InProgress: "In progress",
-  Resolved: "Resolved",
+  WaitingOnClient: "Waiting on client",
+  Completed: "Completed",
   Closed: "Closed",
 };
 
@@ -68,10 +69,10 @@ export default async function TicketDetailPage({
         </div>
       </div>
 
-      {ticket.status === "Resolved" && ticket.resolvedAt && (
+      {ticket.status === "Completed" && ticket.resolvedAt && (
         <Card className="p-4">
           <p className="text-sm text-muted-foreground">
-            Resolved {formatDate(ticket.resolvedAt)} — closes automatically after{" "}
+            Completed {formatDate(ticket.resolvedAt)} — closes automatically after{" "}
             {AUTO_CLOSE_AFTER_DAYS} days without further activity.
           </p>
         </Card>

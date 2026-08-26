@@ -26,7 +26,8 @@ import {
 const STATUS_LABELS: Record<string, string> = {
   New: "New",
   InProgress: "In progress",
-  Resolved: "Resolved",
+  WaitingOnClient: "Waiting on client",
+  Completed: "Completed",
   Closed: "Closed",
 };
 

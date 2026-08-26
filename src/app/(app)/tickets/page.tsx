@@ -16,7 +16,7 @@ import { URGENCY_BADGE_CLASS } from "@/lib/validations/ticket";
 import { TicketFilters } from "@/components/app/ticket-filters";
 import type { TicketStatus, TicketUrgency } from "@/generated/prisma/enums";
 
-const STATUS_FILTERS = ["Open", "New", "InProgress", "Resolved", "Closed", "All"] as const;
+const STATUS_FILTERS = ["Open", "New", "InProgress", "WaitingOnClient", "Completed", "Closed", "All"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 const URGENCY_FILTERS = ["All", "Emergency", "Critical", "High", "Medium", "Low"] as const;
@@ -26,7 +26,8 @@ const STATUS_LABELS: Record<string, string> = {
   Open: "Open",
   New: "New",
   InProgress: "In progress",
-  Resolved: "Resolved",
+  WaitingOnClient: "Waiting on client",
+  Completed: "Completed",
   Closed: "Closed",
   All: "All",
 };
@@ -50,7 +51,7 @@ export default async function TicketsPage({
       where: {
         // "Open" is the default working view: anything not yet put to bed.
         ...(status === "Open"
-          ? { status: { in: ["New", "InProgress"] as TicketStatus[] } }
+          ? { status: { in: ["New", "InProgress", "WaitingOnClient"] as TicketStatus[] } }
           : status === "All"
             ? {}
             : { status: status as TicketStatus }),

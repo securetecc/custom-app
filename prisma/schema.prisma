@@ -102,10 +102,21 @@ enum TicketUrgency {
   Low
 }
 
+/// The ticket lifecycle.
+///
+/// WaitingOnClient exists to stop the clock honestly: a ticket blocked on
+/// information, access or approval is not "in progress", and counting it as
+/// such makes response times look worse than they are and hides which tickets
+/// actually need a technician right now.
+///
+/// Completed (the work is done) and Closed (the ticket is finalised) stay
+/// distinct so a client can come back on something just finished without it
+/// having to be reopened from an archive.
 enum TicketStatus {
   New
   InProgress
-  Resolved
+  WaitingOnClient
+  Completed
   Closed
 }
 
@@ -228,7 +239,13 @@ model Client {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   shortName      String
-  contactName    String?
+  /// The person who owns the business. Renamed from contactName: it was doing
+  /// two jobs, and whoever signs the contract is rarely whoever pays the bill.
+  ownerName      String?
+  /// Who to address billing correspondence to, when that isn't the owner.
+  billingContactName String?
+  /// Billing email -- where invoices are sent. Named `email` from before there
+  /// was more than one kind of contact on a client.
   email          String?
   phone          String?
   address1       String?

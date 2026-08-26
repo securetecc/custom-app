@@ -24,27 +24,24 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
+  // Ordered by how the day runs, not by data model: what needs attention
+  // first, then the work being recorded, then the money, then reference and
+  // configuration. Settings stays last because it is the one nobody visits
+  // twice in a session.
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
-  // Directly under Dashboard: it is the other "where do I start" screen, and
-  // the two belong together rather than separated by the record-keeping tabs.
   { href: "/today", label: "Today", icon: Sunrise, adminOnly: false, soon: true },
-  { href: "/clients", label: "Clients", icon: Users, adminOnly: false },
-  { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
-  { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
-  // Visible to everyone: all tasks are visible to all staff by design. What
-  // differs is who can CREATE one, which the page decides, not the nav.
+  { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
   { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false, soon: true },
+  { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
-  { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false },
-  // Business-side sections: what SecureTECC spends, how it's reviewed and how
-  // the site performs. Admin-only because none of it is a technician's
-  // concern -- unlike Clients or Time Entries, which are the daily job.
-  { href: "/subscriptions", label: "Subscriptions", icon: CreditCard, adminOnly: true, soon: true },
-  { href: "/reviews", label: "Reviews", icon: Star, adminOnly: true, soon: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true, soon: true },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true, soon: true },
   { href: "/documentation", label: "Docs", icon: BookLock, adminOnly: true, soon: true },
+  { href: "/clients", label: "Clients", icon: Users, adminOnly: false },
+  { href: "/reviews", label: "Reviews", icon: Star, adminOnly: true, soon: true },
+  { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false },
+  { href: "/subscriptions", label: "Subscriptions", icon: CreditCard, adminOnly: true, soon: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 

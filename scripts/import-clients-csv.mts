@@ -85,7 +85,7 @@ async function main() {
     clientId: col("ClientID"),
     clientName: col("ClientName"),
     shortName: col("ShortName"),
-    contactName: col("ContactName"),
+    ownerName: col("ContactName"),
     email: col("Email"),
     phone: col("Phone"),
     address1: col("Address1"),
@@ -120,7 +120,7 @@ async function main() {
     clientId: string;
     name: string;
     shortName: string;
-    contactName: string | null;
+    ownerName: string | null;
     email: string | null;
     phone: string | null;
     address1: string | null;
@@ -164,7 +164,7 @@ async function main() {
       clientId,
       name,
       shortName,
-      contactName: (r[idx.contactName] ?? "").trim() || null,
+      ownerName: (r[idx.ownerName] ?? "").trim() || null,
       email: email || null,
       phone: (r[idx.phone] ?? "").trim() || null,
       address1: cleanAddressLine(r[idx.address1] ?? "") || null,
@@ -217,7 +217,7 @@ async function main() {
             organizationId: org.id,
             name: c.name,
             shortName: c.shortName,
-            contactName: c.contactName,
+            ownerName: c.ownerName,
             email: c.email,
             phone: c.phone,
             address1: c.address1,

@@ -7,7 +7,12 @@ export const clientFormSchema = z.object({
     .min(1, "Short name is required")
     .max(20, "Keep it short — this becomes part of the invoice number")
     .regex(/^[A-Za-z0-9-]+$/, "Letters, numbers, and hyphens only"),
-  contactName: z.string().optional().or(z.literal("")),
+  /// Whoever owns the business. Renamed from contactName -- it was standing in
+  /// for two different people, and the one who signs the contract is rarely
+  /// the one who pays the invoice.
+  ownerName: z.string().optional().or(z.literal("")),
+  /// Who billing correspondence is addressed to, when that isn't the owner.
+  billingContactName: z.string().optional().or(z.literal("")),
   email: z.string().email("Enter a valid email").optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   address1: z.string().optional().or(z.literal("")),

@@ -77,7 +77,7 @@ export type PublicTicketValues = z.infer<typeof publicTicketSchema>;
  * technician writing the explanation a minute too late.
  */
 export const ticketStatusChangeSchema = z.object({
-  status: z.enum(["New", "InProgress", "Resolved", "Closed"]),
+  status: z.enum(["New", "InProgress", "WaitingOnClient", "Completed", "Closed"]),
   internalNotes: z.string(),
 });
 

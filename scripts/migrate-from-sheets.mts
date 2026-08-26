@@ -217,7 +217,7 @@ async function main() {
           organizationId: org.id,
           name: r.name,
           shortName: r.shortname,
-          contactName: r.contactname || null,
+          ownerName: r.contactname || null,
           email: r.email || null,
           phone: r.phone || null,
           address1: r.address1 || null,
@@ -333,7 +333,7 @@ async function main() {
       const status = /closed/i.test(r.status)
         ? "Closed"
         : /resolved/i.test(r.status)
-          ? "Resolved"
+          ? "Completed"
           : /progress/i.test(r.status)
             ? "InProgress"
             : "New";
