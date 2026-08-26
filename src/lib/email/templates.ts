@@ -223,6 +223,27 @@ export function ticketAssignedEmail(
   };
 }
 
+/**
+ * The standard sign-off on a closed ticket.
+ *
+ * Closing is the last thing a client hears about a request, and it was going
+ * out as a bare status word -- "Closed", no explanation, no route back. That
+ * reads as a door shutting rather than a job finished.
+ *
+ * Sent whether or not the technician wrote a note, because closing is the one
+ * transition where silence is worst: any note Tony does write appears above
+ * this, so the two complement rather than compete.
+ *
+ * Deliberately says how to reopen the conversation. A client who thinks a
+ * closed ticket cannot be revisited either lets a live problem drop or starts
+ * again from scratch, and both are worse than a reply.
+ */
+function closingMessage(branding: Branding): string {
+  return `<p style="margin:16px 0 0;color:${MUTED};">This request is now closed and no further action is needed from you.</p>
+     <p style="margin:10px 0 0;color:${MUTED};">If the problem comes back or you have a question about it, just reply to this email and we'll reopen it — there's no need to start a new request. For anything unrelated, the support portal is the fastest route to us.</p>
+     <p style="margin:14px 0 0;">Thank you for working with ${escapeHtml(branding.organizationName)}.</p>`;
+}
+
 export function ticketStatusChangeEmail(
   branding: Branding,
   ticket: { ticketNumber: string; contactName: string; status: string },
@@ -244,6 +265,7 @@ export function ticketStatusChangeEmail(
   // wording, because a client who is being waited on and isn't told so will
   // assume the ball is still in our court.
   const waiting = ticket.status === "WaitingOnClient";
+  const closed = ticket.status === "Closed";
   const notes = notesForThisChange?.trim();
 
   return {
@@ -260,7 +282,9 @@ export function ticketStatusChangeEmail(
                  ? "What we did to resolve this"
                  : waiting
                    ? "What we need from you"
-                   : "Update details",
+                   : closed
+                     ? "Closing notes"
+                     : "Update details",
              ) +
              paragraphs(notes)
            : ""
@@ -270,7 +294,9 @@ export function ticketStatusChangeEmail(
            ? `<p style="margin:16px 0 0;color:${MUTED};">Thank you for your patience — please let us know if this fully resolves the issue.</p>`
            : waiting
              ? `<p style="margin:16px 0 0;color:${MUTED};">We've paused work on this until we hear back from you. Just reply to this email and we'll pick it straight back up.</p>`
-             : ""
+             : closed
+               ? closingMessage(branding)
+               : ""
        }
        ${statusUrl ? button(statusUrl, "Visit Support Portal", branding.accentColor) : ""}`,
       statusUrl,
