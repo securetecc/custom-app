@@ -91,7 +91,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Invoiced by month</CardTitle>
           <CardDescription>
-            Value of invoices raised each month, split by where each one is in the pipeline.
+            Value of invoices raised each month, split by where each one is in the pipeline. Issued covers anything finalised and unpaid, however it was delivered.
           </CardDescription>
         </CardHeader>
         <CardContent>

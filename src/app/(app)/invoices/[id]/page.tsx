@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { InvoiceCustomItems } from "@/components/app/invoice-custom-items";
 import {
+  ConfirmInvoiceButton,
   MarkPaidButton,
   RetryPdfButton,
   SendInvoiceActions,
@@ -91,10 +92,16 @@ export default async function InvoiceDetailPage({
             <RetryPdfButton invoiceId={invoice.id} />
           )}
 
+          {/* One step at a time: a draft is confirmed, an issued invoice is
+              sent, a sent one is paid. Showing every transition at once is how
+              an invoice gets marked sent before it was ever finalised. */}
           {!voided && isAdmin && invoice.status === "Draft" && (
+            <ConfirmInvoiceButton invoiceId={invoice.id} />
+          )}
+          {!voided && isAdmin && invoice.status === "Invoiced" && (
             <SendInvoiceActions invoiceId={invoice.id} googleConfigured={isGoogleConfigured()} />
           )}
-          {!voided && isAdmin && invoice.status === "Sent" && (
+          {!voided && isAdmin && (invoice.status === "Sent" || invoice.status === "Invoiced") && (
             <MarkPaidButton invoiceId={invoice.id} />
           )}
           {!voided && isAdmin && (
@@ -141,8 +148,16 @@ export default async function InvoiceDetailPage({
 
       {invoice.timeEntries.length > 0 && (
         <Card>
-          <div className="border-b px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
             <h2 className="font-medium">Time entries ({invoice.timeEntries.length})</h2>
+            {/* Says plainly that these hours are spoken for. Without it the
+                only way to know an entry can't be billed again is to go back
+                to Time Entries and read its Billed badge there. */}
+            <p className="text-xs text-muted-foreground">
+              {voided
+                ? "Released — these entries are available to invoice again."
+                : `Marked as invoiced on ${invoice.invoiceNumber} — they won't appear in a future invoice unless this one is voided.`}
+            </p>
           </div>
           <Table>
             <TableHeader>
@@ -164,7 +179,14 @@ export default async function InvoiceDetailPage({
                 const hours = Number(entry.durationHours);
                 return (
                   <TableRow key={entry.id}>
-                    <TableCell className="whitespace-nowrap">{formatDate(entry.date)}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span className="flex items-center gap-2">
+                        {formatDate(entry.date)}
+                        <Badge variant={voided ? "outline" : "secondary"} className="shrink-0">
+                          {voided ? "Released" : "Invoiced"}
+                        </Badge>
+                      </span>
+                    </TableCell>
                     <TableCell className="max-w-md truncate">{entry.description}</TableCell>
                     <TableCell>{entry.serviceType.code}</TableCell>
                     <TableCell className="text-right">{formatHours(hours)}</TableCell>

@@ -15,7 +15,7 @@ import { InvoiceRowActions } from "@/components/app/invoice-actions";
 import { formatCurrency, formatDate, formatHours } from "@/lib/format";
 import { Plus } from "lucide-react";
 
-const FILTERS = ["All", "Draft", "Sent", "Paid", "Voided"] as const;
+const FILTERS = ["All", "Draft", "Invoiced", "Sent", "Paid", "Voided"] as const;
 type Filter = (typeof FILTERS)[number];
 
 export default async function InvoicesPage({
@@ -104,7 +104,17 @@ export default async function InvoicesPage({
                   {invoice.voidedAt ? (
                     <Badge variant="secondary">Voided</Badge>
                   ) : (
-                    <Badge variant={invoice.status === "Paid" ? "default" : "secondary"}>
+                    // Draft is the only state that is not yet a real invoice,
+                    // so it reads as an outline; Invoiced onward is filled.
+                    <Badge
+                      variant={
+                        invoice.status === "Paid"
+                          ? "default"
+                          : invoice.status === "Draft"
+                            ? "outline"
+                            : "secondary"
+                      }
+                    >
                       {invoice.status}
                     </Badge>
                   )}

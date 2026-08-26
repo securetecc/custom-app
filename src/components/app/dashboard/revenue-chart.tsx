@@ -8,7 +8,7 @@ const usd = (n: number) =>
 
 const SERIES = [
   { key: "paid", label: "Paid", color: "var(--viz-3)" },
-  { key: "sent", label: "Sent", color: "var(--viz-1)" },
+  { key: "sent", label: "Issued", color: "var(--viz-1)" },
   { key: "draft", label: "Draft", color: "var(--viz-4)" },
 ] as const;
 

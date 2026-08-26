@@ -249,8 +249,13 @@ export async function loadDashboardMetrics(
     tx.client.findMany({ select: { id: true, name: true } }),
     // Sent but not paid: the invoices that are actually owed money.
     tx.invoice.findMany({
-      where: { status: "Sent", voidedAt: null },
-      select: { id: true, invoiceNumber: true, totalAmount: true, sentAt: true, client: { select: { name: true } } },
+      // Issued-but-unpaid, whichever way it left: an invoice handed over or
+      // posted is owed exactly as much as one that was emailed.
+      where: { status: { in: ["Sent", "Invoiced"] }, voidedAt: null },
+      select: {
+        id: true, invoiceNumber: true, totalAmount: true, sentAt: true, issuedAt: true,
+        client: { select: { name: true } },
+      },
       orderBy: { sentAt: "asc" },
     }),
     tx.invoice.aggregate({
@@ -302,8 +307,12 @@ export async function loadDashboardMetrics(
     const amount = num(inv.totalAmount);
     const i = bucketFor(inv.createdAt);
     if (i >= 0) {
+      // Invoiced counts with Sent, not with Draft. Both are real invoices
+      // that are out and unpaid; a draft is not yet an invoice at all. The
+      // `else` used to sweep Invoiced in with drafts, which understated the
+      // month's issued revenue and labelled a finalised invoice "Draft".
       if (inv.status === "Paid") revenue[i].paid += amount;
-      else if (inv.status === "Sent") revenue[i].sent += amount;
+      else if (inv.status === "Sent" || inv.status === "Invoiced") revenue[i].sent += amount;
       else revenue[i].draft += amount;
       revenue[i].total += amount;
     }
@@ -350,8 +359,12 @@ export async function loadDashboardMetrics(
   // --- collections ----------------------------------------------------------
   const OVERDUE_AFTER_DAYS = 30;
   const awaitingPayment = sentUnpaid.map((inv) => {
-    const daysSinceSent = inv.sentAt
-      ? Math.floor((Date.now() - inv.sentAt.getTime()) / 86_400_000)
+    // Falls back to issuedAt: an invoice that was never marked sent still has
+    // an age, and treating it as 0 days old would hide a genuinely overdue
+    // one from the chase list.
+    const since = inv.sentAt ?? inv.issuedAt;
+    const daysSinceSent = since
+      ? Math.floor((Date.now() - since.getTime()) / 86_400_000)
       : 0;
     return {
       id: inv.id,

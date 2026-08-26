@@ -895,6 +895,61 @@ export async function createInvoiceGmailDraft(
  * admin clicks once it's really gone out. Ticket and digest email still go
  * through Resend -- that split is intentional.
  */
+/**
+ * Draft -> Invoiced. The commitment step, and deliberately not tied to email.
+ *
+ * Before this existed the only way out of Draft was "Mark as sent", which
+ * forced a lie: an invoice that had been finalised but posted by hand, or paid
+ * straight off a downloaded PDF, had to be recorded as Sent or left sitting in
+ * Draft forever. Neither is true, and Draft totals feed the dashboard
+ * differently from issued ones.
+ *
+ * Refuses an empty invoice. A Draft with nothing on it is a mistake every
+ * time, and finalising it would burn an invoice number on nothing.
+ */
+export async function finalizeInvoice(id: string): Promise<ActionResult> {
+  const { authUserId } = await requireAdminContext();
+
+  try {
+    await withRLS(authUserId, async (tx) => {
+      const invoice = await tx.invoice.findUniqueOrThrow({
+        where: { id },
+        include: {
+          _count: { select: { timeEntries: true, customItems: true, recurringCharges: true } },
+        },
+      });
+      if (invoice.voidedAt) throw new ConflictError("This invoice has been voided.");
+      if (invoice.status !== "Draft") {
+        throw new ConflictError(`This invoice is already ${invoice.status}.`);
+      }
+      const lines =
+        invoice._count.timeEntries + invoice._count.customItems + invoice._count.recurringCharges;
+      if (lines === 0) {
+        throw new ConflictError("There's nothing on this invoice yet.");
+      }
+
+      await tx.invoice.update({
+        where: { id },
+        data: { status: "Invoiced", issuedAt: new Date() },
+      });
+    });
+  } catch (err: unknown) {
+    return { ok: false, error: errorMessage(err) };
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+/**
+ * Records that the invoice went to the client.
+ *
+ * Accepts a Draft as well as an Invoiced one, and back-fills issuedAt when it
+ * does: sending an invoice necessarily issues it, and refusing the shortcut
+ * would only make the common case slower without making the data truer.
+ */
 export async function markInvoiceSent(id: string): Promise<ActionResult> {
   // Admin-only, per the RLS split: only admins transition invoice status.
   const { authUserId } = await requireAdminContext();
@@ -903,12 +958,13 @@ export async function markInvoiceSent(id: string): Promise<ActionResult> {
     await withRLS(authUserId, async (tx) => {
       const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
       if (invoice.voidedAt) throw new ConflictError("This invoice has been voided.");
-      if (invoice.status !== "Draft") {
+      if (invoice.status !== "Draft" && invoice.status !== "Invoiced") {
         throw new ConflictError(`This invoice is already ${invoice.status}.`);
       }
+      const now = new Date();
       await tx.invoice.update({
         where: { id },
-        data: { status: "Sent", sentAt: new Date() },
+        data: { status: "Sent", sentAt: now, issuedAt: invoice.issuedAt ?? now },
       });
     });
   } catch (err: unknown) {
@@ -927,12 +983,16 @@ export async function markInvoicePaid(id: string): Promise<ActionResult> {
     await withRLS(authUserId, async (tx) => {
       const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
       if (invoice.voidedAt) throw new ConflictError("This invoice has been voided.");
-      if (invoice.status !== "Sent") {
-        throw new ConflictError("Only a Sent invoice can be marked Paid.");
+      // Invoiced counts as payable: money arriving against an invoice that
+      // was handed over rather than emailed is ordinary, and forcing it
+      // through Sent first would record a delivery that never happened.
+      if (invoice.status !== "Sent" && invoice.status !== "Invoiced") {
+        throw new ConflictError("Only an issued invoice can be marked Paid.");
       }
+      const now = new Date();
       await tx.invoice.update({
         where: { id },
-        data: { status: "Paid", paidAt: new Date() },
+        data: { status: "Paid", paidAt: now, issuedAt: invoice.issuedAt ?? now },
       });
     });
   } catch (err: unknown) {

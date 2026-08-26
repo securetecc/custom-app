@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   createInvoiceGmailDraft,
+  finalizeInvoice,
   markInvoicePaid,
   markInvoiceSent,
   unvoidInvoice,
@@ -22,7 +23,47 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { CheckCircle2 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+
+/**
+ * Draft -> Invoiced. The step that makes the document real.
+ *
+ * Separate from sending on purpose. An invoice can be issued and then posted,
+ * handed over, or paid off a downloaded PDF -- none of which involve email --
+ * and before this existed all of those had to be recorded as "Sent", which
+ * was simply untrue.
+ */
+export function ConfirmInvoiceButton({ invoiceId }: { invoiceId: string }) {
+  const [pending, setPending] = useState(false);
+  const router = useRouter();
+
+  async function handleClick() {
+    if (
+      !confirm(
+        "Confirm this as a final invoice?\n\nThe numbers are locked in and it stops counting as a draft. You can still download it, email it, or void it.",
+      )
+    ) {
+      return;
+    }
+    setPending(true);
+    const result = await finalizeInvoice(invoiceId);
+    setPending(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Confirmed — this is now an issued invoice");
+    router.refresh();
+  }
+
+  return (
+    <Button onClick={handleClick} disabled={pending}>
+      <CheckCircle2 className="mr-1 h-4 w-4" />
+      {pending ? "Confirming…" : "Confirm as invoice"}
+    </Button>
+  );
+}
 
 /**
  * Two-step, deliberately: invoices leave as a Gmail draft that a human
@@ -63,7 +104,7 @@ export function SendInvoiceActions({
   }
 
   async function handleMarkSent() {
-    if (!confirm("Confirm this invoice has actually been sent from Gmail?")) return;
+    if (!confirm("Confirm this invoice has actually reached the client?")) return;
     setMarking(true);
     const result = await markInvoiceSent(invoiceId);
     setMarking(false);
@@ -84,9 +125,13 @@ export function SendInvoiceActions({
           {marking ? "Saving…" : "Mark as sent"}
         </Button>
       </div>
-      {!googleConfigured && (
+      {!googleConfigured ? (
         <p className="text-xs text-muted-foreground">
           Google Workspace not connected — see docs/google-setup.md
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Or download the PDF and send it yourself, then mark it sent.
         </p>
       )}
     </div>
@@ -294,7 +339,7 @@ export function InvoiceRowActions({
         >
           Mark paid
         </Button>
-      ) : status === "Draft" ? (
+      ) : status === "Invoiced" ? (
         <Button
           variant="ghost"
           size="sm"
@@ -302,6 +347,17 @@ export function InvoiceRowActions({
           onClick={() => run(() => markInvoiceSent(invoiceId), "Marked as sent")}
         >
           Mark sent
+        </Button>
+      ) : status === "Draft" ? (
+        // A draft's next step is confirming it, not claiming it was sent --
+        // the list should offer the same first move the detail page does.
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          onClick={() => run(() => finalizeInvoice(invoiceId), "Confirmed as an invoice")}
+        >
+          Confirm
         </Button>
       ) : null}
     </div>

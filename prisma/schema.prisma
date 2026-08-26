@@ -62,8 +62,14 @@ enum BillingFrequency {
   Annual
 }
 
+/// Draft is a working document -- editable, and its time entries can still be
+/// pulled back. Invoiced is the commitment: the numbers are final and the
+/// document is real, whether or not it has been emailed yet. Sending is a
+/// separate, later fact, because plenty of invoices go out by hand or get paid
+/// off a downloaded PDF and never pass through the mail path at all.
 enum InvoiceStatus {
   Draft
+  Invoiced
   Sent
   Paid
 }
@@ -452,6 +458,10 @@ model Invoice {
   totalHours     Decimal       @db.Decimal(7, 2)
   totalAmount    Decimal       @db.Decimal(10, 2)
   status         InvoiceStatus @default(Draft)
+  /// When the invoice was confirmed as final. Separate from sentAt: an invoice
+  /// can be issued today and posted next week, and "which month does this
+  /// belong to" is answered by this date, not by when it was emailed.
+  issuedAt       DateTime?
   // Storage object path in the private `invoices` bucket (NOT a public URL) --
   // the app mints a short-lived signed URL on demand. Null until the PDF is
   // rendered, which happens after the generation transaction commits.
