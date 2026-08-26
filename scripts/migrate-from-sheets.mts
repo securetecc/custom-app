@@ -41,7 +41,7 @@
  *                          urgency accepts: Emergency, Critical, High, Medium, Low
  */
 import "dotenv/config";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { parseCsv } from "../src/lib/csv";
@@ -50,13 +50,35 @@ const prisma = new PrismaClient();
 
 // ---------------------------------------------------------------- CSV parsing
 
-function readCsv(dir: string, file: string): Record<string, string>[] {
-  const full = path.join(dir, file);
-  if (!existsSync(full)) {
+/**
+ * Reads one export, accepting either the plain filename or the name Google
+ * Sheets produces ("SecureTECC_Operations_Master Sheet - TIME_LOG.csv").
+ *
+ * The sheet puts two title rows above the real header, so the header row is
+ * located rather than assumed: parsing from line 1 makes the export's title
+ * the column names and every row comes back empty.
+ */
+function readCsv(dir: string, file: string, sheetName?: string): Record<string, string>[] {
+  const candidates = [file];
+  if (sheetName) {
+    for (const entry of readdirSync(dir)) {
+      if (entry.toLowerCase().includes(sheetName.toLowerCase()) && entry.endsWith(".csv")) {
+        candidates.push(entry);
+      }
+    }
+  }
+  const found = candidates.find((c) => existsSync(path.join(dir, c)));
+  if (!found) {
     console.warn(`  (no ${file} — skipping that entity)`);
     return [];
   }
-  return parseCsv(readFileSync(full, "utf8"));
+
+  const text = readFileSync(path.join(dir, found), "utf8");
+  const lines = text.split("\n");
+  // The header is the first line naming a column we recognise.
+  const headerAt = lines.findIndex((l) => /(^|,)\s*"?(Date|ClientID|InvoiceID|EntryID|ReimbursableID|ClientName|ClientShortName)"?\s*(,|$)/i.test(l));
+  const body = headerAt > 0 ? lines.slice(headerAt).join("\n") : text;
+  return parseCsv(body);
 }
 
 // ------------------------------------------------------------------- coercion
@@ -67,14 +89,33 @@ function problem(msg: string) {
 }
 
 function toDate(value: string, context: string): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) {
-    problem(`${context}: unparseable date "${value}"`);
-    return null;
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  // Parsed from the STRING, never via `new Date()` + local getters. The sheet
+  // exports two formats and that approach gets one of them wrong every time:
+  // "2026-06-01" is parsed as UTC midnight, and reading it back with
+  // getFullYear/getMonth/getDate in Pacific yields 31 May. Every one of the
+  // 131 time-entry dates would have shifted back a day, moving work across
+  // month boundaries and therefore into the wrong billing period.
+  //
+  // "07/01/2026" happened to survive, because that form parses as LOCAL
+  // midnight -- which is exactly why the bug was easy to miss: the invoice
+  // dates looked fine.
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (iso) {
+    const [, y, m, d] = iso;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
   }
-  // Normalize to UTC midnight so date-only columns don't drift by timezone.
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(raw);
+  if (us) {
+    const [, m, d, y] = us;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  }
+
+  problem(`${context}: unrecognised date format "${raw}" (expected yyyy-mm-dd or mm/dd/yyyy)`);
+  return null;
 }
 
 function toNumber(value: string, context: string): number | null {
@@ -140,11 +181,12 @@ async function main() {
   const userByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u]));
   const fallbackUser = users[0];
 
-  const clientRows = readCsv(dir, "clients.csv");
-  const chargeRows = readCsv(dir, "recurring-charges.csv");
-  const entryRows = readCsv(dir, "time-entries.csv");
-  const invoiceRows = readCsv(dir, "invoices.csv");
-  const ticketRows = readCsv(dir, "tickets.csv");
+  const clientRows = readCsv(dir, "clients.csv", "CLIENTS");
+  const chargeRows = readCsv(dir, "recurring-charges.csv", "RECURRING");
+  const entryRows = readCsv(dir, "time-entries.csv", "TIME_LOG");
+  const invoiceRows = readCsv(dir, "invoices.csv", "INVOICES");
+  const ticketRows = readCsv(dir, "tickets.csv", "TICKETS");
+  const reimbursableRows = readCsv(dir, "reimbursables.csv", "REIMBURSABLE");
 
   console.log(
     `Parsed: ${clientRows.length} clients, ${chargeRows.length} recurring charges, ` +
