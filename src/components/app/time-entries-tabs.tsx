@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/time-entries", label: "Time entries" },
   { href: "/time-entries/recurring-charges", label: "Recurring charges" },
+  { href: "/time-entries/reimbursable-charges", label: "Reimbursable charges" },
 ];
 
 /**
@@ -14,9 +15,12 @@ const TABS = [
  * NOT the base-ui Tabs component, which drives client-side content
  * switching rather than routing. Filters on /time-entries live in the URL
  * (bookmarkable, same pattern as ticket-filters.tsx), so each "tab" needs to
- * be a real route rather than client-only state. Reimbursable expenses are
- * NOT a separate tab -- they're a "Type" filter value on /time-entries
- * itself (see TimeEntryFilters).
+ * be a real route rather than client-only state.
+ *
+ * Reimbursable charges used to be a "Type" value on the time-entries filter
+ * bar instead of a tab. That put two controls in charge of the same state --
+ * the tab strip said "Time entries" while the dropdown said "Reimbursable
+ * expenses" -- and buried a whole category of billable work inside a filter.
  */
 export function TimeEntriesTabs() {
   const pathname = usePathname();

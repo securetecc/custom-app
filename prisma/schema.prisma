@@ -339,6 +339,11 @@ model ReimbursableExpense {
   clientId       String
   client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   date           DateTime     @db.Date
+  /// The sheet's own id ("RB-925653fa"), kept so imported rows can be matched
+  /// against the operations sheet by eye and an import can be undone exactly.
+  /// Same job as Client.reference and Invoice.importedFrom. Null for anything
+  /// created in the app.
+  reference      String?
   description    String
   amount         Decimal      @db.Decimal(10, 2)
   invoiceId      String?

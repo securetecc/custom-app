@@ -12,24 +12,25 @@ import {
 } from "@/components/ui/select";
 import { DATE_RANGE_PRESET_LABELS, DATE_RANGE_PRESETS, type DateRangePreset } from "@/lib/date-range";
 
-export type EntryType = "time" | "expense";
-
-const TYPE_LABELS: Record<EntryType, string> = {
-  time: "Time entries",
-  expense: "Reimbursable expenses",
-};
-
 type ClientOption = { id: string; name: string };
 
+/**
+ * Client and period filters, shared by Time entries and Reimbursable charges.
+ *
+ * `basePath` exists because the two are now separate routes rather than one
+ * page with a Type dropdown. The dropdown is gone: the tab above already says
+ * which list you are looking at, and having both a tab and a select that set
+ * the same thing meant two controls disagreeing about the same state.
+ */
 export function TimeEntryFilters({
-  type,
+  basePath = "/time-entries",
   clientId,
   range,
   start,
   end,
   clients,
 }: {
-  type: EntryType;
+  basePath?: string;
   clientId: string; // "all" or a client id
   range: DateRangePreset;
   start: string; // yyyy-mm-dd, only meaningful when range === "custom"
@@ -38,10 +39,9 @@ export function TimeEntryFilters({
 }) {
   const router = useRouter();
 
-  function navigate(next: Partial<{ type: EntryType; clientId: string; range: DateRangePreset; start: string; end: string }>) {
-    const merged = { type, clientId, range, start, end, ...next };
+  function navigate(next: Partial<{ clientId: string; range: DateRangePreset; start: string; end: string }>) {
+    const merged = { clientId, range, start, end, ...next };
     const params = new URLSearchParams();
-    if (merged.type !== "time") params.set("type", merged.type);
     if (merged.clientId !== "all") params.set("client", merged.clientId);
     if (merged.range !== "all") params.set("range", merged.range);
     if (merged.range === "custom") {
@@ -49,27 +49,11 @@ export function TimeEntryFilters({
       if (merged.end) params.set("end", merged.end);
     }
     const qs = params.toString();
-    router.push(`/time-entries${qs ? `?${qs}` : ""}`);
+    router.push(`${basePath}${qs ? `?${qs}` : ""}`);
   }
 
   return (
     <div className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Type</Label>
-        <Select value={type} onValueChange={(v) => v && navigate({ type: v as EntryType })}>
-          <SelectTrigger className="w-[190px]">
-            <SelectValue>{(value) => TYPE_LABELS[value as EntryType]}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(TYPE_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Client</Label>
         <Select value={clientId} onValueChange={(v) => v && navigate({ clientId: v })}>

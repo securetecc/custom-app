@@ -227,20 +227,16 @@ export function ticketAssignedEmail(
  * The standard sign-off on a closed ticket.
  *
  * Closing is the last thing a client hears about a request, and it was going
- * out as a bare status word -- "Closed", no explanation, no route back. That
- * reads as a door shutting rather than a job finished.
+ * out as a bare status word -- "Closed", no explanation. Two sentences, no
+ * more: this is a receipt, not a letter, and the longer version said things
+ * the reader had not asked about.
  *
  * Sent whether or not the technician wrote a note, because closing is the one
- * transition where silence is worst: any note Tony does write appears above
- * this, so the two complement rather than compete.
- *
- * Deliberately says how to reopen the conversation. A client who thinks a
- * closed ticket cannot be revisited either lets a live problem drop or starts
- * again from scratch, and both are worse than a reply.
+ * transition where silence is worst. Any note appears above it, so the two
+ * complement rather than compete.
  */
 function closingMessage(branding: Branding): string {
   return `<p style="margin:16px 0 0;color:${MUTED};">This request is now closed and no further action is needed from you.</p>
-     <p style="margin:10px 0 0;color:${MUTED};">If the problem comes back or you have a question about it, just reply to this email and we'll reopen it — there's no need to start a new request. For anything unrelated, the support portal is the fastest route to us.</p>
      <p style="margin:14px 0 0;">Thank you for working with ${escapeHtml(branding.organizationName)}.</p>`;
 }
 
