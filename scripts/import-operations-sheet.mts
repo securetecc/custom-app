@@ -242,6 +242,11 @@ async function main() {
           "Paid" | "Sent" | "Draft",
         sentAt: toDate(r.sentdate, `invoice ${r.invoiceid}`),
         paidAt: toDate(r.paiddate, `invoice ${r.invoiceid}`),
+        // Dated to the period it covers, not to the moment of import. The
+        // dashboard's revenue chart buckets by createdAt, so leaving it at
+        // "now" credits every historical invoice to the month the import
+        // ran -- July's $13,500 appeared as August revenue.
+        createdAt: toDate(r.periodend, `invoice ${r.invoiceid}`) ?? new Date(),
         // No PDF: the originals live in Drive, and generating our own would
         // replace a real invoice with an approximation of it.
         importedFrom: tag,
