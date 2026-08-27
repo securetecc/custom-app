@@ -3,6 +3,18 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Server Actions default to a 1 MB body, and the support form was
+      // advertising 10 MB per file across 5 files. Anything over 1 MB failed
+      // with a 413 the form never surfaced.
+      //
+      // 4 MB, not 50: Vercel caps a serverless request body at 4.5 MB, so a
+      // larger number here would only move the failure from Next.js to the
+      // platform. Attachment limits below are set to fit inside this.
+      bodySizeLimit: "4mb",
+    },
+  },
   // Stop announcing the framework in responses -- free, no functional effect.
   poweredByHeader: false,
   // Security-audit fix: no headers were set anywhere (checked proxy.ts too).

@@ -83,7 +83,17 @@ export const ticketStatusChangeSchema = z.object({
 
 export type TicketStatusChangeValues = z.infer<typeof ticketStatusChangeSchema>;
 
-export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10MB each
+/**
+ * Per file, and across all files.
+ *
+ * Bounded by the transport, not by preference: attachments travel inside a
+ * Server Action request, Vercel caps a serverless request body at 4.5 MB, and
+ * next.config.ts sets the Server Action limit to 4 MB to stay inside that.
+ * The form used to advertise 10 MB per file across 5 files -- a 50 MB promise
+ * over a 1 MB pipe, which failed with a 413 that the form never showed.
+ */
+export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024; // 3MB each
+export const MAX_ATTACHMENTS_TOTAL_BYTES = 3.5 * 1024 * 1024; // 3.5MB combined
 export const MAX_ATTACHMENTS = 5;
 export const ALLOWED_ATTACHMENT_TYPES = [
   "image/png",

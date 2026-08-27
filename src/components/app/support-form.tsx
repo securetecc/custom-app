@@ -7,6 +7,8 @@ import { submitPublicTicket } from "@/app/support/actions";
 import {
   ISSUE_TYPES,
   MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS_TOTAL_BYTES,
   URGENCY_LABELS,
   URGENCY_RESPONSE_TIMES,
 } from "@/lib/validations/ticket";
@@ -49,25 +51,43 @@ export function SupportForm() {
   function addFiles(picked: FileList | null) {
     if (!picked?.length) return;
 
-    // Snapshot to a real array FIRST. `picked` is the input's own live
-    // FileList, and clearing the input below empties it -- so reading it
-    // inside the setFiles updater, which React runs later, found nothing and
-    // silently dropped the file. That is why a second attachment never
-    // appeared while the change event fired perfectly well.
+    // Everything here is computed SYNCHRONOUSLY, from the current `files`
+    // state, rather than inside a setFiles updater.
+    //
+    // Two bugs came from doing it the other way. `picked` is the input's own
+    // live FileList and clearing the input empties it, so a deferred updater
+    // read nothing. And a rejection list built inside the updater was read by
+    // setError before React had run it, so oversized files were silently
+    // dropped with no message. Both were timing-dependent, which is why they
+    // looked intermittent.
     const chosen = Array.from(picked);
-
-    // Cleared so re-picking the SAME file still fires onChange. Done here,
-    // after the snapshot, rather than after setFiles.
     if (fileInputRef.current) fileInputRef.current.value = "";
 
-    setFiles((current) => {
-      const next = [...current];
-      for (const file of chosen) {
-        // Same name AND size is the closest thing to identity a File gives us.
-        if (!next.some((f) => f.name === file.name && f.size === file.size)) next.push(file);
+    const next = [...files];
+    let total = next.reduce((sum, f) => sum + f.size, 0);
+    const rejected: string[] = [];
+
+    for (const file of chosen) {
+      if (next.length >= MAX_ATTACHMENTS) {
+        rejected.push(`${file.name} — you can attach at most ${MAX_ATTACHMENTS} files`);
+        continue;
       }
-      return next.slice(0, MAX_ATTACHMENTS);
-    });
+      // Same name AND size is the closest thing to identity a File gives us.
+      if (next.some((f) => f.name === file.name && f.size === file.size)) continue;
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        rejected.push(`${file.name} is ${formatSize(file.size)} — the limit is ${formatSize(MAX_ATTACHMENT_BYTES)} per file`);
+        continue;
+      }
+      if (total + file.size > MAX_ATTACHMENTS_TOTAL_BYTES) {
+        rejected.push(`${file.name} would take you over the ${formatSize(MAX_ATTACHMENTS_TOTAL_BYTES)} total`);
+        continue;
+      }
+      next.push(file);
+      total += file.size;
+    }
+
+    setFiles(next);
+    setError(rejected.length > 0 ? rejected.join(". ") : null);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -81,7 +101,23 @@ export function SupportForm() {
     formData.delete("attachments");
     for (const file of files) formData.append("attachments", file);
 
-    const result = await submitPublicTicket(formData);
+    // try/catch, because a THROWN error (rather than a returned one) left the
+    // button reading "Submitting…" forever with nothing on screen explaining
+    // why -- which is exactly how the 1 MB body limit presented: a 413 the
+    // form swallowed entirely.
+    let result: Awaited<ReturnType<typeof submitPublicTicket>>;
+    try {
+      result = await submitPublicTicket(formData);
+    } catch (err) {
+      setSubmitting(false);
+      const tooBig = err instanceof Error && /body|413|size/i.test(err.message);
+      setError(
+        tooBig
+          ? "Those attachments are too large to send. Please remove one, or attach a smaller file."
+          : "Something went wrong submitting your request. Please try again, or call us at 877.707.TECC.",
+      );
+      return;
+    }
     setSubmitting(false);
 
     if (!result.ok) {
@@ -249,8 +285,12 @@ export function SupportForm() {
         </button>
         <p className="mt-2 text-xs text-[rgba(255,255,255,0.55)]">
           {files.length > 0
-            ? `${files.length} of ${MAX_ATTACHMENTS} attached. Images or PDFs, 10MB each.`
-            : `Screenshots help a lot. Up to ${MAX_ATTACHMENTS} images or PDFs, 10MB each.`}
+            ? `${files.length} of ${MAX_ATTACHMENTS} attached — ${formatSize(
+                files.reduce((sum, f) => sum + f.size, 0),
+              )} of ${formatSize(MAX_ATTACHMENTS_TOTAL_BYTES)} used.`
+            : `Screenshots help a lot. Up to ${MAX_ATTACHMENTS} images or PDFs, ${formatSize(
+                MAX_ATTACHMENT_BYTES,
+              )} each.`}
         </p>
 
         {files.length > 0 && (
