@@ -193,6 +193,18 @@ export function SupportForm() {
         <label htmlFor="attachments" className={LABEL}>
           Attachments (optional)
         </label>
+        {/* The native input is hidden rather than styled.
+            
+            It has to be cleared after every pick, otherwise choosing the same
+            file twice fires no onChange and the second attempt looks broken.
+            But a cleared input makes the browser paint "No file chosen" — so
+            the control said no file was chosen while sitting directly above a
+            list of the chosen files, which reads as a failed upload. Reported
+            as exactly that.
+            
+            Hidden but not removed: it still does the file picking, still
+            carries the accept filter, and the label above still targets it, so
+            keyboard and screen-reader behaviour are unchanged. */}
         <input
           id="attachments"
           ref={fileInputRef}
@@ -200,10 +212,24 @@ export function SupportForm() {
           multiple
           accept="image/png,image/jpeg,image/gif,image/webp,application/pdf"
           onChange={(e) => addFiles(e.target.files)}
-          className={`${FIELD} file:mr-3 file:rounded-md file:border-0 file:bg-[#06E1DC] file:px-3 file:py-1 file:text-sm file:font-semibold file:text-[#071E37]`}
+          className="sr-only"
         />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={files.length >= MAX_ATTACHMENTS}
+          className="w-full rounded-[10px] border border-dashed border-[rgba(6,225,220,0.4)] bg-[rgba(6,225,220,0.04)] px-4 py-3 text-sm font-semibold text-[#06E1DC] transition-colors hover:border-[#06E1DC] hover:bg-[rgba(6,225,220,0.09)] disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {files.length === 0
+            ? "Choose files"
+            : files.length >= MAX_ATTACHMENTS
+              ? `Maximum ${MAX_ATTACHMENTS} files attached`
+              : "Add another file"}
+        </button>
         <p className="mt-2 text-xs text-[rgba(255,255,255,0.55)]">
-          Screenshots help a lot. Up to {MAX_ATTACHMENTS} images or PDFs, 10MB each.
+          {files.length > 0
+            ? `${files.length} of ${MAX_ATTACHMENTS} attached. Images or PDFs, 10MB each.`
+            : `Screenshots help a lot. Up to ${MAX_ATTACHMENTS} images or PDFs, 10MB each.`}
         </p>
 
         {files.length > 0 && (
