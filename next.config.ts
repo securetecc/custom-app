@@ -109,6 +109,14 @@ export default withSentryConfig(nextConfig, {
   // Better client stack traces at the cost of a slightly larger upload.
   widenClientFileUpload: true,
 
+  // Sentry wraps proxy.ts (middleware) automatically. Turned OFF because
+  // every POST that passes through the middleware hung on production while
+  // GETs were fine, and /monitoring -- the one POST route the matcher
+  // excludes -- worked. Only requests with a body were affected, which points
+  // at the wrapper reading the request. Errors from route handlers, Server
+  // Actions and pages are still captured; only middleware is uninstrumented.
+  autoInstrumentMiddleware: false,
+
   // Proxies Sentry through our own origin so ad-blockers don't silently drop
   // reports. NOTE: this path must be excluded from proxy.ts's matcher, or the
   // auth gate redirects the tunnel to /login and nothing is ever reported.
