@@ -5,6 +5,23 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
+      // Server Actions reject a request whose Origin does not match the Host,
+      // as CSRF protection. The ticket portal is served THROUGH a rewrite --
+      // ticket.securetecc.com/ is rewritten to /support by proxy.ts -- and the
+      // custom domains sit in front of Vercel's own, so the comparison fails
+      // and the POST is refused before the action's response ever reaches the
+      // browser. That is what left the form on "Submitting…" with a status-0
+      // POST in the logs and no error anywhere.
+      //
+      // Listing the real hosts restores the check rather than disabling it:
+      // these are the only origins the app is ever served from.
+      allowedOrigins: [
+        "ticket.securetecc.com",
+        "manage.securetecc.com",
+        "custom-app-six.vercel.app",
+        "custom-app-secure-tecc.vercel.app",
+        "custom-app-git-main-secure-tecc.vercel.app",
+      ],
       // Server Actions default to a 1 MB body, and the support form was
       // advertising 10 MB per file across 5 files. Anything over 1 MB failed
       // with a 413 the form never surfaced.
