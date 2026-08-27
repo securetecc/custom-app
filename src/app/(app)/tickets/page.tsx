@@ -113,6 +113,7 @@ export default async function TicketsPage({
             <TableRow>
               <TableHead>Ticket</TableHead>
               <TableHead>Company</TableHead>
+              <TableHead>Contact</TableHead>
               <TableHead>Issue</TableHead>
               <TableHead>Urgency</TableHead>
               <TableHead>Status</TableHead>
@@ -136,6 +137,9 @@ export default async function TicketsPage({
                   )}
                 </TableCell>
                 <TableCell>{ticket.clientCompanyName}</TableCell>
+                {/* The person who raised it, not the client's owner or billing
+                    contact -- a ticket is from whoever hit the form. */}
+                <TableCell className="whitespace-nowrap">{ticket.contactName}</TableCell>
                 <TableCell>{ticket.issueType}</TableCell>
                 <TableCell>
                   <Badge className={URGENCY_BADGE_CLASS[ticket.urgency]}>{ticket.urgency}</Badge>
@@ -156,7 +160,7 @@ export default async function TicketsPage({
             ))}
             {tickets.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                   No tickets match this filter.
                 </TableCell>
               </TableRow>
