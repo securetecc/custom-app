@@ -36,10 +36,14 @@ const TICKET_PASSTHROUGH = ["/_next", "/support", "/privacy", "/terms"];
 // Machine-to-machine routes, deliberately resolved BEFORE any host routing.
 //
 // The ticket-host branch below redirects everything it doesn't recognise to
-// "/". Vercel Cron invokes whichever production domain Vercel picks, and
-// ticket.securetecc.com is currently the only custom domain attached -- so a
+// "/". Vercel Cron invokes whichever production domain Vercel picks, and for
+// a while ticket.securetecc.com was the only custom domain attached -- so a
 // cron hitting that host was being 307'd to the ticket form and silently
 // doing nothing, on a schedule, with a 200 in the logs.
+//
+// manage.securetecc.com is now attached as well and needs no entry here:
+// anything that is not a ticket host is served as the internal app, which is
+// exactly what it should be.
 //
 // Safe to exempt from host routing because neither route relies on it for
 // access control: /api/cron verifies `Authorization: Bearer $CRON_SECRET`
