@@ -24,6 +24,17 @@ const FIELD =
 const LABEL =
   "mb-2 block text-xs font-bold uppercase tracking-[1.5px] text-[#06E1DC]";
 
+/**
+ * Sizes in the unit that makes them readable. Everything was shown in MB to
+ * one decimal, so a 40KB screenshot displayed as "0.0MB" -- which reads as an
+ * empty file, right next to an upload the user is unsure worked.
+ */
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export function SupportForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,16 +48,26 @@ export function SupportForm() {
 
   function addFiles(picked: FileList | null) {
     if (!picked?.length) return;
+
+    // Snapshot to a real array FIRST. `picked` is the input's own live
+    // FileList, and clearing the input below empties it -- so reading it
+    // inside the setFiles updater, which React runs later, found nothing and
+    // silently dropped the file. That is why a second attachment never
+    // appeared while the change event fired perfectly well.
+    const chosen = Array.from(picked);
+
+    // Cleared so re-picking the SAME file still fires onChange. Done here,
+    // after the snapshot, rather than after setFiles.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
     setFiles((current) => {
       const next = [...current];
-      for (const file of Array.from(picked)) {
+      for (const file of chosen) {
         // Same name AND size is the closest thing to identity a File gives us.
         if (!next.some((f) => f.name === file.name && f.size === file.size)) next.push(file);
       }
       return next.slice(0, MAX_ATTACHMENTS);
     });
-    // Clear the input so re-picking the same file still fires onChange.
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -241,7 +262,7 @@ export function SupportForm() {
               >
                 <span className="min-w-0 flex-1 truncate">{file.name}</span>
                 <span className="shrink-0 text-xs text-[rgba(255,255,255,0.55)]">
-                  {(file.size / 1024 / 1024).toFixed(1)}MB
+                  {formatSize(file.size)}
                 </span>
                 <button
                   type="button"
