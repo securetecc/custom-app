@@ -201,121 +201,145 @@ async function main() {
   }
 
   // --- write ---------------------------------------------------------------
+  //
+  // Existence checks happen BEFORE the transaction and inserts go through
+  // createMany, rather than a findFirst + create per row inside it. The
+  // per-row version issued roughly 300 round trips to Oregon and blew the
+  // transaction timeout at the tickets, rolling the whole import back. This
+  // is a handful of statements instead.
+  const existingInvoices = new Set(
+    (await prisma.invoice.findMany({ select: { invoiceNumber: true } })).map((i) => i.invoiceNumber),
+  );
+  const existingExpenses = new Set(
+    (await prisma.reimbursableExpense.findMany({ where: { reference: { not: null } }, select: { reference: true } }))
+      .map((e) => e.reference!),
+  );
+  const existingTickets = new Set(
+    (await prisma.ticket.findMany({ select: { ticketNumber: true } })).map((t) => t.ticketNumber),
+  );
+  const existingEntries = new Set(
+    (await prisma.timeEntry.findMany({ select: { clientId: true, date: true, description: true } }))
+      .map((e) => `${e.clientId}|${e.date.toISOString().slice(0, 10)}|${e.description}`),
+  );
+
   await prisma.$transaction(async (tx) => {
+    // --- invoices, and the per-client counters that must follow them -------
+    const invoiceData = [];
+    const highestSeq = new Map<string, number>();
     for (const r of invoiceRows) {
       const client = resolveClient(r.clientid, r.clientname);
       if (!client) continue;
-      const existing = await tx.invoice.findFirst({ where: { invoiceNumber: r.invoiceid } });
-      if (existing) { invoiceIds.set(r.invoiceid, existing.id); stats.skipped++; continue; }
-
-      const status = /paid/i.test(r.status) ? "Paid" : /sent/i.test(r.status) ? "Sent" : "Draft";
-      const created = await tx.invoice.create({
-        data: {
-          organizationId: org.id,
-          clientId: client.id,
-          invoiceNumber: r.invoiceid,
-          periodStart: toDate(r.periodstart, `invoice ${r.invoiceid}`) ?? new Date(),
-          periodEnd: toDate(r.periodend, `invoice ${r.invoiceid}`) ?? new Date(),
-          totalHours: Number(r.totalhours) || 0,
-          totalAmount: toMoney(r.totalamount),
-          status,
-          sentAt: toDate(r.sentdate, `invoice ${r.invoiceid}`),
-          paidAt: toDate(r.paiddate, `invoice ${r.invoiceid}`),
-          // No PDF is rendered: the originals live in Drive and regenerating
-          // would replace a real invoice with an approximation of it.
-          importedFrom: tag,
-        },
-        select: { id: true },
+      if (existingInvoices.has(r.invoiceid)) { stats.skipped++; continue; }
+      invoiceData.push({
+        organizationId: org.id,
+        clientId: client.id,
+        invoiceNumber: r.invoiceid,
+        periodStart: toDate(r.periodstart, `invoice ${r.invoiceid}`) ?? new Date(),
+        periodEnd: toDate(r.periodend, `invoice ${r.invoiceid}`) ?? new Date(),
+        totalHours: Number(r.totalhours) || 0,
+        totalAmount: toMoney(r.totalamount),
+        status: (/paid/i.test(r.status) ? "Paid" : /sent/i.test(r.status) ? "Sent" : "Draft") as
+          "Paid" | "Sent" | "Draft",
+        sentAt: toDate(r.sentdate, `invoice ${r.invoiceid}`),
+        paidAt: toDate(r.paiddate, `invoice ${r.invoiceid}`),
+        // No PDF: the originals live in Drive, and generating our own would
+        // replace a real invoice with an approximation of it.
+        importedFrom: tag,
       });
-      invoiceIds.set(r.invoiceid, created.id);
-      stats.invoices++;
-
-      // Continuity: the next invoice generated must follow history, not restart.
       const seq = sequenceOf(r.invoiceid);
-      if (seq > client.lastInvoiceSequence) {
-        await tx.client.update({ where: { id: client.id }, data: { lastInvoiceSequence: seq } });
-        client.lastInvoiceSequence = seq;
-      }
+      if (seq > (highestSeq.get(client.id) ?? 0)) highestSeq.set(client.id, seq);
+    }
+    if (invoiceData.length) await tx.invoice.createMany({ data: invoiceData, skipDuplicates: true });
+    stats.invoices = invoiceData.length;
+
+    // Continuity: the next invoice generated must follow history, not restart.
+    for (const [clientId, seq] of highestSeq) {
+      await tx.client.update({ where: { id: clientId }, data: { lastInvoiceSequence: seq } });
     }
 
+    // Ids are needed to link the time entries, so read them back by number.
+    for (const i of await tx.invoice.findMany({ select: { id: true, invoiceNumber: true } })) {
+      invoiceIds.set(i.invoiceNumber, i.id);
+    }
+
+    // --- time entries ------------------------------------------------------
+    const entryData = [];
     for (const r of entryRows) {
       const client = resolveClient(r.clientid, r.clientname);
       if (!client) continue;
-      const code = serviceCodeOf(r.description ?? "") ?? "R-S";
-      const serviceType = byCode.get(code.toUpperCase());
+      const serviceType = byCode.get((serviceCodeOf(r.description ?? "") ?? "R-S").toUpperCase());
       if (!serviceType) continue;
-      const exists = await tx.timeEntry.findFirst({
-        where: { clientId: client.id, description: cleanDescription(r.description), date: toDate(r.date, "")! },
+      const date = toDate(r.date, `entry ${r.entryid}`) ?? new Date();
+      const description = cleanDescription(r.description ?? "");
+      if (existingEntries.has(`${client.id}|${date.toISOString().slice(0, 10)}|${description}`)) {
+        stats.skipped++; continue;
+      }
+      entryData.push({
+        organizationId: org.id,
+        clientId: client.id,
+        serviceTypeId: serviceType.id,
+        date,
+        // Hours are imported AS RECORDED. Re-applying today's billing minimums
+        // would rewrite what was actually billed.
+        durationHours: Number(r.durationhours) || 0,
+        description,
+        billableStatus: (/non/i.test(r.billablestatus) ? "NonBillable"
+          : /residual/i.test(r.billablestatus) ? "Residual" : "Billable") as
+          "NonBillable" | "Residual" | "Billable",
+        rawInput: r.rawvoiceinput?.startsWith("STAGED") || r.rawvoiceinput === "MANUAL-ENTRY"
+          ? null : r.rawvoiceinput || null,
+        source: (r.rawvoiceinput === "MANUAL-ENTRY" ? "Manual" : "Voice") as "Manual" | "Voice",
+        invoiceId: r.invoiceid ? (invoiceIds.get(r.invoiceid) ?? null) : null,
+        loggedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
       });
-      if (exists) { stats.skipped++; continue; }
-
-      await tx.timeEntry.create({
-        data: {
-          organizationId: org.id,
-          clientId: client.id,
-          serviceTypeId: serviceType.id,
-          date: toDate(r.date, `entry ${r.entryid}`) ?? new Date(),
-          // Hours are imported AS RECORDED. Re-applying today's billing
-          // minimums would rewrite what was actually billed.
-          durationHours: Number(r.durationhours) || 0,
-          description: cleanDescription(r.description ?? ""),
-          billableStatus: /non/i.test(r.billablestatus) ? "NonBillable"
-            : /residual/i.test(r.billablestatus) ? "Residual" : "Billable",
-          rawInput: r.rawvoiceinput?.startsWith("STAGED") || r.rawvoiceinput === "MANUAL-ENTRY"
-            ? null : r.rawvoiceinput || null,
-          source: r.rawvoiceinput === "MANUAL-ENTRY" ? "Manual" : "Voice",
-          invoiceId: r.invoiceid ? (invoiceIds.get(r.invoiceid) ?? null) : null,
-          loggedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
-        },
-      });
-      stats.entries++;
     }
+    if (entryData.length) await tx.timeEntry.createMany({ data: entryData });
+    stats.entries = entryData.length;
 
+    // --- reimbursables -----------------------------------------------------
+    const expenseData = [];
     for (const r of expenseRows) {
       const client = resolveClient(r.clientid, r.clientname);
       if (!client) continue;
-      if (await tx.reimbursableExpense.findFirst({ where: { reference: r.reimbursableid } })) {
-        stats.skipped++; continue;
-      }
-      await tx.reimbursableExpense.create({
-        data: {
-          organizationId: org.id,
-          clientId: client.id,
-          reference: r.reimbursableid,
-          date: toDate(r.date, `expense ${r.reimbursableid}`) ?? new Date(),
-          description: r.description,
-          amount: toMoney(r.amount),
-          invoiceId: r.invoiceid ? (invoiceIds.get(r.invoiceid) ?? null) : null,
-          loggedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
-        },
+      if (existingExpenses.has(r.reimbursableid)) { stats.skipped++; continue; }
+      expenseData.push({
+        organizationId: org.id,
+        clientId: client.id,
+        reference: r.reimbursableid,
+        date: toDate(r.date, `expense ${r.reimbursableid}`) ?? new Date(),
+        description: r.description,
+        amount: toMoney(r.amount),
+        invoiceId: r.invoiceid ? (invoiceIds.get(r.invoiceid) ?? null) : null,
+        loggedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
       });
-      stats.expenses++;
     }
+    if (expenseData.length) await tx.reimbursableExpense.createMany({ data: expenseData });
+    stats.expenses = expenseData.length;
 
+    // --- tickets -----------------------------------------------------------
+    const ticketData = [];
     let ticketSeq = org.lastTicketSequence;
     for (const r of ticketRows) {
-      if (await tx.ticket.findFirst({ where: { ticketNumber: r.ticketid } })) { stats.skipped++; continue; }
-      const status = TICKET_STATUS[(r.status ?? "").trim().toLowerCase()] ?? "New";
-      await tx.ticket.create({
-        data: {
-          organizationId: org.id,
-          ticketNumber: r.ticketid,
-          clientCompanyName: r.clientname,
-          contactName: r.contactname,
-          contactEmail: r.contactemail,
-          callbackNumber: r.callbacknumber || null,
-          issueType: r.issuetype || "Other",
-          urgency: URGENCY[(r.urgencylevel ?? "").trim().toLowerCase()] ?? "Medium",
-          description: r.description,
-          status,
-          internalNotes: r.notes || null,
-          createdAt: toDate(r.submitteddate, `ticket ${r.ticketid}`) ?? new Date(),
-          resolvedAt: toDate(r.resolveddate, `ticket ${r.ticketid}`),
-        },
+      if (existingTickets.has(r.ticketid)) { stats.skipped++; continue; }
+      ticketData.push({
+        organizationId: org.id,
+        ticketNumber: r.ticketid,
+        clientCompanyName: r.clientname,
+        contactName: r.contactname,
+        contactEmail: r.contactemail,
+        callbackNumber: r.callbacknumber || null,
+        issueType: r.issuetype || "Other",
+        urgency: (URGENCY[(r.urgencylevel ?? "").trim().toLowerCase()] ?? "Medium"),
+        description: r.description,
+        status: (TICKET_STATUS[(r.status ?? "").trim().toLowerCase()] ?? "New"),
+        internalNotes: r.notes || null,
+        createdAt: toDate(r.submitteddate, `ticket ${r.ticketid}`) ?? new Date(),
+        resolvedAt: toDate(r.resolveddate, `ticket ${r.ticketid}`),
       });
-      stats.tickets++;
       ticketSeq = Math.max(ticketSeq, Number(/-(\d+)$/.exec(r.ticketid)?.[1] ?? 0));
     }
+    if (ticketData.length) await tx.ticket.createMany({ data: ticketData });
+    stats.tickets = ticketData.length;
     if (ticketSeq > org.lastTicketSequence) {
       await tx.organization.update({ where: { id: org.id }, data: { lastTicketSequence: ticketSeq } });
     }
