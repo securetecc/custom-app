@@ -16,10 +16,18 @@ Sentry.init({
   // Full sampling in dev where volume is trivial; 10% in production.
   tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
 
-  // The attachment bug earlier today was a caught error whose cause was
-  // invisible. Local variables at the throw site are exactly what would have
-  // made that a one-look diagnosis.
-  includeLocalVariables: true,
+  // includeLocalVariables is deliberately OFF.
+  //
+  // It was on, to capture locals at a throw site. It works by attaching
+  // Node's inspector to the running process -- which is why every production
+  // invocation logged "Debugger listening on ws://127.0.0.1:...". On Vercel
+  // that open inspector session kept the function from settling, so Server
+  // Actions ran to completion but their response was never returned: the
+  // ticket form and the status lookup both sat on "Submitting…"/"Checking…"
+  // forever, while ordinary route handlers were unaffected.
+  //
+  // Do not re-enable it on serverless. If locals are needed for a specific
+  // bug, capture them explicitly with Sentry.setContext at the throw site.
 
   environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV,
 });
