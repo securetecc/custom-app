@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PAYMENT_METHODS, updateInvoicePaymentDetails } from "@/app/(app)/invoices/actions";
+import { updateInvoicePaymentDetails } from "@/app/(app)/invoices/actions";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 
 /**
  * Sent date, paid date and payment method, editable directly.

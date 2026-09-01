@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminContext, requireOrgContext } from "@/lib/auth";
 import { withRLS, type TxClient } from "@/lib/db/rls";
+import { PAYMENT_METHODS, type PaymentMethodValue } from "@/lib/payment-methods";
 import {
   generateInvoiceSchema,
   invoicePeriodSchema,
@@ -1116,10 +1117,6 @@ export async function unvoidInvoice(id: string): Promise<ActionResult> {
   revalidatePath(`/invoices/${id}`);
   return { ok: true };
 }
-
-/** The payment methods the UI offers, in the order they're shown. */
-export const PAYMENT_METHODS = ["Check", "Cash", "ACH", "Zelle", "PayPal", "Venmo", "Other"] as const;
-export type PaymentMethodValue = (typeof PAYMENT_METHODS)[number];
 
 /**
  * Corrects the sent/paid dates and payment method on an invoice.
