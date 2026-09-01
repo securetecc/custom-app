@@ -103,6 +103,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         <Collections
           collections={metrics.collections}
           awaitingPayment={metrics.awaitingPayment}
+          paymentMethods={metrics.paymentMethods}
         />
         <TicketAttention tickets={metrics.tickets} />
       </div>

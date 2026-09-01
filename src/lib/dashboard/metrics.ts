@@ -188,6 +188,8 @@ export type DashboardMetrics = {
     overdue: boolean;
   }[];
   collections: { sentValue: number; paidValue: number; overdueValue: number };
+  /** How paid invoices in range were settled, largest first. */
+  paymentMethods: { method: string; count: number; amount: number }[];
 };
 
 /** Prisma Decimal | number | null -> number. */
@@ -219,6 +221,7 @@ export async function loadDashboardMetrics(
     sentUnpaid,
     paidInRange,
     recentTickets,
+    paidByMethod,
   ] = await Promise.all([
     tx.timeEntry.aggregate({
       where: { loggedByUserId: userId, createdAt: { gte: dayStart } },
@@ -272,6 +275,14 @@ export async function loadDashboardMetrics(
       },
       orderBy: [{ createdAt: "desc" }],
       take: 5,
+    }),
+    // Grouped by how the client paid. Ranged on paidAt, not createdAt: the
+    // question is which methods brought money IN during the period.
+    tx.invoice.groupBy({
+      by: ["paymentMethod"],
+      where: { status: "Paid", voidedAt: null, paidAt: { gte: range.start, lt: range.end } },
+      _count: true,
+      _sum: { totalAmount: true },
     }),
   ]);
 
@@ -423,5 +434,14 @@ export async function loadDashboardMetrics(
       paidValue: num(paidInRange._sum.totalAmount),
       overdueValue: awaitingPayment.filter((i) => i.overdue).reduce((s, i) => s + i.amount, 0),
     },
+    paymentMethods: paidByMethod
+      .map((r) => ({
+        // Paid before the method was recorded -- shown rather than dropped, so
+        // the parts still sum to the total collected.
+        method: r.paymentMethod ?? "Not recorded",
+        count: r._count,
+        amount: num(r._sum.totalAmount),
+      }))
+      .sort((a, b) => b.amount - a.amount),
   };
 }

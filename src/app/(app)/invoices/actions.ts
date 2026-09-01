@@ -1116,3 +1116,78 @@ export async function unvoidInvoice(id: string): Promise<ActionResult> {
   revalidatePath(`/invoices/${id}`);
   return { ok: true };
 }
+
+/** The payment methods the UI offers, in the order they're shown. */
+export const PAYMENT_METHODS = ["Check", "Cash", "ACH", "Zelle", "PayPal", "Venmo", "Other"] as const;
+export type PaymentMethodValue = (typeof PAYMENT_METHODS)[number];
+
+/**
+ * Corrects the sent/paid dates and payment method on an invoice.
+ *
+ * Marking an invoice sent or paid stamps "now", which is right for something
+ * happening today and wrong for history: the imported invoices were sent and
+ * paid weeks before they existed here. Without this, a July invoice recorded
+ * today looks brand new, so it never enters the 30-day chase list and its
+ * payment lands in the wrong month's collections.
+ *
+ * Dates are date-only strings parsed to UTC midnight, matching how every
+ * other calendar date in the app is stored -- `new Date("2026-07-10")` read
+ * back in Pacific would be 9 July.
+ */
+export async function updateInvoicePaymentDetails(
+  id: string,
+  input: { sentAt: string | null; paidAt: string | null; paymentMethod: string | null },
+): Promise<ActionResult> {
+  const { authUserId } = await requireAdminContext();
+
+  const toDate = (value: string | null): Date | null => {
+    if (!value) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (!m) return null;
+    return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  };
+
+  const sentAt = toDate(input.sentAt);
+  const paidAt = toDate(input.paidAt);
+
+  if (input.sentAt && !sentAt) return { ok: false, error: "That sent date isn't valid." };
+  if (input.paidAt && !paidAt) return { ok: false, error: "That paid date isn't valid." };
+  // Caught here rather than left to the reader of a report: an invoice paid
+  // before it was sent is a data-entry slip every time.
+  if (sentAt && paidAt && paidAt < sentAt) {
+    return { ok: false, error: "The paid date is before the sent date — check which is which." };
+  }
+  const method = input.paymentMethod;
+  if (method && !PAYMENT_METHODS.includes(method as PaymentMethodValue)) {
+    return { ok: false, error: "Unknown payment method." };
+  }
+
+  try {
+    await withRLS(authUserId, async (tx) => {
+      const invoice = await tx.invoice.findUniqueOrThrow({ where: { id } });
+      if (invoice.voidedAt) throw new ConflictError("This invoice has been voided.");
+
+      // Dates imply status. Recording a payment on a Draft and leaving it a
+      // Draft would keep it out of every revenue figure it belongs in.
+      const status = paidAt ? "Paid" : sentAt ? "Sent" : invoice.status;
+
+      await tx.invoice.update({
+        where: { id },
+        data: {
+          sentAt,
+          paidAt,
+          paymentMethod: (method as PaymentMethodValue | null) ?? null,
+          status,
+          issuedAt: invoice.issuedAt ?? sentAt ?? paidAt,
+        },
+      });
+    });
+  } catch (err: unknown) {
+    return { ok: false, error: errorMessage(err) };
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
+  revalidatePath("/dashboard");
+  return { ok: true };
+}

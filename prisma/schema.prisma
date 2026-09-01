@@ -67,6 +67,18 @@ enum BillingFrequency {
 /// document is real, whether or not it has been emailed yet. Sending is a
 /// separate, later fact, because plenty of invoices go out by hand or get paid
 /// off a downloaded PDF and never pass through the mail path at all.
+/// How a client actually paid. Recorded per invoice so "what share of our
+/// money arrives by check" is answerable without asking Tony.
+enum PaymentMethod {
+  Check
+  Cash
+  ACH
+  Zelle
+  PayPal
+  Venmo
+  Other
+}
+
 enum InvoiceStatus {
   Draft
   Invoiced
@@ -484,6 +496,9 @@ model Invoice {
   /// can be issued today and posted next week, and "which month does this
   /// belong to" is answered by this date, not by when it was emailed.
   issuedAt       DateTime?
+  /// How the client paid. Null until an invoice is marked paid, and still
+  /// optional after -- a payment can be recorded before the method is known.
+  paymentMethod  PaymentMethod?
   // Storage object path in the private `invoices` bucket (NOT a public URL) --
   // the app mints a short-lived signed URL on demand. Null until the PDF is
   // rendered, which happens after the generation transaction commits.

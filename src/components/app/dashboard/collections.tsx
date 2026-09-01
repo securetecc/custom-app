@@ -17,9 +17,11 @@ const usd = (n: number) =>
 export function Collections({
   collections,
   awaitingPayment,
+  paymentMethods,
 }: {
   collections: DashboardMetrics["collections"];
   awaitingPayment: DashboardMetrics["awaitingPayment"];
+  paymentMethods: DashboardMetrics["paymentMethods"];
 }) {
   const { sentValue, paidValue, overdueValue } = collections;
   const total = sentValue + paidValue;
@@ -106,6 +108,27 @@ export function Collections({
           </p>
         ) : (
           <p className="text-sm text-muted-foreground">Nothing outstanding.</p>
+        )}
+
+        {/* How the money actually arrived. Sits under the paid figure because
+            it is a breakdown OF that number, not a separate statistic. */}
+        {paymentMethods.length > 0 && (
+          <div className="space-y-2 border-t pt-4">
+            <p className="label-hud opacity-70">How it was paid</p>
+            {paymentMethods.map((m) => (
+              <div key={m.method} className="flex items-center gap-3 text-sm">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                  style={{ background: m.method === "Not recorded" ? "var(--viz-other)" : "var(--viz-teal)" }}
+                />
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">{m.method}</span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {m.count} {m.count === 1 ? "invoice" : "invoices"}
+                </span>
+                <span className="shrink-0 tabular-nums">{usd(m.amount)}</span>
+              </div>
+            ))}
+          </div>
         )}
 
         <Link href="/invoices?status=Sent" className={buttonVariants({ variant: "outline", size: "sm" })}>

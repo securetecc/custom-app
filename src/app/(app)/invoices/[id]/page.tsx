@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { InvoiceCustomItems } from "@/components/app/invoice-custom-items";
+import { InvoicePaymentDetails } from "@/components/app/invoice-payment-details";
 import {
   ConfirmInvoiceButton,
   MarkPaidButton,
@@ -145,6 +146,22 @@ export default async function InvoiceDetailPage({
         )}
         {invoice.client.phone && <p className="text-sm">{invoice.client.phone}</p>}
       </Card>
+
+      {!voided && isAdmin && (
+        <Card>
+          <div className="border-b px-4 py-3">
+            <h2 className="font-medium">Payment</h2>
+          </div>
+          <div className="p-4">
+            <InvoicePaymentDetails
+              invoiceId={invoice.id}
+              sentAt={invoice.sentAt ? invoice.sentAt.toISOString().slice(0, 10) : null}
+              paidAt={invoice.paidAt ? invoice.paidAt.toISOString().slice(0, 10) : null}
+              paymentMethod={invoice.paymentMethod}
+            />
+          </div>
+        </Card>
+      )}
 
       {invoice.timeEntries.length > 0 && (
         <Card>

@@ -79,6 +79,9 @@ export default async function InvoicesPage({
               <TableHead className="text-right">Hours</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="whitespace-nowrap">Sent</TableHead>
+              <TableHead className="whitespace-nowrap">Paid</TableHead>
+              <TableHead>Method</TableHead>
               <TableHead className="w-[9rem]" />
             </TableRow>
           </TableHeader>
@@ -119,6 +122,19 @@ export default async function InvoicesPage({
                     </Badge>
                   )}
                 </TableCell>
+                {/* Sent/paid/method sit next to the status because the
+                    question is never "is it paid" alone -- it is "paid when,
+                    and how", which is what reconciling against a bank
+                    statement actually needs. */}
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {invoice.sentAt ? formatDate(invoice.sentAt) : "—"}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {invoice.paidAt ? formatDate(invoice.paidAt) : "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {invoice.paymentMethod ?? "—"}
+                </TableCell>
                 <TableCell>
                   <InvoiceRowActions
                     invoiceId={invoice.id}
@@ -130,7 +146,7 @@ export default async function InvoicesPage({
             ))}
             {invoices.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                   {active === "All" ? "No invoices yet." : `No ${active.toLowerCase()} invoices.`}
                 </TableCell>
               </TableRow>
