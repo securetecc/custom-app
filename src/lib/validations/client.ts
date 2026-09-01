@@ -19,6 +19,9 @@ export const clientFormSchema = z.object({
   address2: z.string().optional().or(z.literal("")),
   cityStateZip: z.string().optional().or(z.literal("")),
   billingType: z.enum(["Hourly", "Retainer"]),
+  /// How often this client should be invoiced. Drives the dashboard reminder,
+  /// not the invoice generator -- Tony still decides when to raise one.
+  billingCadence: z.enum(["Monthly", "Quarterly"]),
   // No transform here on purpose: a zod .transform() makes the resolver's
   // pre-validation (input) type diverge from its post-validation (output)
   // type, which breaks useForm<ClientFormValues>'s single-type assumption.

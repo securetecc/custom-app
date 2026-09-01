@@ -68,6 +68,7 @@ export default async function EditClientPage({
               address2: client.address2 ?? "",
               cityStateZip: client.cityStateZip ?? "",
               billingType: client.billingType,
+              billingCadence: client.billingCadence,
               billingRate: client.billingRate ? Number(client.billingRate) : undefined,
               activeStatus: client.activeStatus,
               notes: client.notes ?? "",

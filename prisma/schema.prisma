@@ -46,6 +46,16 @@ enum TaskStatus {
   Completed
 }
 
+/// How often a client should be invoiced.
+///
+/// Quarterly exists because some clients are billed in batches, but Tony's
+/// rule is that nothing goes longer than a quarter unbilled -- this is what
+/// the "needs billing" reminder measures against.
+enum BillingCadence {
+  Monthly
+  Quarterly
+}
+
 enum BillingType {
   Hourly
   Retainer
@@ -76,6 +86,9 @@ enum PaymentMethod {
   Zelle
   PayPal
   Venmo
+  /// Merchant / credit-card services. Tony expects to add these later; having
+  /// the value now means the first card payment doesn't land in "Other".
+  Card
   Other
 }
 
@@ -269,6 +282,9 @@ model Client {
   /// the spreadsheet by eye. Null for clients the sheet never numbered.
   reference      String?
   billingType    BillingType  @default(Hourly)
+  /// Monthly unless set otherwise. Drives the billing reminder, not the
+  /// invoice generator -- Tony still decides when to raise one.
+  billingCadence BillingCadence @default(Monthly)
   billingRate    Decimal?     @db.Decimal(10, 2)
   activeStatus   Boolean      @default(true)
   notes          String?

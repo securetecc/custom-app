@@ -9,6 +9,7 @@ import { ClientShare } from "@/components/app/dashboard/client-share";
 import { RangeFilter } from "@/components/app/dashboard/range-filter";
 import { TodayStatus } from "@/components/app/dashboard/today-status";
 import { Collections, TicketAttention } from "@/components/app/dashboard/collections";
+import { BillingFocus } from "@/components/app/dashboard/billing-focus";
 import { buildGreeting } from "@/lib/greeting";
 
 const usd = (n: number) =>
@@ -100,6 +101,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <BillingFocus
+          thisMonth={metrics.thisMonth}
+          needsBilling={metrics.needsBilling}
+          monthLabel={metrics.goal.monthLabel}
+        />
         <Collections
           collections={metrics.collections}
           awaitingPayment={metrics.awaitingPayment}

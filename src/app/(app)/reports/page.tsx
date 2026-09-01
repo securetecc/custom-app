@@ -27,7 +27,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   const range = resolveRange(sp.range, sp.from, sp.to);
 
   const { data } = await requireAdminContext((tx) => loadReports(tx, range));
-  const { clients, serviceTypes, totals } = data!;
+  const { clients, serviceTypes, totals, paymentSpeed } = data!;
 
   // The PDF route re-resolves the range from these same params, so the
   // download is always the report on screen rather than a default period.
@@ -130,6 +130,61 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {c.loggedBillable}h / {c.loggedNonBillable}h
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">How quickly clients pay</CardTitle>
+          <CardDescription>
+            Days from sent to paid, across every settled invoice — not just this period, because
+            one month is too few invoices to judge a client on.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {paymentSpeed.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No invoices yet with both a sent and a paid date. Fill those in on the invoice page and
+              this fills itself.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead className="text-right">Avg days</TableHead>
+                  <TableHead className="text-right">Slowest</TableHead>
+                  <TableHead className="text-right">Invoices</TableHead>
+                  <TableHead>Usually pays by</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paymentSpeed.map((c) => (
+                  <TableRow key={c.clientId}>
+                    <TableCell className="font-medium">
+                      <Link href={`/clients/${c.clientId}`} className="hover:underline">
+                        {c.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell
+                      className="text-right tabular-nums"
+                      // 30 days is the same threshold the dashboard chases at.
+                      style={c.averageDays >= 30 ? { color: "var(--viz-warn)" } : undefined}
+                    >
+                      {c.averageDays}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {c.slowestDays}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {c.paidCount}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{c.usualMethod ?? "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

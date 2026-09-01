@@ -49,6 +49,7 @@ export function ClientForm({
       address2: "",
       cityStateZip: "",
       billingType: "Hourly",
+      billingCadence: "Monthly",
       billingRate: undefined,
       activeStatus: true,
       notes: "",
@@ -74,6 +75,7 @@ export function ClientForm({
   }
 
   const billingType = watch("billingType");
+  const billingCadence = watch("billingCadence");
   const activeStatus = watch("activeStatus");
 
   return (
@@ -150,6 +152,25 @@ export function ClientForm({
                 <SelectItem value="Retainer">Retainer</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="billingCadence">Billing cycle</Label>
+            <Select
+              value={billingCadence}
+              onValueChange={(v) => setValue("billingCadence", v as ClientFormValues["billingCadence"])}
+            >
+              <SelectTrigger id="billingCadence">
+                <SelectValue>{(value) => (value === "Quarterly" ? "Quarterly" : "Monthly")}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Monthly">Monthly</SelectItem>
+                <SelectItem value="Quarterly">Quarterly</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              How often this client should be invoiced. The dashboard flags anyone carrying unbilled
+              work for longer than this.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="billingRate">Billing rate ($/hr)</Label>

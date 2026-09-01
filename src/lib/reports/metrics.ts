@@ -52,9 +52,21 @@ export type ServiceTypeReportRow = {
   share: number;
 };
 
+/** How quickly a client settles, measured from sent to paid. */
+export type PaymentSpeedRow = {
+  clientId: string;
+  name: string;
+  paidCount: number;
+  averageDays: number;
+  slowestDays: number;
+  /** Most common method they pay by, or null when never recorded. */
+  usualMethod: string | null;
+};
+
 export type ReportsData = {
   clients: ClientReportRow[];
   serviceTypes: ServiceTypeReportRow[];
+  paymentSpeed: PaymentSpeedRow[];
   totals: {
     invoiced: number;
     invoiceCount: number;
@@ -75,7 +87,7 @@ function num(v: unknown): number {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<ReportsData> {
-  const [invoices, loggedByClient, byServiceType, serviceTypes, clients] = await Promise.all([
+  const [invoices, loggedByClient, byServiceType, serviceTypes, clients, settled] = await Promise.all([
     // createdAt, matching how the dashboard buckets invoices -- "raised in
     // this period", not "covering this period".
     tx.invoice.findMany({
@@ -95,6 +107,13 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
     }),
     tx.serviceType.findMany({ select: { id: true, code: true, label: true } }),
     tx.client.findMany({ select: { id: true, name: true } }),
+    // Deliberately NOT limited to the selected range. "How fast does this
+    // client pay" is a property of the relationship, and a one-month window
+    // would answer it from one or two invoices -- or none at all.
+    tx.invoice.findMany({
+      where: { voidedAt: null, status: "Paid", sentAt: { not: null }, paidAt: { not: null } },
+      select: { clientId: true, sentAt: true, paidAt: true, paymentMethod: true },
+    }),
   ]);
 
   // Hours attached to the invoices counted above -- a second query, because
@@ -172,11 +191,41 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
     })
     .sort((a, b) => b.hours - a.hours);
 
+  // --- payment speed -------------------------------------------------------
+  const speed = new Map<string, { days: number[]; methods: string[] }>();
+  for (const inv of settled) {
+    const days = Math.round((inv.paidAt!.getTime() - inv.sentAt!.getTime()) / 86_400_000);
+    // Negative would mean paid before sent, which the write path refuses --
+    // guarded here anyway so one bad legacy row can't skew an average.
+    if (days < 0) continue;
+    const row = speed.get(inv.clientId) ?? { days: [], methods: [] };
+    row.days.push(days);
+    if (inv.paymentMethod) row.methods.push(inv.paymentMethod);
+    speed.set(inv.clientId, row);
+  }
+
+  const paymentSpeed: PaymentSpeedRow[] = [...speed]
+    .map(([clientId, r]) => {
+      const counts = new Map<string, number>();
+      for (const m of r.methods) counts.set(m, (counts.get(m) ?? 0) + 1);
+      const usual = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+      return {
+        clientId,
+        name: names.get(clientId) ?? "Unknown client",
+        paidCount: r.days.length,
+        averageDays: Math.round(r.days.reduce((a, b) => a + b, 0) / r.days.length),
+        slowestDays: Math.max(...r.days),
+        usualMethod: usual,
+      };
+    })
+    .sort((a, b) => b.averageDays - a.averageDays);
+
   const totalBilledHours = [...billedHours.values()].reduce((a, h) => a + h, 0);
 
   return {
     clients: clientRows,
     serviceTypes: serviceRows,
+    paymentSpeed,
     totals: {
       invoiced: round2(totalInvoiced),
       invoiceCount: invoices.length,

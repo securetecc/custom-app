@@ -166,6 +166,21 @@ export type DashboardMetrics = {
   revenue: RevenueBucket[];
   clientShare: { top: ClientShare[]; otherAmount: number; otherCount: number; total: number };
   hours: { billable: number; nonBillable: number; unbilledValue: number; unbilledHours: number };
+  /** This calendar month only -- what still needs invoicing for the period in progress. */
+  thisMonth: { billableHours: number; billableValue: number; unbilledHours: number; unbilledValue: number };
+  /**
+   * Clients carrying unbilled work older than their billing cadence allows.
+   * Tony's rule: nothing goes longer than a quarter unbilled.
+   */
+  needsBilling: {
+    clientId: string;
+    name: string;
+    cadence: string;
+    oldestEntryDays: number;
+    unbilledHours: number;
+    unbilledValue: number;
+    overdue: boolean;
+  }[];
   tickets: {
     open: number;
     inProgress: number;
@@ -221,6 +236,7 @@ export async function loadDashboardMetrics(
     sentUnpaid,
     paidInRange,
     recentTickets,
+    unbilledDetail,
     paidByMethod,
   ] = await Promise.all([
     tx.timeEntry.aggregate({
@@ -278,6 +294,19 @@ export async function loadDashboardMetrics(
     }),
     // Grouped by how the client paid. Ranged on paidAt, not createdAt: the
     // question is which methods brought money IN during the period.
+    // Every unbilled billable entry, with its client's rate and cadence. Small
+    // enough to total in code, and doing so keeps the cadence rule in one
+    // readable place rather than spread across a SQL aggregate.
+    tx.timeEntry.findMany({
+      where: { invoiceId: null, billableStatus: "Billable" },
+      select: {
+        date: true,
+        durationHours: true,
+        clientId: true,
+        serviceType: { select: { rateOverride: true } },
+        client: { select: { name: true, billingRate: true, billingCadence: true } },
+      },
+    }),
     tx.invoice.groupBy({
       by: ["paymentMethod"],
       where: { status: "Paid", voidedAt: null, paidAt: { gte: range.start, lt: range.end } },
@@ -392,7 +421,93 @@ export async function loadDashboardMetrics(
     };
   });
 
+  // --- this month vs the unbilled backlog -----------------------------------
+  //
+  // Kept apart deliberately. Mixing them answers neither question: "what do I
+  // still need to bill for August" gets inflated by June work nobody has
+  // invoiced, and the backlog disappears into a number that looks like normal
+  // month-to-date activity.
+  const rateFor = (e: (typeof unbilledDetail)[number]) =>
+    (e.serviceType.rateOverride ? Number(e.serviceType.rateOverride) : null) ??
+    (e.client.billingRate ? Number(e.client.billingRate) : 0);
+
+  let monthBillableHours = 0;
+  let monthBillableValue = 0;
+  let monthUnbilledHours = 0;
+  let monthUnbilledValue = 0;
+
+  const unbilledByClient = new Map<
+    string,
+    { name: string; cadence: string; hours: number; value: number; oldest: Date }
+  >();
+
+  for (const e of unbilledDetail) {
+    const hours = num(e.durationHours);
+    const value = hours * rateFor(e);
+
+    if (e.date >= monthStart && e.date < monthEnd) {
+      monthUnbilledHours += hours;
+      monthUnbilledValue += value;
+    }
+
+    const row = unbilledByClient.get(e.clientId) ?? {
+      name: e.client.name,
+      cadence: e.client.billingCadence,
+      hours: 0,
+      value: 0,
+      oldest: e.date,
+    };
+    row.hours += hours;
+    row.value += value;
+    if (e.date < row.oldest) row.oldest = e.date;
+    unbilledByClient.set(e.clientId, row);
+  }
+
+  // Billable hours logged this month, invoiced or not -- the month's output,
+  // as distinct from what is still waiting to be billed.
+  const monthEntries = await tx.timeEntry.findMany({
+    where: { billableStatus: "Billable", date: { gte: monthStart, lt: monthEnd } },
+    select: {
+      durationHours: true,
+      serviceType: { select: { rateOverride: true } },
+      client: { select: { billingRate: true } },
+    },
+  });
+  for (const e of monthEntries) {
+    const hours = num(e.durationHours);
+    monthBillableHours += hours;
+    monthBillableValue +=
+      hours *
+      ((e.serviceType.rateOverride ? Number(e.serviceType.rateOverride) : null) ??
+        (e.client.billingRate ? Number(e.client.billingRate) : 0));
+  }
+
+  const CADENCE_DAYS: Record<string, number> = { Monthly: 31, Quarterly: 93 };
+  const needsBilling = [...unbilledByClient]
+    .map(([clientId, r]) => {
+      const oldestEntryDays = Math.floor((Date.now() - r.oldest.getTime()) / 86_400_000);
+      return {
+        clientId,
+        name: r.name,
+        cadence: r.cadence,
+        oldestEntryDays,
+        unbilledHours: Number(r.hours.toFixed(2)),
+        unbilledValue: Number(r.value.toFixed(2)),
+        // Past the point their cadence allows. Tony's rule is that nothing
+        // waits longer than a quarter, whatever the client's normal pattern.
+        overdue: oldestEntryDays > (CADENCE_DAYS[r.cadence] ?? 31),
+      };
+    })
+    .sort((a, b) => b.oldestEntryDays - a.oldestEntryDays);
+
   return {
+    thisMonth: {
+      billableHours: Number(monthBillableHours.toFixed(2)),
+      billableValue: Number(monthBillableValue.toFixed(2)),
+      unbilledHours: Number(monthUnbilledHours.toFixed(2)),
+      unbilledValue: Number(monthUnbilledValue.toFixed(2)),
+    },
+    needsBilling,
     today: {
       loggedEntries: todayEntries._count,
       loggedHours: num(todayEntries._sum.durationHours),
