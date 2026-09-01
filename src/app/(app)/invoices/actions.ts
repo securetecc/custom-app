@@ -1149,11 +1149,15 @@ export async function updateInvoicePaymentDetails(
 
   if (input.sentAt && !sentAt) return { ok: false, error: "That sent date isn't valid." };
   if (input.paidAt && !paidAt) return { ok: false, error: "That paid date isn't valid." };
-  // Caught here rather than left to the reader of a report: an invoice paid
-  // before it was sent is a data-entry slip every time.
-  if (sentAt && paidAt && paidAt < sentAt) {
-    return { ok: false, error: "The paid date is before the sent date — check which is which." };
-  }
+  // NOT rejected when the paid date precedes the sent date. That looked like a
+  // data-entry slip, and it is often a transposition -- but it is also a real
+  // situation: a client pays on account, or settles work before the invoice is
+  // formally raised, which is exactly what happened with MSAFC-00001 (paid 10
+  // August, invoiced 31 August). Refusing it left the true dates unrecordable.
+  //
+  // The dates are stored as given. What DOES ignore the combination is the
+  // payment-speed report, which skips negative intervals rather than letting
+  // one advance payment drag a client's average below zero.
   const method = input.paymentMethod;
   if (method && !PAYMENT_METHODS.includes(method as PaymentMethodValue)) {
     return { ok: false, error: "Unknown payment method." };
