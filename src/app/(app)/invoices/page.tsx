@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { InvoiceRowActions } from "@/components/app/invoice-actions";
-import { InvoiceSearch } from "@/components/app/invoice-search";
+import { ListSearch } from "@/components/app/list-search";
 import { methodLabel, SETTLEMENT_LABELS, settle } from "@/lib/billing/payments";
 import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { pacificDayStart } from "@/lib/cron/pacific";
@@ -140,7 +140,11 @@ export default async function InvoicesPage({
           ))}
         </div>
         <Suspense fallback={null}>
-          <InvoiceSearch initial={search} />
+          <ListSearch
+            initial={search}
+            label="Search invoices"
+            placeholder="Search number, client, method, reference…"
+          />
         </Suspense>
       </div>
 

@@ -5,16 +5,23 @@ import { useEffect, useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 
 /**
- * Free-text search across the invoice list.
+ * URL-backed search box, shared by the list screens.
  *
- * In the URL rather than in React state, like the range filter: the search is
- * then shareable and survives a refresh, and the page stays a server component
- * that re-queries instead of shipping every invoice to the browser.
- *
- * Debounced, because it navigates on each change and a keystroke-per-request
- * would queue a dozen server round trips for one word.
+ * State lives in the query string so a search is shareable and survives a
+ * refresh, and the page stays a server component that re-queries rather than
+ * shipping every row to the browser to filter there. Debounced, because it
+ * navigates on change and a request per keystroke would queue a dozen round
+ * trips for one word.
  */
-export function InvoiceSearch({ initial }: { initial: string }) {
+export function ListSearch({
+  initial,
+  placeholder,
+  label,
+}: {
+  initial: string;
+  placeholder: string;
+  label: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -36,9 +43,9 @@ export function InvoiceSearch({ initial }: { initial: string }) {
     <Input
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      placeholder="Search number, client, method, reference…"
+      placeholder={placeholder}
       className="h-8 w-full sm:w-72"
-      aria-label="Search invoices"
+      aria-label={label}
     />
   );
 }

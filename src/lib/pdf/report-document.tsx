@@ -260,6 +260,58 @@ export function ReportPdfDocument({ data }: { data: ReportPdfData }) {
         )}
         </View>
 
+        {/* Ageing last, and on its own: it is the page an accountant asks
+            for, and it answers a different question from everything above --
+            what is owed right now, not what happened in the period. */}
+        {r.aging.rows.length > 0 && (
+          <View break>
+            <Text style={styles.sectionTitle}>Money owed, by age</Text>
+            <Text style={styles.sectionNote}>
+              Counted from the day each invoice was sent. Part-paid invoices count only their
+              balance. Not limited to the period above — an unpaid invoice stays unpaid whichever
+              month is being reported.
+            </Text>
+            <View style={styles.tHead}>
+              <Text style={[styles.th, { width: 168 }]}>CLIENT</Text>
+              <Text style={[styles.th, styles.right, { width: 78 }]}>0–30</Text>
+              <Text style={[styles.th, styles.right, { width: 78 }]}>31–60</Text>
+              <Text style={[styles.th, styles.right, { width: 78 }]}>61–90</Text>
+              <Text style={[styles.th, styles.right, { width: 78 }]}>90+</Text>
+              <Text style={[styles.th, styles.right, { width: 78 }]}>TOTAL</Text>
+            </View>
+            {r.aging.rows.map((row) => (
+              <View key={row.clientId} style={styles.row} wrap={false}>
+                <Text style={[styles.cell, { width: 168 }]}>{row.name}</Text>
+                <Text style={[styles.cell, styles.right, { width: 78 }]}>
+                  {row.current ? usd(row.current) : "—"}
+                </Text>
+                <Text style={[styles.cell, styles.right, { width: 78 }]}>
+                  {row.d31_60 ? usd(row.d31_60) : "—"}
+                </Text>
+                <Text style={[styles.cell, styles.right, { width: 78 }]}>
+                  {row.d61_90 ? usd(row.d61_90) : "—"}
+                </Text>
+                <Text style={[styles.cell, styles.right, { width: 78 }]}>
+                  {row.d90plus ? usd(row.d90plus) : "—"}
+                </Text>
+                <Text style={[styles.cell, styles.right, { width: 78, fontWeight: 700 }]}>
+                  {usd(row.total)}
+                </Text>
+              </View>
+            ))}
+            <View style={[styles.row, styles.totalRow]} wrap={false}>
+              <Text style={[styles.cell, { width: 168, fontWeight: 700 }]}>TOTAL OWED</Text>
+              <Text style={[styles.cell, styles.right, { width: 78 }]}>{usd(r.aging.totals.current)}</Text>
+              <Text style={[styles.cell, styles.right, { width: 78 }]}>{usd(r.aging.totals.d31_60)}</Text>
+              <Text style={[styles.cell, styles.right, { width: 78 }]}>{usd(r.aging.totals.d61_90)}</Text>
+              <Text style={[styles.cell, styles.right, { width: 78 }]}>{usd(r.aging.totals.d90plus)}</Text>
+              <Text style={[styles.cell, styles.right, { width: 78, fontWeight: 700 }]}>
+                {usd(r.aging.totals.total)}
+              </Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.footer} fixed>
           <Text>{data.organizationName}</Text>
           <Text

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { requireOrgContext } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,8 @@ import { DeleteRecurringChargeButton } from "@/components/app/delete-recurring-c
 import { TimeEntriesTabs } from "@/components/app/time-entries-tabs";
 import { ADDON_ITEM_TYPE_LABELS } from "@/lib/validations/recurring-charge";
 import { formatCurrency } from "@/lib/format";
+import { recurringRank } from "@/lib/recurring-order";
+import { ListSearch } from "@/components/app/list-search";
 import { Plus, Pencil } from "lucide-react";
 
 /**
@@ -23,14 +26,33 @@ import { Plus, Pencil } from "lucide-react";
  * charges" tab (src/app/(app)/clients/[id]/page.tsx); this one adds a Client
  * column and lets "New charge" pick which client it's for.
  */
-export default async function RecurringChargesPage() {
+export default async function RecurringChargesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const search = ((await searchParams).q ?? "").trim();
   const {
     data: [charges, clients, pricingRows],
   } = await requireOrgContext((tx, appUser) =>
     Promise.all([
       tx.recurringCharge.findMany({
+        where: search
+          ? {
+              OR: [
+                { description: { contains: search, mode: "insensitive" as const } },
+                { reference: { contains: search, mode: "insensitive" as const } },
+                { notes: { contains: search, mode: "insensitive" as const } },
+                { authorizedBy: { contains: search, mode: "insensitive" as const } },
+                { client: { name: { contains: search, mode: "insensitive" as const } } },
+              ],
+            }
+          : {},
         include: { client: true },
-        orderBy: [{ client: { name: "asc" } }, { billingFrequency: "asc" }, { description: "asc" }],
+        // Client, then the service ranking within each -- site fee, RMM,
+        // email security, the rest. Applied in code because no column sorts
+        // by what a service IS; see lib/recurring-order.ts.
+        orderBy: [{ client: { name: "asc" } }],
       }),
       tx.client.findMany({ where: { activeStatus: true }, orderBy: { name: "asc" } }),
       tx.addonPricing.findMany({ where: { organizationId: appUser.organizationId } }),
@@ -51,6 +73,13 @@ export default async function RecurringChargesPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <TimeEntriesTabs />
+        <Suspense fallback={null}>
+          <ListSearch
+            initial={search}
+            label="Search recurring charges"
+            placeholder="Search service, client, reference, notes…"
+          />
+        </Suspense>
         <RecurringChargeDialog
           clients={clientOptions}
           addonPricing={addonPricing}
@@ -86,7 +115,7 @@ export default async function RecurringChargesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {charges.map((charge) => (
+            {sortWithinClients(charges).map((charge) => (
               <TableRow key={charge.id}>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {charge.reference ?? "—"}
@@ -150,5 +179,17 @@ export default async function RecurringChargesPage() {
         </Table>
       </Card>
     </div>
+  );
+}
+
+/** Keeps the client grouping from the query, ranking services inside it. */
+function sortWithinClients<
+  T extends { client: { name: string }; itemType: Parameters<typeof recurringRank>[0]["itemType"]; description: string },
+>(charges: T[]): T[] {
+  return [...charges].sort(
+    (a, b) =>
+      a.client.name.localeCompare(b.client.name) ||
+      recurringRank(a) - recurringRank(b) ||
+      a.description.localeCompare(b.description),
   );
 }
