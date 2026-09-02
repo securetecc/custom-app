@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SupportForm, SupportHeader } from "@/components/app/support-form";
+import { recaptchaSiteKey } from "@/lib/recaptcha";
 import { PublicFooter } from "@/components/app/public-footer";
 
 export const metadata: Metadata = {
@@ -45,7 +46,7 @@ export default function SupportPage() {
           </div>
 
           <div className="rounded-[14px] border border-[rgba(6,225,220,0.24)] bg-[#071E37] p-6 sm:p-8">
-            <SupportForm />
+            <SupportForm recaptchaSiteKey={recaptchaSiteKey()} />
           </div>
 
           <p className="mt-6 text-center text-[13px] text-[rgba(255,255,255,0.55)]">

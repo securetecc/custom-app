@@ -15,6 +15,7 @@ import {
 } from "@/lib/storage/ticket-attachments";
 import { notifyNewTicket } from "@/lib/email/notify";
 import { checkRateLimit, getClientIp, rateLimitedMessage } from "@/lib/rate-limit";
+import { verifyRecaptcha } from "@/lib/recaptcha";
 
 // NOTE: every export from a "use server" file is a callable server action.
 
@@ -111,6 +112,16 @@ export async function submitPublicTicket(formData: FormData): Promise<SubmitResu
   if (!limited.ok) {
     return { ok: false, error: rateLimitedMessage(limited.retryAfterSeconds) };
   }
+
+  // Before anything is parsed or stored: a bot's submission should cost as
+  // little as possible.
+  const recaptcha = await verifyRecaptcha(
+    typeof formData.get("recaptchaToken") === "string"
+      ? (formData.get("recaptchaToken") as string)
+      : null,
+    "submit_ticket",
+  );
+  if (!recaptcha.ok) return { ok: false, error: recaptcha.error };
 
   const parsed = publicTicketSchema.safeParse({
     clientCompanyName: formData.get("clientCompanyName"),

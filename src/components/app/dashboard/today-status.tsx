@@ -17,6 +17,18 @@ import type { DashboardMetrics } from "@/lib/dashboard/metrics";
  *
  * Status is carried by an icon and a sentence, never by colour alone.
  */
+/** "Tue 26 Aug" from a yyyy-mm-dd, split rather than parsed -- a date-only
+ *  string through `new Date()` is UTC midnight, a day early in Pacific. */
+function dayLabel(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
 export function TodayStatus({
   today,
   firstName,
@@ -25,21 +37,27 @@ export function TodayStatus({
   firstName: string;
 }) {
   const done = today.hasLogged;
+  // A gap is worth flagging even on a day that IS logged: the Tuesday nobody
+  // noticed last week is exactly what the old email never caught.
+  const missing = today.missingDays;
+  const complete = done && missing.length === 0;
 
   return (
     <div
       className="flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3"
       style={{
-        borderColor: done ? "var(--viz-good)" : "var(--viz-warn)",
-        background: done ? "color-mix(in oklab, var(--viz-good) 8%, transparent)" : "color-mix(in oklab, var(--viz-warn) 8%, transparent)",
+        borderColor: complete ? "var(--viz-good)" : "var(--viz-warn)",
+        background: complete
+          ? "color-mix(in oklab, var(--viz-good) 8%, transparent)"
+          : "color-mix(in oklab, var(--viz-warn) 8%, transparent)",
       }}
     >
       <span
         aria-hidden
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-        style={{ background: done ? "var(--viz-good)" : "var(--viz-warn)" }}
+        style={{ background: complete ? "var(--viz-good)" : "var(--viz-warn)" }}
       >
-        {done ? "✓" : "!"}
+        {complete ? "✓" : "!"}
       </span>
 
       <div className="min-w-0 flex-1">
@@ -49,9 +67,17 @@ export function TodayStatus({
             : `No time logged today yet, ${firstName}.`}
         </p>
         <p className="text-xs text-muted-foreground">
-          {done
-            ? "Logging as you go is what keeps invoice time from becoming archaeology."
-            : "This is your reminder — there is no longer an email one."}
+          {missing.length > 0 ? (
+            <>
+              {missing.length} weekday{missing.length === 1 ? "" : "s"} in the last fortnight with
+              nothing logged: {missing.slice(0, 5).map(dayLabel).join(", ")}
+              {missing.length > 5 ? ` and ${missing.length - 5} more` : ""}.
+            </>
+          ) : done ? (
+            "Nothing missing in the last fortnight either."
+          ) : (
+            "This is your reminder — there is no longer an email one."
+          )}
         </p>
       </div>
 

@@ -152,6 +152,14 @@ export type DashboardMetrics = {
     loggedEntries: number;
     loggedHours: number;
     hasLogged: boolean;
+    /**
+     * Recent WEEKDAYS with nothing logged by this person, most recent first.
+     * Today is excluded -- the day is not over, and calling it missing before
+     * 6pm would cry wolf every morning. This is the in-platform replacement
+     * for the 7pm email, and it has to look further back than one day: the
+     * gap that costs money is the Tuesday nobody noticed last week.
+     */
+    missingDays: string[];
   };
   goal: {
     target: number;
@@ -208,6 +216,37 @@ export type DashboardMetrics = {
   paymentMethods: { method: string; count: number; amount: number }[];
 };
 
+/** How far back the missing-entry check looks, in days. */
+const MISSING_DAY_LOOKBACK = 14;
+
+/**
+ * Weekdays in the lookback window with nothing logged, most recent first.
+ *
+ * Weekdays only: a quiet Sunday is not a gap. Today is excluded because the
+ * day is still running. Dates are compared as yyyy-mm-dd strings in Pacific,
+ * never as timestamps -- the entry column is date-only and the server clock
+ * is UTC, which is what puts an evening's work on tomorrow.
+ */
+function missingWeekdays(logged: Date[], todayStart: Date): string[] {
+  const iso = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: PACIFIC_TZ }).format(d);
+  const have = new Set(logged.map((d) => d.toISOString().slice(0, 10)));
+  const missing: string[] = [];
+
+  for (let back = 1; back <= MISSING_DAY_LOOKBACK; back++) {
+    // Stepping by whole days from Pacific midnight, then re-reading the day
+    // in Pacific, so a DST change cannot skip or repeat one.
+    const day = pacificDayStart(new Date(todayStart.getTime() - (back * 24 - 12) * 3_600_000));
+    const weekday = new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      timeZone: PACIFIC_TZ,
+    }).format(day);
+    if (weekday === "Sat" || weekday === "Sun") continue;
+    const key = iso(day);
+    if (!have.has(key)) missing.push(key);
+  }
+  return missing;
+}
+
 /** Prisma Decimal | number | null -> number. */
 function num(v: unknown): number {
   if (v === null || v === undefined) return 0;
@@ -225,6 +264,7 @@ export async function loadDashboardMetrics(
 
   const [
     todayEntries,
+    recentEntryDates,
     monthInvoices,
     rangeInvoices,
     unbilled,
@@ -244,6 +284,17 @@ export async function loadDashboardMetrics(
       where: { loggedByUserId: userId, createdAt: { gte: dayStart } },
       _count: true,
       _sum: { durationHours: true },
+    }),
+    // Dates this person logged work FOR over the recent past. Keyed on the
+    // entry's own date rather than when it was typed, so catching up on
+    // Friday for Tuesday's work correctly clears Tuesday.
+    tx.timeEntry.findMany({
+      where: {
+        loggedByUserId: userId,
+        date: { gte: new Date(dayStart.getTime() - MISSING_DAY_LOOKBACK * 86_400_000) },
+      },
+      select: { date: true },
+      distinct: ["date"],
     }),
     // The goal is about invoicing OUTPUT this month, so a draft still counts --
     // the work is captured. Voided invoices never count: they were withdrawn.
@@ -543,6 +594,7 @@ export async function loadDashboardMetrics(
       loggedEntries: todayEntries._count,
       loggedHours: num(todayEntries._sum.durationHours),
       hasLogged: todayEntries._count > 0,
+      missingDays: missingWeekdays(recentEntryDates.map((e) => e.date), dayStart),
     },
     goal: {
       target: monthlyGoal,

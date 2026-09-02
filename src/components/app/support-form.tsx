@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { submitPublicTicket } from "@/app/support/actions";
+import { executeRecaptcha, useRecaptchaScript } from "@/lib/recaptcha-client";
 import {
   ISSUE_TYPES,
   MAX_ATTACHMENTS,
@@ -37,7 +38,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function SupportForm() {
+export function SupportForm({ recaptchaSiteKey }: { recaptchaSiteKey: string | null }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export function SupportForm() {
   // the wrong screenshot meant re-selecting the whole set.
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  useRecaptchaScript(recaptchaSiteKey);
 
   function addFiles(picked: FileList | null) {
     if (!picked?.length) return;
@@ -100,6 +102,14 @@ export function SupportForm() {
     const formData = new FormData(e.currentTarget);
     formData.delete("attachments");
     for (const file of files) formData.append("attachments", file);
+
+    // A v3 token, scored server-side. Nothing is asked of the person: if the
+    // script did not load, the token is simply absent and the server decides
+    // what to do about that.
+    if (recaptchaSiteKey) {
+      const token = await executeRecaptcha(recaptchaSiteKey, "submit_ticket");
+      if (token) formData.set("recaptchaToken", token);
+    }
 
     // try/catch, because a THROWN error (rather than a returned one) left the
     // button reading "Submitting…" forever with nothing on screen explaining
