@@ -30,6 +30,7 @@ import { archiveInvoiceToDrive } from "@/lib/google/archive-invoice";
 import { invoiceEmail } from "@/lib/email/templates";
 import type { BillableStatus, BillingFrequency } from "@/generated/prisma/enums";
 import { isNoCharge, NON_CHARGE_STATUSES } from "@/lib/billing/no-charge";
+import { resolveRate, toRate } from "@/lib/billing/rates";
 
 export type ActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -80,6 +81,29 @@ export type BillingCandidates = {
   /** Entries whose rate can't be resolved -- generation will refuse these. Hourly clients only. */
   unratedEntryIds: string[];
 };
+
+/**
+ * The rate for one entry, from the entry, the service type, or the client --
+ * including a scheduled rate change once the entry's date reaches it. See
+ * lib/billing/rates.ts; this wrapper only unwraps Prisma's Decimals.
+ */
+function rateFor(
+  entry: {
+    rateOverride: unknown;
+    date: Date;
+    serviceType: { rateOverride: unknown };
+  },
+  client: { billingRate: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null },
+): number | null {
+  return resolveRate({
+    entryRateOverride: toRate(entry.rateOverride),
+    serviceTypeRateOverride: toRate(entry.serviceType.rateOverride),
+    clientBillingRate: toRate(client.billingRate),
+    clientScheduledRate: toRate(client.scheduledRate),
+    clientScheduledRateFrom: client.scheduledRateFrom,
+    entryDate: entry.date,
+  });
+}
 
 function monthLabel(date: Date): string {
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(
@@ -267,10 +291,7 @@ export async function loadBillingCandidates(
             billableStatus: entry.billableStatus,
           };
         }
-        const override = entry.serviceType.rateOverride
-          ? Number(entry.serviceType.rateOverride)
-          : null;
-        const rate = override ?? clientRate;
+        const rate = rateFor(entry, client);
         return {
           id: entry.id,
           date: entry.date.toISOString().slice(0, 10),
@@ -457,10 +478,7 @@ export async function generateInvoice(
             noCharge,
           };
         }
-        const override = entry.serviceType.rateOverride
-          ? Number(entry.serviceType.rateOverride)
-          : null;
-        const rate = override ?? clientRate;
+        const rate = rateFor(entry, client);
         if (rate === null) {
           throw new ConflictError(
             `No rate available for "${entry.description.slice(0, 40)}…" ` +
@@ -721,10 +739,7 @@ export async function regenerateInvoicePdf(
             noCharge,
           };
         }
-        const override = entry.serviceType.rateOverride
-          ? Number(entry.serviceType.rateOverride)
-          : null;
-        const rate = override ?? clientRate ?? 0;
+        const rate = rateFor(entry, invoice.client) ?? 0;
         return {
           date: entry.date.toISOString().slice(0, 10),
           serviceCode: entry.serviceType.code,

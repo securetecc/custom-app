@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import { timeEntryFormSchema, type TimeEntryFormValues } from "@/lib/validations/time-entry";
+import { billableHours, isOnSiteCode } from "@/lib/billing/travel";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -25,10 +26,22 @@ export async function createTimeEntry(
         where: { id: data.serviceTypeId },
       });
 
-      // Billing minimum is the DB-side source of truth, not whatever the
-      // client submitted -- always applied here, never trusted from the form.
-      const minimum = Number(serviceType.billingMinimumHours);
-      const durationHours = Math.max(data.durationHours, minimum);
+      // Billing minimum and the travel rule are the DB's to decide, never the
+      // form's: the minimum comes from the service type and the client's
+      // service area, and travel is billed one way in area, both ways outside
+      // it. durationHours stores what is BILLED; travelMinutes keeps what was
+      // actually driven, so changing the rule later cannot rewrite history.
+      const client = await tx.client.findUniqueOrThrow({
+        where: { id: data.clientId },
+        select: { serviceArea: true },
+      });
+      const { hours: durationHours } = billableHours({
+        workedHours: data.durationHours,
+        travelMinutes: data.travelMinutes,
+        serviceTypeMinimumHours: Number(serviceType.billingMinimumHours),
+        serviceArea: client.serviceArea,
+        isOnSite: isOnSiteCode(serviceType.code),
+      });
 
       await tx.timeEntry.create({
         data: {
@@ -39,6 +52,8 @@ export async function createTimeEntry(
           durationHours,
           description: data.description,
           billableStatus: data.billableStatus,
+          rateOverride: data.rateOverride,
+          travelMinutes: data.travelMinutes,
           loggedByUserId: appUser.id,
           rawInput: rawInput ?? null,
           // Presence of rawInput is already this codebase's existing signal
@@ -70,8 +85,17 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
       const serviceType = await tx.serviceType.findUniqueOrThrow({
         where: { id: data.serviceTypeId },
       });
-      const minimum = Number(serviceType.billingMinimumHours);
-      const durationHours = Math.max(data.durationHours, minimum);
+      const client = await tx.client.findUniqueOrThrow({
+        where: { id: data.clientId },
+        select: { serviceArea: true },
+      });
+      const { hours: durationHours } = billableHours({
+        workedHours: data.durationHours,
+        travelMinutes: data.travelMinutes,
+        serviceTypeMinimumHours: Number(serviceType.billingMinimumHours),
+        serviceArea: client.serviceArea,
+        isOnSite: isOnSiteCode(serviceType.code),
+      });
 
       // RLS ("time_entries: staff can update unbilled, admin can update any")
       // is what actually blocks a technician from editing a billed entry --
@@ -85,6 +109,8 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
           durationHours,
           description: data.description,
           billableStatus: data.billableStatus,
+          rateOverride: data.rateOverride,
+          travelMinutes: data.travelMinutes,
         },
       });
     });

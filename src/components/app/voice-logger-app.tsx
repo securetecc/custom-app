@@ -46,6 +46,8 @@ const emptyDraft: Partial<TimeEntryFormValues> = {
   durationHours: 1,
   description: "",
   billableStatus: "Billable",
+  rateOverride: null,
+  travelMinutes: null,
 };
 
 export function VoiceLoggerApp({

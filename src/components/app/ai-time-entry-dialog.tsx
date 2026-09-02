@@ -78,6 +78,8 @@ export function AiTimeEntryDialog({
       durationHours: 1,
       description: "",
       billableStatus: "Billable",
+      rateOverride: null,
+      travelMinutes: null,
     },
   });
 

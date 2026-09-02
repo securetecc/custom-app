@@ -6,6 +6,7 @@ import {
   PACIFIC_TZ,
 } from "@/lib/cron/pacific";
 import type { TxClient } from "@/lib/db/rls";
+import { resolveRate, toRate } from "@/lib/billing/rates";
 
 /**
  * Dashboard aggregates.
@@ -256,7 +257,15 @@ export async function loadDashboardMetrics(
     }),
     tx.timeEntry.findMany({
       where: { invoiceId: null, billableStatus: "Billable" },
-      select: { durationHours: true, client: { select: { billingRate: true } } },
+      select: {
+        date: true,
+        durationHours: true,
+        rateOverride: true,
+        serviceType: { select: { rateOverride: true } },
+        client: {
+          select: { billingRate: true, scheduledRate: true, scheduledRateFrom: true },
+        },
+      },
     }),
     tx.timeEntry.groupBy({
       by: ["billableStatus"],
@@ -302,9 +311,18 @@ export async function loadDashboardMetrics(
       select: {
         date: true,
         durationHours: true,
+        rateOverride: true,
         clientId: true,
         serviceType: { select: { rateOverride: true } },
-        client: { select: { name: true, billingRate: true, billingCadence: true } },
+        client: {
+          select: {
+            name: true,
+            billingRate: true,
+            billingCadence: true,
+            scheduledRate: true,
+            scheduledRateFrom: true,
+          },
+        },
       },
     }),
     tx.invoice.groupBy({
@@ -377,13 +395,31 @@ export async function loadDashboardMetrics(
     total: ranked.reduce((s, r) => s + r.amount, 0),
   };
 
+  // One rate rule for the whole app -- entry override, then service type,
+  // then the client's rate or its scheduled replacement. See
+  // lib/billing/rates.ts.
+  const rateFor = (e: {
+    date: Date;
+    rateOverride: unknown;
+    serviceType: { rateOverride: unknown };
+    client: { billingRate: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null };
+  }) =>
+    resolveRate({
+      entryRateOverride: toRate(e.rateOverride),
+      serviceTypeRateOverride: toRate(e.serviceType.rateOverride),
+      clientBillingRate: toRate(e.client.billingRate),
+      clientScheduledRate: toRate(e.client.scheduledRate),
+      clientScheduledRateFrom: e.client.scheduledRateFrom,
+      entryDate: e.date,
+    }) ?? 0;
+
   // --- unbilled pipeline -----------------------------------------------------
   let unbilledHours = 0;
   let unbilledValue = 0;
   for (const e of unbilled) {
     const h = num(e.durationHours);
     unbilledHours += h;
-    unbilledValue += h * num(e.client.billingRate);
+    unbilledValue += h * rateFor(e);
   }
 
   const billable = num(rangeHours.find((r) => r.billableStatus === "Billable")?._sum.durationHours);
@@ -427,10 +463,6 @@ export async function loadDashboardMetrics(
   // still need to bill for August" gets inflated by June work nobody has
   // invoiced, and the backlog disappears into a number that looks like normal
   // month-to-date activity.
-  const rateFor = (e: (typeof unbilledDetail)[number]) =>
-    (e.serviceType.rateOverride ? Number(e.serviceType.rateOverride) : null) ??
-    (e.client.billingRate ? Number(e.client.billingRate) : 0);
-
   let monthBillableHours = 0;
   let monthBillableValue = 0;
   let monthUnbilledHours = 0;
@@ -468,18 +500,17 @@ export async function loadDashboardMetrics(
   const monthEntries = await tx.timeEntry.findMany({
     where: { billableStatus: "Billable", date: { gte: monthStart, lt: monthEnd } },
     select: {
+      date: true,
       durationHours: true,
+      rateOverride: true,
       serviceType: { select: { rateOverride: true } },
-      client: { select: { billingRate: true } },
+      client: { select: { billingRate: true, scheduledRate: true, scheduledRateFrom: true } },
     },
   });
   for (const e of monthEntries) {
     const hours = num(e.durationHours);
     monthBillableHours += hours;
-    monthBillableValue +=
-      hours *
-      ((e.serviceType.rateOverride ? Number(e.serviceType.rateOverride) : null) ??
-        (e.client.billingRate ? Number(e.client.billingRate) : 0));
+    monthBillableValue += hours * rateFor(e);
   }
 
   const CADENCE_DAYS: Record<string, number> = { Monthly: 31, Quarterly: 93 };

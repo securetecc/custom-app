@@ -72,6 +72,11 @@ export default async function EditClientPage({
               billingType: client.billingType,
               billingCadence: client.billingCadence,
               billingRate: client.billingRate ? Number(client.billingRate) : undefined,
+              scheduledRate: client.scheduledRate ? Number(client.scheduledRate) : undefined,
+              scheduledRateFrom: client.scheduledRateFrom
+                ? client.scheduledRateFrom.toISOString().slice(0, 10)
+                : null,
+              serviceArea: client.serviceArea,
               activeStatus: client.activeStatus,
               notes: client.notes ?? "",
             }}

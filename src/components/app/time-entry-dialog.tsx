@@ -78,6 +78,8 @@ export function TimeEntryDialog({
       durationHours: 1,
       description: "",
       billableStatus: "Billable",
+      rateOverride: null,
+      travelMinutes: null,
       ...defaultValues,
     },
   });
@@ -213,6 +215,44 @@ export function TimeEntryDialog({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Both optional and both deliberately below the main fields:
+                the usual entry needs neither, and putting them first would
+                suggest a rate has to be chosen every time. */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="rateOverride">Rate for this job ($/hr)</Label>
+                <Input
+                  id="rateOverride"
+                  type="number"
+                  step="0.01"
+                  placeholder="Usual rate"
+                  {...register("rateOverride", {
+                    setValueAs: (v) => (v === "" || v === null ? null : Number(v)),
+                  })}
+                />
+                {errors.rateOverride && (
+                  <p className="text-xs text-destructive">{errors.rateOverride.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="travelMinutes">Travel (minutes, one way)</Label>
+                <Input
+                  id="travelMinutes"
+                  type="number"
+                  step="5"
+                  min="0"
+                  placeholder="—"
+                  {...register("travelMinutes", {
+                    setValueAs: (v) => (v === "" || v === null ? null : Number(v)),
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  On-site work only. Billed one way inside the service area, both ways outside
+                  it — the client&apos;s record decides which.
+                </p>
               </div>
             </div>
 

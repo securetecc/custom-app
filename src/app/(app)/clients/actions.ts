@@ -7,6 +7,13 @@ import { clientFormSchema, type ClientFormValues } from "@/lib/validations/clien
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+/** yyyy-mm-dd -> the UTC midnight a @db.Date column stores. */
+function toDateOnly(value: string | null): Date | null {
+  if (!value) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 export async function createClientRecord(input: ClientFormValues): Promise<ActionResult> {
   const parsed = clientFormSchema.safeParse(input);
   if (!parsed.success) {
@@ -33,6 +40,9 @@ export async function createClientRecord(input: ClientFormValues): Promise<Actio
           billingType: data.billingType,
           billingCadence: data.billingCadence,
           billingRate: normalizeBillingRate(data.billingRate),
+          scheduledRate: normalizeBillingRate(data.scheduledRate),
+          scheduledRateFrom: toDateOnly(data.scheduledRateFrom),
+          serviceArea: data.serviceArea,
           activeStatus: data.activeStatus,
           notes: data.notes || null,
         },
@@ -75,6 +85,9 @@ export async function updateClientRecord(id: string, input: ClientFormValues): P
           billingType: data.billingType,
           billingCadence: data.billingCadence,
           billingRate: normalizeBillingRate(data.billingRate),
+          scheduledRate: normalizeBillingRate(data.scheduledRate),
+          scheduledRateFrom: toDateOnly(data.scheduledRateFrom),
+          serviceArea: data.serviceArea,
           activeStatus: data.activeStatus,
           notes: data.notes || null,
         },

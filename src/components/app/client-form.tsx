@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { clientFormSchema, type ClientFormValues } from "@/lib/validations/client";
+import { SERVICE_AREA_LABELS } from "@/lib/billing/travel";
 import { createClientRecord, updateClientRecord } from "@/app/(app)/clients/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +52,9 @@ export function ClientForm({
       billingType: "Hourly",
       billingCadence: "Monthly",
       billingRate: undefined,
+      scheduledRate: undefined,
+      scheduledRateFrom: null,
+      serviceArea: "InArea",
       activeStatus: true,
       notes: "",
       ...defaultValues,
@@ -76,6 +80,7 @@ export function ClientForm({
 
   const billingType = watch("billingType");
   const billingCadence = watch("billingCadence");
+  const serviceArea = watch("serviceArea");
   const activeStatus = watch("activeStatus");
 
   return (
@@ -181,6 +186,51 @@ export function ClientForm({
               {...register("billingRate", { valueAsNumber: true })}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="scheduledRate">Next rate ($/hr)</Label>
+            <Input
+              id="scheduledRate"
+              type="number"
+              step="0.01"
+              placeholder="—"
+              {...register("scheduledRate", { valueAsNumber: true })}
+            />
+            <p className="text-xs text-muted-foreground">
+              A rate already agreed for later — it takes over by itself on the date beside it,
+              and work dated before that still bills at the current rate.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="scheduledRateFrom">From</Label>
+            <Input
+              id="scheduledRateFrom"
+              type="date"
+              {...register("scheduledRateFrom", { setValueAs: (v) => (v === "" ? null : v) })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="serviceArea">Service area</Label>
+            <Select
+              value={serviceArea}
+              onValueChange={(v) => setValue("serviceArea", v as ClientFormValues["serviceArea"])}
+            >
+              <SelectTrigger id="serviceArea">
+                <SelectValue>
+                  {(value) => SERVICE_AREA_LABELS[value as ClientFormValues["serviceArea"]]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="InArea">{SERVICE_AREA_LABELS.InArea}</SelectItem>
+                <SelectItem value="OutOfArea">{SERVICE_AREA_LABELS.OutOfArea}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              In area: one-hour on-site minimum, travel billed one way. Outside: two hours, and
+              travel both ways.
+            </p>
+          </div>
+
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="activeStatus">Status</Label>
             <Select

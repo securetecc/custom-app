@@ -28,6 +28,15 @@ export const clientFormSchema = z.object({
   // NaN (from an emptied number input) and undefined are normalized to null
   // where this value is actually used (see clients/actions.ts).
   billingRate: z.union([z.number(), z.nan()]).optional(),
+  /// A rate change already agreed but not yet in force -- everyone moving to
+  /// $125/hr on 1 Jan 2027, say. Applied automatically to entries dated on or
+  /// after the date, so nobody has to remember to edit every client that
+  /// morning, and back-dated work still bills at the rate of its own day.
+  scheduledRate: z.union([z.number(), z.nan()]).optional(),
+  scheduledRateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date").nullable(),
+  /// Inside the normal service area, or outside it. Decides the on-site
+  /// minimum and whether travel bills one way or both.
+  serviceArea: z.enum(["InArea", "OutOfArea"]),
   // No `.default()` here for the same reason billingRate has no transform:
   // it would make the resolver's input type optional while the output type
   // stays required, which useForm<ClientFormValues> can't reconcile. The
