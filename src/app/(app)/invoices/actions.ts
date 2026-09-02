@@ -19,6 +19,7 @@ import { fetchLogoDataUri, readWatermarkDataUri } from "@/lib/pdf/logo";
 import {
   archiveInvoicePdf,
   downloadInvoicePdf,
+  invoicePdfFileName,
   invoicePdfPath,
   uploadInvoicePdf,
 } from "@/lib/storage/invoices";
@@ -869,7 +870,7 @@ export async function createInvoiceGmailDraft(
       subject: email.subject,
       text: email.text,
         attachment: {
-          filename: `${invoice.invoiceNumber}.pdf`,
+          filename: invoicePdfFileName(invoice.invoiceNumber, invoice.client.name),
           content: pdf,
           mimeType: "application/pdf",
         },

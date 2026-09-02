@@ -2,7 +2,12 @@ import { Fragment } from "react";
 import { Document, Image, Page, Text, View } from "@react-pdf/renderer";
 import { registerInvoiceFonts } from "./fonts";
 import { COL, styles, summaryStyles, TEMPLATE_ROW_COUNT } from "./styles";
-import { buildServiceSummary, buildWorkLog, periodLabel } from "./summary";
+import {
+  buildServiceSummary,
+  buildWorkLog,
+  periodLabel,
+  shouldPrefixServiceCode,
+} from "./summary";
 import type { InvoicePdfData, InvoicePdfLineItem } from "./types";
 
 /**
@@ -191,7 +196,6 @@ function SummaryPage({ data }: { data: InvoicePdfData }) {
   const period = periodLabel(data.periodStart, data.periodEnd);
   const workLog = buildWorkLog(data.lineItems);
   const paragraphs = buildServiceSummary({
-    lineItems: data.lineItems,
     clientName: data.client.name,
     orgName: data.organization.name,
     periodLabel: period,
@@ -233,10 +237,10 @@ function SummaryPage({ data }: { data: InvoicePdfData }) {
 }
 
 function LineRow({ item }: { item: InvoicePdfLineItem | null }) {
-  // The existing invoices prefix the description with the service-type code,
-  // and print $0.00 (not blank) in the AMOUNT column of the padding rows.
+  // The invoice prefixes each description with its service-type code -- unless
+  // the description already carries one (see shouldPrefixServiceCode).
   const description = item
-    ? item.serviceCode
+    ? item.serviceCode && shouldPrefixServiceCode(item.description)
       ? `${item.serviceCode} — ${item.description}`
       : item.description
     : " ";
@@ -254,7 +258,11 @@ function LineRow({ item }: { item: InvoicePdfLineItem | null }) {
         {item?.rate != null ? currency(item.rate) : " "}
       </Text>
       <Text style={[styles.cell, styles.cellLast, styles.cellAmount, { width: COL.amount }]}>
-        {currency(item?.amount ?? 0)}
+        {/* Blank, not $0.00. The empty rows exist to hold the grid's shape --
+            printing an amount on them states a charge that does not exist,
+            and a client reading four "$0.00" lines reasonably wonders what
+            they were for. */}
+        {item?.amount != null ? currency(item.amount) : " "}
       </Text>
     </View>
   );
@@ -268,7 +276,8 @@ function GroupDividerRow({ label }: { label: string }) {
         — {label} —
       </Text>
       <Text style={[styles.cell, styles.cellLast, styles.cellAmount, { width: COL.amount }]}>
-        {currency(0)}
+        {/* A divider carries no amount -- it labels the rows beneath it. */}
+        {" "}
       </Text>
     </View>
   );

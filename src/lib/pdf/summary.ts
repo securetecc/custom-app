@@ -10,49 +10,52 @@ import type { InvoicePdfLineItem } from "./types";
 
 export type WorkLogEntry = { when: string; code: string | null; description: string };
 
+/** "R-S — ", "O-S [Civil Dept] — ": a service code already leading the text. */
+const LEADING_SERVICE_CODE = /^[A-Z]-[A-Z]\s*(\[[^\]]*\])?\s*[\u2014-]\s*/;
+
+/**
+ * Whether the code should be printed ahead of the description.
+ *
+ * Entries imported from the master sheet have the code baked into the text,
+ * so prepending it produced "R-S — R-S — Fixed the printer" on both the grid
+ * and the work log. Shared by the two so they cannot disagree.
+ */
+export function shouldPrefixServiceCode(description: string): boolean {
+  return !LEADING_SERVICE_CODE.test(description);
+}
+
 /** Dated rows keep their date and service code; charges/retainers read "Monthly". */
 export function buildWorkLog(lineItems: InvoicePdfLineItem[]): WorkLogEntry[] {
-  return lineItems.map((item) => ({
-    when: item.date ? formatDate(item.date) : "Monthly",
-    code: item.serviceCode,
-    description: item.description.trim(),
-  }));
+  return lineItems.map((item) => {
+    const description = item.description.trim();
+    return {
+      when: item.date ? formatDate(item.date) : "Monthly",
+      code: shouldPrefixServiceCode(description) ? item.serviceCode : null,
+      description,
+    };
+  });
 }
 
 /**
- * "During July 2026, SecureTECC provided the following IT services for X."
- * followed by the work itself, then any recurring services.
+ * The one-line lead-in above the work log.
  *
- * Individual descriptions are split on sentence boundaries and re-joined with
- * commas, which is how the old system's summaries read -- "Repaired Acrobat.
- * Ran Dell Updates." becomes part of one flowing list rather than staying two
- * clipped sentences.
+ * This used to re-state every line item as prose: each description was split
+ * on sentence boundaries and the clauses re-joined with commas, mimicking the
+ * old system's summaries. On a busy month that produced a single run-on
+ * paragraph of thirty-odd clauses that no client would read, and it said
+ * nothing the DETAILED WORK LOG directly above it had not already said in
+ * dated, itemised form. So it is now one static sentence naming the period,
+ * and the work log carries the detail.
  */
 export function buildServiceSummary(args: {
-  lineItems: InvoicePdfLineItem[];
   clientName: string;
   orgName: string;
   periodLabel: string;
 }): string[] {
-  const { lineItems, clientName, orgName, periodLabel } = args;
-
-  const dated = lineItems.filter((i) => i.date);
-  const recurring = lineItems.filter((i) => !i.date);
-
-  const paragraphs = [
-    `During ${periodLabel}, ${orgName} provided the following IT services for ${clientName}.`,
+  const { clientName, orgName, periodLabel } = args;
+  return [
+    `During ${periodLabel}, ${orgName} provided the IT services itemized above for ${clientName}.`,
   ];
-
-  const clauses = dated.flatMap((i) => splitSentences(i.description));
-  const body: string[] = [];
-  if (clauses.length) body.push(`${clauses.join(", ")}.`);
-  if (recurring.length) {
-    const names = recurring.map((i) => i.description.trim().replace(/\.$/, ""));
-    body.push(`Recurring services for the period also included ${joinList(names)}.`);
-  }
-  if (body.length) paragraphs.push(body.join(" "));
-
-  return paragraphs;
 }
 
 /** "Jul 2026" style label for the billing period the invoice covers. */
@@ -64,19 +67,6 @@ export function periodLabel(periodStart: string, periodEnd: string): string {
   const a = month(start);
   const b = month(end);
   return a === b ? a : `${a} – ${b}`;
-}
-
-function splitSentences(text: string): string[] {
-  return text
-    .split(/(?<=\.)\s+/)
-    .map((part) => part.trim().replace(/\.$/, ""))
-    .filter(Boolean);
-}
-
-function joinList(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
 function parseIsoDate(iso: string): Date {

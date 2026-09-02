@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { requireOrgContext } from "@/lib/auth";
-import { getInvoicePdfSignedUrl } from "@/lib/storage/invoices";
+import { getInvoicePdfSignedUrl, invoicePdfFileName } from "@/lib/storage/invoices";
 
 /**
  * Redirects to a short-lived signed URL for the invoice PDF.
@@ -16,7 +16,10 @@ export async function GET(
 ) {
   const { id } = await params;
   const { data: invoice } = await requireOrgContext((tx) =>
-    tx.invoice.findUnique({ where: { id }, select: { pdfUrl: true } }),
+    tx.invoice.findUnique({
+      where: { id },
+      select: { pdfUrl: true, invoiceNumber: true, client: { select: { name: true } } },
+    }),
   );
 
   if (!invoice) {
@@ -29,5 +32,11 @@ export async function GET(
     );
   }
 
-  redirect(await getInvoicePdfSignedUrl(invoice.pdfUrl));
+  redirect(
+    await getInvoicePdfSignedUrl(
+      invoice.pdfUrl,
+      60,
+      invoicePdfFileName(invoice.invoiceNumber, invoice.client.name),
+    ),
+  );
 }

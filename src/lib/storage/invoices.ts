@@ -33,12 +33,42 @@ export async function uploadInvoicePdf(path: string, pdf: Buffer): Promise<void>
   if (error) throw new Error(`Invoice PDF upload failed: ${error.message}`);
 }
 
-/** Short-lived signed URL -- the bucket is private, so there is no public URL. */
-export async function getInvoicePdfSignedUrl(path: string, expiresInSeconds = 60): Promise<string> {
+/**
+ * The name the client's browser saves the PDF under: "UPH-00003 - UWE-PMA
+ * Holdings, LLC.pdf".
+ *
+ * Without this the download inherits the storage object's name, which is the
+ * invoice's UUID -- a 36-character filename that tells whoever receives it
+ * nothing. The storage path itself stays UUID-keyed (it must: it is the
+ * stable key, and client names get renamed).
+ */
+export function invoicePdfFileName(invoiceNumber: string, clientName: string): string {
+  // Slashes would read as directories and the rest are illegal on Windows.
+  const safe = (value: string) =>
+    value
+      .replace(/[/\\:*?"<>|]/g, "-")
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  return `${safe(invoiceNumber)} - ${safe(clientName)}.pdf`.slice(0, 150);
+}
+
+/**
+ * Short-lived signed URL -- the bucket is private, so there is no public URL.
+ *
+ * `fileName` turns the link into a download with a readable name; omit it to
+ * get a plain inline URL.
+ */
+export async function getInvoicePdfSignedUrl(
+  path: string,
+  expiresInSeconds = 60,
+  fileName?: string,
+): Promise<string> {
   const supabase = createAdminClient();
   const { data, error } = await supabase.storage
     .from(BUCKET)
-    .createSignedUrl(path, expiresInSeconds);
+    .createSignedUrl(path, expiresInSeconds, fileName ? { download: fileName } : undefined);
   if (error || !data) throw new Error(`Could not sign invoice PDF URL: ${error?.message}`);
   return data.signedUrl;
 }
