@@ -1,4 +1,5 @@
 import { PACIFIC_TZ } from "@/lib/cron/pacific";
+import { ticketInboxOf } from "@/lib/email/routing";
 import { prisma } from "@/lib/db/prisma";
 import { sendEmail, type SendResult } from "@/lib/email/client";
 import {
@@ -134,7 +135,9 @@ export async function notifyNewTicket(ticketId: string): Promise<{
       emailDomainVerified: org.emailDomainVerified,
     }),
     sendEmail({
-      to: org.supportEmail,
+      // The watched ticket inbox, which may not be the public support
+      // address -- see lib/email/routing.ts.
+      to: ticketInboxOf(org),
       from: senderOf(org),
       replyTo: ticket.contactEmail,
       subject: alert.subject,
@@ -209,6 +212,11 @@ export async function notifyTicketAssigned(
   if (!ticket?.assignedToUser) return { ok: false, skipped: true, error: "No assignee" };
   if (ticket.assignedToUser.id === assignedByUserId) {
     return { ok: false, skipped: true, error: "Self-assigned" };
+  }
+  // Opting out is a real choice, not a failure: the ticket is on the board
+  // and in the shared inbox either way.
+  if (!ticket.assignedToUser.receivesTicketEmails) {
+    return { ok: false, skipped: true, error: "Assignee has ticket email turned off" };
   }
 
   const assignedBy = await prisma.user.findUnique({

@@ -3,24 +3,26 @@ import { buttonVariants } from "@/components/ui/button";
 import type { DashboardMetrics } from "@/lib/dashboard/metrics";
 
 /**
- * "Have you logged today?" -- the same question the 7pm Pacific daily reminder
- * asks, surfaced where it can still be acted on.
+ * "Have you logged today?"
  *
- * Deliberately shares the digest's definition (any time entry created by this
- * user since Pacific midnight), so the banner and the email can never disagree
- * and tell Tony two different things about the same day.
+ * This IS the reminder now. There used to be a 7pm Pacific email as well, and
+ * it has been removed: the people it nagged are in the platform every day,
+ * and a mail that repeats what the first screen already says is one more
+ * thing to delete. Asking here means the answer is one click away instead of
+ * in another app.
+ *
+ * "Logged today" keeps its old definition -- any time entry created by this
+ * user since PACIFIC midnight, not the server's, which on Vercel is UTC and
+ * rolls over at 5pm local.
  *
  * Status is carried by an icon and a sentence, never by colour alone.
  */
 export function TodayStatus({
   today,
   firstName,
-  remindersOn,
 }: {
   today: DashboardMetrics["today"];
   firstName: string;
-  /** Whether THIS user is opted into the 7pm reminder (Settings → Staff). */
-  remindersOn: boolean;
 }) {
   const done = today.hasLogged;
 
@@ -47,13 +49,9 @@ export function TodayStatus({
             : `No time logged today yet, ${firstName}.`}
         </p>
         <p className="text-xs text-muted-foreground">
-          {/* Only mention the reminder to people who actually receive it --
-              promising a 7pm nudge to someone opted out is just wrong. */}
-          {!remindersOn
-            ? "Daily reminders are off for you."
-            : done
-              ? "You won't get the 7pm reminder."
-              : "The daily reminder goes out at 7pm Pacific if nothing is logged."}
+          {done
+            ? "Logging as you go is what keeps invoice time from becoming archaeology."
+            : "This is your reminder — there is no longer an email one."}
         </p>
       </div>
 

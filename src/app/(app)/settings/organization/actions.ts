@@ -35,6 +35,7 @@ export async function updateOrganization(
           name: data.name,
           supportEmail: data.supportEmail,
           notificationFromEmail: data.notificationFromEmail || null,
+          ticketNotificationEmail: data.ticketNotificationEmail || null,
           invoiceFromEmail: data.invoiceFromEmail || null,
           phone: data.phone || null,
           logoUrl: data.logoUrl || null,
@@ -186,24 +187,25 @@ export async function updateStaffRole(
 }
 
 /**
- * Toggles whether someone gets the 7pm "you haven't logged time" reminder.
+ * Toggles whether ticket mail addressed to this person reaches their inbox.
  *
  * Not admin-only on purpose: this is a personal notification preference, and
- * anyone should be able to turn their own nag off. Admins can set it for
- * others, which the role check below enforces.
+ * anyone should be able to turn their own off. Admins can set it for others,
+ * which the role check below enforces. Turning it off changes nothing about
+ * the shared ticket inbox or the board -- the ticket is still there.
  */
-export async function updateDailyReminderOptIn(
+export async function updateTicketEmailOptIn(
   userId: string,
   receives: boolean,
 ): Promise<ActionResult> {
   const { authUserId, appUser } = await requireOrgContext();
   if (appUser.role !== "admin" && appUser.id !== userId) {
-    return { ok: false, error: "You can only change your own reminder setting." };
+    return { ok: false, error: "You can only change your own notification setting." };
   }
 
   try {
     await withRLS(authUserId, (tx) =>
-      tx.user.update({ where: { id: userId }, data: { receivesDailyReminder: receives } }),
+      tx.user.update({ where: { id: userId }, data: { receivesTicketEmails: receives } }),
     );
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

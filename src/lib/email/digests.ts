@@ -1,8 +1,7 @@
-import { pacificDayStart } from "@/lib/cron/pacific";
 import { prisma } from "@/lib/db/prisma";
 import { sendEmail } from "@/lib/email/client";
+import { ticketInboxOf } from "@/lib/email/routing";
 import {
-  dailyReminderEmail,
   monthlySummaryEmail,
   weeklyTicketDigestEmail,
   type Branding,
@@ -29,53 +28,7 @@ function brandingOf(org: Awaited<ReturnType<typeof organizations>>[number]): Bra
   };
 }
 
-/** "You logged nothing today" — only to staff who actually logged nothing. */
-export async function sendDailyReminders(): Promise<Result[]> {
-  const results: Result[] = [];
-  // Pacific midnight, not UTC midnight. This job fires at 7pm Pacific, by
-  // which point the UTC date has already rolled over -- UTC midnight would be
-  // 5pm Pacific TODAY, so anyone who logged their time that morning looked
-  // like they hadn't logged at all and got a nag anyway.
-  const startOfToday = pacificDayStart();
-
-  for (const org of await organizations()) {
-    const result: Result = { organization: org.name, sent: 0, skipped: 0, errors: [] };
-    // Only people who actually log billable hours -- see
-    // User.receivesDailyReminder. Sending this to every staff row meant
-    // admins who never log time got a nightly nag they could only ignore.
-    const staff = await prisma.user.findMany({
-      where: { organizationId: org.id, receivesDailyReminder: true },
-    });
-
-    for (const user of staff) {
-      const logged = await prisma.timeEntry.count({
-        where: { loggedByUserId: user.id, createdAt: { gte: startOfToday } },
-      });
-      if (logged > 0) {
-        result.skipped++;
-        continue;
-      }
-
-      const email = dailyReminderEmail(brandingOf(org), user.name);
-      const sent = await sendEmail({
-        to: user.email,
-        from: org.notificationFromEmail ?? org.supportEmail,
-        subject: email.subject,
-        html: email.html,
-        emailDomainVerified: org.emailDomainVerified,
-      });
-      if (sent.ok) result.sent++;
-      else if (sent.skipped) result.skipped++;
-      else result.errors.push(`${user.email}: ${sent.error}`);
-    }
-
-    results.push(result);
-  }
-
-  return results;
-}
-
-/** Weekly open-ticket digest to all staff. */
+/** Weekly open-ticket digest to the shared ticket inbox. */
 export async function sendWeeklyTicketDigests(): Promise<Result[]> {
   const results: Result[] = [];
 
@@ -107,8 +60,9 @@ export async function sendWeeklyTicketDigests(): Promise<Result[]> {
     // This is a queue summary the team acts on together -- fanning it out to
     // three individual mailboxes just meant three people each assuming
     // someone else had picked it up.
+    const to = ticketInboxOf(org);
     const sent = await sendEmail({
-      to: org.supportEmail,
+      to,
       from: org.notificationFromEmail ?? org.supportEmail,
       subject: email.subject,
       html: email.html,
@@ -116,7 +70,7 @@ export async function sendWeeklyTicketDigests(): Promise<Result[]> {
     });
     if (sent.ok) result.sent++;
     else if (sent.skipped) result.skipped++;
-    else result.errors.push(`${org.supportEmail}: ${sent.error}`);
+    else result.errors.push(`${to}: ${sent.error}`);
 
     results.push(result);
   }

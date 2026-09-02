@@ -335,17 +335,6 @@ function formatPeriodLabel(start: Date, end: Date): string {
 
 // --- staff digests ---------------------------------------------------------
 
-export function dailyReminderEmail(branding: Branding, staffName: string): { subject: string; html: string } {
-  return {
-    subject: "No time logged today",
-    html: shell(
-      branding,
-      `<h1 style="margin:0 0 12px;font-size:20px;">No time logged yet today</h1>
-       <p style="margin:0;">Hi ${escapeHtml(staffName)} — nothing has been logged against a client today. If you worked, a couple of minutes now saves reconstructing it at invoice time.</p>`,
-    ),
-  };
-}
-
 export function weeklyTicketDigestEmail(
   branding: Branding,
   rows: { ticketNumber: string; clientCompanyName: string; urgency: string; status: string; ageDays: number }[],

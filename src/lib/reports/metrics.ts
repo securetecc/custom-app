@@ -42,6 +42,8 @@ export type ClientReportRow = {
   loggedNonBillable: number;
   /** Share of the period's invoiced total, 0-1. */
   share: number;
+  /** Nothing invoiced and nothing logged in this period. */
+  dormant: boolean;
 };
 
 export type ServiceTypeReportRow = {
@@ -106,7 +108,7 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
       _count: true,
     }),
     tx.serviceType.findMany({ select: { id: true, code: true, label: true } }),
-    tx.client.findMany({ select: { id: true, name: true } }),
+    tx.client.findMany({ select: { id: true, name: true, activeStatus: true } }),
     // Deliberately NOT limited to the selected range. "How fast does this
     // client pay" is a property of the relationship, and a one-month window
     // would answer it from one or two invoices -- or none at all.
@@ -152,9 +154,15 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
 
   const totalInvoiced = [...invoiced.values()].reduce((a, r) => a + r.amount, 0);
 
-  // Every client that either was invoiced or had time logged -- a client with
-  // hours and no invoice is exactly the case worth seeing.
-  const clientIds = new Set<string>([...invoiced.keys(), ...logged.keys()]);
+  // Every ACTIVE client, plus anyone inactive who still has activity in the
+  // period. Listing only the clients with movement answers "who was busy",
+  // but the question this page gets asked is "how is each client doing" --
+  // and a client who billed nothing this quarter is the one worth noticing.
+  const clientIds = new Set<string>([
+    ...clients.filter((c) => c.activeStatus).map((c) => c.id),
+    ...invoiced.keys(),
+    ...logged.keys(),
+  ]);
 
   const clientRows: ClientReportRow[] = [...clientIds]
     .map((id) => {
@@ -171,9 +179,18 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
         loggedBillable: round2(log.billable),
         loggedNonBillable: round2(log.nonBillable),
         share: totalInvoiced > 0 ? inv.amount / totalInvoiced : 0,
+        dormant: inv.count === 0 && log.billable + log.nonBillable === 0,
       };
     })
-    .sort((a, b) => b.invoicedAmount - a.invoicedAmount || b.loggedBillable - a.loggedBillable);
+    // Quiet clients sort last, alphabetically among themselves -- they are
+    // context, not the headline, but they must still be findable.
+    .sort(
+      (a, b) =>
+        Number(a.dormant) - Number(b.dormant) ||
+        b.invoicedAmount - a.invoicedAmount ||
+        b.loggedBillable - a.loggedBillable ||
+        a.name.localeCompare(b.name),
+    );
 
   const typeLabels = new Map(serviceTypes.map((t) => [t.id, t]));
   const totalTypeHours = byServiceType.reduce((a, r) => a + num(r._sum.durationHours), 0);

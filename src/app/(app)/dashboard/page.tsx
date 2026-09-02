@@ -10,6 +10,7 @@ import { RangeFilter } from "@/components/app/dashboard/range-filter";
 import { TodayStatus } from "@/components/app/dashboard/today-status";
 import { Collections, TicketAttention } from "@/components/app/dashboard/collections";
 import { BillingFocus } from "@/components/app/dashboard/billing-focus";
+import { UnbilledAlert } from "@/components/app/dashboard/unbilled-alert";
 import { buildGreeting } from "@/lib/greeting";
 
 const usd = (n: number) =>
@@ -55,10 +56,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         {greeting.subline && <p className="text-muted-foreground">{greeting.subline}</p>}
       </div>
 
-      <TodayStatus
-        today={metrics.today}
-        firstName={firstName}
-        remindersOn={appUser.receivesDailyReminder}
+      <TodayStatus today={metrics.today} firstName={firstName} />
+
+      <UnbilledAlert
+        needsBilling={metrics.needsBilling}
+        monthlyGoal={Number(appUser.organization.monthlyRevenueGoal)}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">

@@ -146,35 +146,42 @@ enum TicketStatus {
 }
 
 model Organization {
-  id                    String   @id @default(uuid())
-  name                  String
-  logoUrl               String?
-  brandColorPrimary     String   @default("#071E37")
-  brandColorAccent      String   @default("#06E1DC")
+  id                      String   @id @default(uuid())
+  name                    String
+  logoUrl                 String?
+  brandColorPrimary       String   @default("#071E37")
+  brandColorAccent        String   @default("#06E1DC")
   /// The REAL, monitored inbox. Two distinct jobs, both of which need a human
   /// reading them: it's the `to:` for internal new-ticket alerts, and the
   /// `replyTo:` on client-facing mail. Deliberately NOT the `from:` — see
   /// notificationFromEmail.
-  supportEmail          String   @unique
+  supportEmail            String   @unique
   /// The `from:` for automated Resend mail (ticket confirmations, status
   /// changes, digests). Split out from supportEmail because outbound sending
   /// moved to a dedicated subdomain (noreply@alerts.securetecc.com) so its SPF
   /// record stays independent of the root domain's Google Workspace one.
   /// A noreply sender must never be the to:/replyTo: — that black-holes both
   /// internal alerts and client replies. Falls back to supportEmail when unset.
-  notificationFromEmail String?
+  notificationFromEmail   String?
   // From address used specifically for outbound invoice emails (may differ
   // from supportEmail — e.g. a named staff mailbox rather than a shared inbox).
-  invoiceFromEmail      String?
-  phone                 String?
+  invoiceFromEmail        String?
+  /// Where ticket traffic is WATCHED: new-ticket alerts and the weekly open
+  /// ticket digest. Separate from supportEmail because that address is also
+  /// the reply-to on client mail and so has to stay the public one, while
+  /// where the team actually watches tickets is an internal choice — a shared
+  /// inbox, a channel bridge, a notification app. Falls back to supportEmail
+  /// when unset, which is what it did before this existed.
+  ticketNotificationEmail String?
+  phone                   String?
   // Manual onboarding checklist flag: domain/DKIM verified in Resend.
   // Sends are blocked until this is true — see lib/email.
-  emailDomainVerified   Boolean  @default(false)
+  emailDomainVerified     Boolean  @default(false)
   /// Monthly invoicing target the dashboard meter reads against. A business
   /// number, so it lives in the DB and is editable in Settings → Organization
   /// rather than being a constant someone has to redeploy to change.
-  monthlyRevenueGoal    Decimal  @default(20000) @db.Decimal(10, 2)
-  createdAt             DateTime @default(now())
+  monthlyRevenueGoal      Decimal  @default(20000) @db.Decimal(10, 2)
+  createdAt               DateTime @default(now())
 
   // --- Invoice letterhead -------------------------------------------------
   // The invoice PDF's letterhead names an individual biller (e.g. the owner),
@@ -218,35 +225,35 @@ model Organization {
 }
 
 model User {
-  id                    String       @id @default(uuid())
-  organizationId        String
-  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                   String       @id @default(uuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   // Mirrors Supabase auth.users.id — this row is the app-side profile/role record.
-  authUserId            String       @unique
-  name                  String
-  email                 String
-  role                  UserRole     @default(technician)
-  /// Whether the 7pm Pacific "you haven't logged time today" nag goes to this
-  /// person. Off by default and deliberately per-user rather than sent to
-  /// every staff row: it's addressed to whoever actually logs billable hours,
-  /// and mailing it to people who don't just trains them to ignore it.
-  receivesDailyReminder Boolean      @default(false)
+  authUserId           String       @unique
+  name                 String
+  email                String
+  role                 UserRole     @default(technician)
+  /// Whether ticket mail addressed to this person individually (a ticket
+  /// assigned to them) reaches their inbox. Shared-inbox mail is unaffected --
+  /// that goes to ticketNotificationEmail, not here. On by default: someone
+  /// handed a ticket should hear about it unless they say otherwise.
+  receivesTicketEmails Boolean      @default(true)
   /// Storage path in the private "avatars" bucket, not a URL -- the bucket is
   /// private, so what's shown is a short-lived signed URL minted per request.
-  avatarPath            String?
+  avatarPath           String?
   /// Who may CREATE and ASSIGN tasks. A per-user flag rather than a role
   /// check, because role=admin is already held by more than one person here
   /// and delegation is specifically the business owner's function. Explicit
   /// beats an email address hard-coded in application logic.
-  canDelegateTasks      Boolean      @default(false)
+  canDelegateTasks     Boolean      @default(false)
   /// Birthday as month/day integers rather than a Date. Only the day matters
   /// for a greeting, and storing a timestamp would mean a date-only value
   /// crossing timezones -- the exact bug that shifted the digest window and
   /// every imported time entry. Ints cannot drift. The year is deliberately
   /// not collected: it isn't needed and it's the sensitive half.
-  birthMonth            Int?
-  birthDay              Int?
-  createdAt             DateTime     @default(now())
+  birthMonth           Int?
+  birthDay             Int?
+  createdAt            DateTime     @default(now())
 
   emailSignatures            EmailSignature[]
   loggedTimeEntries          TimeEntry[]           @relation("LoggedByUser")

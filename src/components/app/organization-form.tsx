@@ -16,7 +16,7 @@ import {
   setEmailDomainVerified,
   updateOrganization,
   updateStaffRole,
-  updateDailyReminderOptIn,
+  updateTicketEmailOptIn,
 } from "@/app/(app)/settings/organization/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -114,6 +114,24 @@ export function OrganizationForm({ defaultValues }: { defaultValues: Organizatio
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="ticketNotificationEmail">Ticket notifications go to</Label>
+            <Input
+              id="ticketNotificationEmail"
+              type="email"
+              placeholder="support@securetecc.com"
+              {...register("ticketNotificationEmail")}
+            />
+            <p className="text-xs text-muted-foreground">
+              Where new-ticket alerts and the weekly ticket digest are delivered. Separate from
+              the support inbox above, which stays the address clients reply to — point this at
+              wherever the team actually watches tickets. Defaults to the support inbox if left
+              blank.
+            </p>
+            {errors.ticketNotificationEmail && (
+              <p className="text-xs text-destructive">{errors.ticketNotificationEmail.message}</p>
+            )}
+          </div>
           <div className="space-y-2">
             <Label htmlFor="invoiceFromEmail">Invoice &ldquo;from&rdquo; email</Label>
             <Input id="invoiceFromEmail" type="email" {...register("invoiceFromEmail")} />
@@ -330,7 +348,7 @@ export function StaffSection({
   staff,
   currentUserId,
 }: {
-  staff: { id: string; name: string; email: string; role: string; receivesDailyReminder: boolean }[];
+  staff: { id: string; name: string; email: string; role: string; receivesTicketEmails: boolean }[];
   currentUserId: string;
 }) {
   return (
@@ -358,10 +376,7 @@ export function StaffSection({
               <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
             <div className="flex items-center gap-4">
-              <DailyReminderToggle
-                userId={user.id}
-                initial={user.receivesDailyReminder}
-              />
+              <TicketEmailToggle userId={user.id} initial={user.receivesTicketEmails} />
               <StaffRoleSelect userId={user.id} role={user.role} />
             </div>
           </div>
@@ -371,7 +386,14 @@ export function StaffSection({
   );
 }
 
-function DailyReminderToggle({ userId, initial }: { userId: string; initial: boolean }) {
+/**
+ * Whether tickets assigned to this person are emailed to them.
+ *
+ * Off does not mean uninformed: the ticket still lands in the watched ticket
+ * inbox and on the tickets page. It exists because someone who lives in the
+ * platform every day does not need the same thing twice.
+ */
+function TicketEmailToggle({ userId, initial }: { userId: string; initial: boolean }) {
   const [on, setOn] = useState(initial);
   const [pending, setPending] = useState(false);
 
@@ -385,16 +407,16 @@ function DailyReminderToggle({ userId, initial }: { userId: string; initial: boo
           const value = next === true;
           setOn(value); // optimistic -- reverted below if the write fails
           setPending(true);
-          const result = await updateDailyReminderOptIn(userId, value);
+          const result = await updateTicketEmailOptIn(userId, value);
           setPending(false);
           if (!result.ok) {
             setOn(previous);
             toast.error(result.error);
           }
         }}
-        aria-label="Send the daily time-logging reminder to this person"
+        aria-label="Email this person when a ticket is assigned to them"
       />
-      Daily reminder
+      Ticket emails
     </label>
   );
 }

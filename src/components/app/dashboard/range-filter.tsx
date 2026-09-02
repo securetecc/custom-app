@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { RANGE_LABELS, type RangeKey } from "@/lib/dashboard/metrics";
 const PRESETS = Object.entries(RANGE_LABELS) as [Exclude<RangeKey, "custom">, string][];
 
 /**
- * Time-range control for the whole dashboard.
+ * Time-range control, shared by the dashboard and Reports.
  *
  * State lives in the URL, not React: the range is then shareable, survives a
  * refresh, and lets the page stay a server component that re-queries on
@@ -19,6 +19,11 @@ const PRESETS = Object.entries(RANGE_LABELS) as [Exclude<RangeKey, "custom">, st
 export function RangeFilter({ current, from, to }: { current: RangeKey; from?: string; to?: string }) {
   const router = useRouter();
   const params = useSearchParams();
+  // The page this control is on -- it used to push to a hard-coded
+  // "/dashboard", so changing the range on Reports navigated away from
+  // Reports. Reported as custom ranges and "last 6 months" being broken:
+  // they worked, they just answered on a different page.
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const [showCustom, setShowCustom] = useState(current === "custom");
   const [draft, setDraft] = useState({ from: from ?? "", to: to ?? "" });
@@ -29,7 +34,7 @@ export function RangeFilter({ current, from, to }: { current: RangeKey; from?: s
       if (v === null) q.delete(k);
       else q.set(k, v);
     }
-    startTransition(() => router.push(`/dashboard?${q.toString()}`, { scroll: false }));
+    startTransition(() => router.push(`${pathname}?${q.toString()}`, { scroll: false }));
   }
 
   return (

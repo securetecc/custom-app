@@ -84,8 +84,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
         <CardHeader className="pb-3">
           <CardTitle className="text-base">By client</CardTitle>
           <CardDescription>
-            Effective rate is what was invoiced divided by the hours on those invoices — so a
-            client absorbing unbilled time shows a lower rate than their nominal one.
+            Every active client, whether or not they moved this period — a quiet client is the
+            one worth noticing. Effective rate is what was invoiced divided by the hours on those
+            invoices, so a client absorbing unbilled time shows a lower rate than their nominal
+            one.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -107,11 +109,14 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
               </TableHeader>
               <TableBody>
                 {clients.map((c) => (
-                  <TableRow key={c.clientId}>
+                  <TableRow key={c.clientId} className={c.dormant ? "text-muted-foreground" : undefined}>
                     <TableCell className="font-medium">
                       <Link href={`/clients/${c.clientId}`} className="hover:underline">
                         {c.name}
                       </Link>
+                      {c.dormant && (
+                        <span className="ml-2 text-xs font-normal">no activity</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{usd(c.invoicedAmount)}</TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
