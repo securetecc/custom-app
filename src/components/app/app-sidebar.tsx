@@ -32,7 +32,7 @@ const NAV_ITEMS = [
   { href: "/today", label: "Today", icon: Sunrise, adminOnly: false, soon: true },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
   { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
-  { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false, soon: true },
+  { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false },
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true, soon: true },

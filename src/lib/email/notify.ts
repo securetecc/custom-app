@@ -1,3 +1,4 @@
+import { PACIFIC_TZ } from "@/lib/cron/pacific";
 import { prisma } from "@/lib/db/prisma";
 import { sendEmail, type SendResult } from "@/lib/email/client";
 import {
@@ -7,6 +8,7 @@ import {
   ticketStatusChangeEmail,
   taskAssignedEmail,
   taskForReviewEmail,
+  taskCompletedEmail,
   type Branding,
 } from "@/lib/email/templates";
 
@@ -309,6 +311,54 @@ export async function notifyTaskForReview(taskId: string): Promise<SendResult> {
   const email = taskForReviewEmail(
     brandingOf(org),
     { title: task.title, assigneeName: task.assignedToUser.name },
+    appUrl("/tasks"),
+  );
+
+  return sendEmail({
+    to: task.createdByUser.email,
+    from: senderOf(org),
+    replyTo: task.assignedToUser.email,
+    subject: email.subject,
+    html: email.html,
+    emailDomainVerified: org.emailDomainVerified,
+  });
+}
+
+/**
+ * Tells the delegator a task is done.
+ *
+ * Same shape as notifyTaskForReview, deliberately not folded into it with a
+ * flag: they are two different messages, and the branch would have to reach
+ * into the template choice, the subject and the copy anyway.
+ */
+export async function notifyTaskCompleted(taskId: string): Promise<SendResult> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { organization: true, assignedToUser: true, createdByUser: true },
+  });
+  if (!task) return { ok: false, error: "Task not found." };
+  if (task.assignedToUserId === task.createdByUserId) {
+    return { ok: false, skipped: true, error: "Self-assigned" };
+  }
+
+  const org = task.organization as OrgRow;
+  const email = taskCompletedEmail(
+    brandingOf(org),
+    {
+      title: task.title,
+      assigneeName: task.assignedToUser.name,
+      // completedAt is a real timestamp, not a date-only column, so it is
+      // read in Pacific -- formatTaskDate's UTC reading would show the next
+      // day for anything finished after 5pm.
+      completedOn: task.completedAt
+        ? task.completedAt.toLocaleDateString("en-US", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            timeZone: PACIFIC_TZ,
+          })
+        : null,
+    },
     appUrl("/tasks"),
   );
 

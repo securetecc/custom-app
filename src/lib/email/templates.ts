@@ -498,3 +498,30 @@ export function taskForReviewEmail(
     ),
   };
 }
+
+/**
+ * Tells the delegator a task is finished.
+ *
+ * Distinct from the For review note above: "ready to be checked" asks for
+ * something, "done" reports something. Sending the same mail for both would
+ * make the one that needs action indistinguishable from the one that does
+ * not.
+ */
+export function taskCompletedEmail(
+  branding: Branding,
+  task: { title: string; assigneeName: string; completedOn: string | null },
+  taskUrl: string,
+): { subject: string; html: string } {
+  return {
+    subject: `Completed: ${task.title}`,
+    html: shell(
+      branding,
+      `<h1 style="margin:0 0 12px;font-size:20px;">Task completed</h1>
+       <p style="margin:0 0 4px;">${escapeHtml(task.assigneeName)} has marked this task as completed${
+         task.completedOn ? ` on ${escapeHtml(task.completedOn)}` : ""
+       }.</p>
+       ${panel("Task", task.title)}
+       ${button(taskUrl, "Open task", branding.accentColor)}`,
+    ),
+  };
+}

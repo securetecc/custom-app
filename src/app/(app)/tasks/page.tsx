@@ -1,63 +1,106 @@
-import { ListChecks } from "lucide-react";
+import { Plus } from "lucide-react";
 import { requireOrgContext } from "@/lib/auth";
-import { ComingSoon } from "@/components/app/coming-soon";
+import { withRLS } from "@/lib/db/rls";
+import { PACIFIC_TZ, pacificDayStart } from "@/lib/cron/pacific";
+import { TaskBoard, type BoardTask } from "@/components/app/task-board";
+import { TaskDialog } from "@/components/app/task-dialog";
+import { Button } from "@/components/ui/button";
 
 /**
- * Task delegation.
+ * The delegation board.
  *
- * Placeholder for now, but the data layer behind it is already built and
- * applied -- see the Task model in prisma/schema.prisma and the policies in
- * supabase/migrations/0007_tasks.sql. What is missing is the board UI.
+ * Everyone reads everything — shared awareness is the point, and the split
+ * that matters (only the delegator creates and assigns) is enforced by RLS in
+ * supabase/migrations/0007_tasks.sql, not just by hiding buttons here.
  */
 export default async function TasksPage() {
-  const { appUser } = await requireOrgContext();
+  const { appUser, authUserId } = await requireOrgContext();
+
+  const [tasks, staff] = await withRLS(authUserId, (tx) =>
+    Promise.all([
+      tx.task.findMany({
+        orderBy: [
+          // Undated work sinks below anything with a deadline, and the most
+          // urgent of the undated rises within it.
+          { dueDate: { sort: "asc", nulls: "last" } },
+          { priority: "desc" },
+          { createdAt: "desc" },
+        ],
+        include: {
+          assignedToUser: { select: { id: true, name: true } },
+          createdByUser: { select: { name: true } },
+        },
+      }),
+      tx.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    ]),
+  );
+
+  const board: BoardTask[] = tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    priority: t.priority,
+    status: t.status,
+    // Date-only columns, formatted with toISOString because they are stored
+    // as UTC midnight — never through a locale formatter, which would shift
+    // them a day.
+    startDate: t.startDate ? t.startDate.toISOString().slice(0, 10) : null,
+    dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+    assigneeId: t.assignedToUser.id,
+    assigneeName: t.assignedToUser.name,
+    createdByName: t.createdByUser.name,
+  }));
+
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: PACIFIC_TZ }).format(pacificDayStart());
+  const mine = board.filter((t) => t.assigneeId === appUser.id && t.status !== "Completed").length;
+  const waiting = board.filter((t) => t.status === "ForReview").length;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-        <p className="text-muted-foreground">
-          {appUser.canDelegateTasks
-            ? "Delegate work to the team and track it through to done."
-            : "What the team is working on, and who has what."}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
+          <p className="text-muted-foreground">
+            {appUser.canDelegateTasks
+              ? "Delegate work to the team and track it through to done."
+              : "What the team is working on, and who has what."}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {mine === 0 ? "Nothing open assigned to you" : `${mine} open assigned to you`}
+            {appUser.canDelegateTasks && waiting > 0 && ` · ${waiting} waiting on your review`}
+          </p>
+        </div>
+
+        {appUser.canDelegateTasks && (
+          <TaskDialog
+            staff={staff}
+            selfUserId={appUser.id}
+            trigger={
+              <Button>
+                <Plus className="mr-1 h-4 w-4" /> New task
+              </Button>
+            }
+          />
+        )}
       </div>
 
-      <ComingSoon
-        icon={ListChecks}
-        title="Coming soon"
-        description="Delegated tasks, with everyone able to see the whole board."
-        points={[
-          "Tony creates a task — name, description, priority, start and due date — and assigns it to a VA or partner.",
-          "The assignee gets an email the moment it lands, with the brief and the due date.",
-          "They move it through In progress → For review, and Tony gets told when something is waiting on him.",
-          "Every task is visible to everyone, showing who is assigned to what — shared awareness, not four private queues.",
-        ]}
-        note="Only Tony can create and assign; everyone can read everything and update their own. That split is already enforced at the database, not just in the interface."
-        preview={
-          <div className="grid gap-2 sm:grid-cols-4">
-            {[
-              { col: "Not started", items: [["Reconcile July invoices", "Zia", "High"]] },
-              { col: "In progress", items: [["Chase PCC network quote", "Ian", "Medium"]] },
-              { col: "For review", items: [["Draft Sergent migration doc", "Zia", "Urgent"]] },
-              { col: "Completed", items: [["Update client list", "Ian", "Low"]] },
-            ].map(({ col, items }) => (
-              <div key={col} className="rounded-md border p-2">
-                <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">{col}</p>
-                {items.map(([title, who, pri]) => (
-                  <div key={title} className="rounded border p-2">
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="text-[11px] leading-tight">{title}</span>
-                      <span className="shrink-0 text-[9px] uppercase text-accent">{pri}</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{who}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        }
-      />
+      {board.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            {appUser.canDelegateTasks
+              ? "No tasks yet. Create one — you can dictate it and check the draft before it goes out."
+              : "No tasks yet."}
+          </p>
+        </div>
+      ) : (
+        <TaskBoard
+          tasks={board}
+          staff={staff}
+          selfUserId={appUser.id}
+          canDelegate={appUser.canDelegateTasks}
+          today={today}
+        />
+      )}
     </div>
   );
 }

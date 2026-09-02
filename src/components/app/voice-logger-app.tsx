@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import Image from "next/image";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/validations/time-entry";
 import { createTimeEntry } from "@/app/(app)/time-entries/actions";
 import { parseTimeEntryVoiceNote } from "@/app/(app)/time-entries/ai-actions";
+import { LISTENING_PLACEHOLDER, useDictation } from "@/lib/hooks/use-dictation";
 
 /**
  * Standalone branded page ported from manage.securetecc.com's v1 Voice
@@ -38,31 +39,6 @@ const EXAMPLE_PHRASES = [
   "30 minute call with Yar On The Lake, non-billable",
 ];
 
-type SpeechRecognitionResultLike = { isFinal: boolean; 0: { transcript: string } };
-type SpeechRecognitionEventLike = { results: ArrayLike<SpeechRecognitionResultLike> };
-type SpeechRecognitionErrorEventLike = { error: string };
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  maxAlternatives: number;
-  onstart: (() => void) | null;
-  onresult: ((e: SpeechRecognitionEventLike) => void) | null;
-  onend: (() => void) | null;
-  onerror: ((e: SpeechRecognitionErrorEventLike) => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: new () => SpeechRecognitionLike;
-    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
 const emptyDraft: Partial<TimeEntryFormValues> = {
   clientId: "",
   serviceTypeId: "",
@@ -83,14 +59,13 @@ export function VoiceLoggerApp({
   const [tab, setTab] = useState<"voice" | "manual">("voice");
 
   // Voice tab state
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState("");
+  const dictation = useDictation({
+    onUnsupported: () => toast.error("Voice input needs Chrome or Safari."),
+  });
+  const { isRecording, transcript } = dictation;
   const [parsing, setParsing] = useState(false);
   const [reviewDraft, setReviewDraft] = useState<Partial<TimeEntryFormValues> | null>(null);
   const [reviewWarning, setReviewWarning] = useState<string | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const finalTranscriptRef = useRef("");
-  const userStoppedRef = useRef(true);
 
   // Manual tab state
   const [manual, setManual] = useState<Partial<TimeEntryFormValues>>(emptyDraft);
@@ -99,10 +74,9 @@ export function VoiceLoggerApp({
   const [result, setResult] = useState<{ ok: boolean; message: string; detail?: string } | null>(null);
 
   function resetVoice() {
-    setTranscript("");
+    dictation.reset();
     setReviewDraft(null);
     setReviewWarning(null);
-    finalTranscriptRef.current = "";
   }
 
   function switchTab(next: "voice" | "manual") {
@@ -112,92 +86,8 @@ export function VoiceLoggerApp({
     if (next === "manual") setManual(emptyDraft);
   }
 
-  function startRecognitionSession() {
-    const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) {
-      toast.error("Voice input needs Chrome or Safari.");
-      return;
-    }
-    const recognition = new Ctor();
-    recognitionRef.current = recognition;
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    // continuous stays false -- setting it true causes transcript doubling on
-    // Android Chrome. Instead we auto-restart a fresh session on natural
-    // pause-triggered "end" events below, so speaking with pauses doesn't cut
-    // the technician off mid-thought.
-    recognition.continuous = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setIsRecording(true);
-      if (!finalTranscriptRef.current) setTranscript("Listening...");
-    };
-
-    recognition.onresult = (e) => {
-      let sessionFinal = "";
-      let sessionInterim = "";
-      for (let i = 0; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) sessionFinal += r[0].transcript;
-        else sessionInterim += r[0].transcript;
-      }
-      const liveText =
-        (finalTranscriptRef.current ? finalTranscriptRef.current + " " : "") +
-        (sessionFinal || sessionInterim);
-      setTranscript(liveText.trim());
-      if (sessionFinal) {
-        finalTranscriptRef.current = (
-          finalTranscriptRef.current ? finalTranscriptRef.current + " " : ""
-        ) + sessionFinal.trim();
-      }
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-      if (!userStoppedRef.current) {
-        try {
-          startRecognitionSession();
-          recognitionRef.current?.start();
-        } catch {
-          finishRecording();
-        }
-        return;
-      }
-      finishRecording();
-    };
-
-    recognition.onerror = (e) => {
-      if (e.error === "no-speech" && !userStoppedRef.current) return;
-      setIsRecording(false);
-      if (!finalTranscriptRef.current) {
-        setTranscript(`Error: ${e.error}. Please try again.`);
-      }
-    };
-
-    recognition.start();
-  }
-
-  function finishRecording() {
-    const text = finalTranscriptRef.current.trim();
-    if (text) setTranscript(text);
-  }
-
-  function toggleRecording() {
-    if (isRecording) {
-      userStoppedRef.current = true;
-      recognitionRef.current?.stop();
-      return;
-    }
-    finalTranscriptRef.current = "";
-    setTranscript("");
-    setReviewDraft(null);
-    userStoppedRef.current = false;
-    startRecognitionSession();
-  }
-
   async function handleParseVoice() {
-    if (!transcript.trim() || transcript === "Listening...") {
+    if (!dictation.hasSpeech) {
       toast.error("Record a voice entry first.");
       return;
     }
@@ -247,13 +137,6 @@ export function VoiceLoggerApp({
     setManual(emptyDraft);
     router.refresh();
   }
-
-  useEffect(() => {
-    return () => {
-      userStoppedRef.current = true;
-      recognitionRef.current?.stop();
-    };
-  }, []);
 
   const reviewServiceType = serviceTypes.find((st) => st.id === reviewDraft?.serviceTypeId);
   const manualServiceType = serviceTypes.find((st) => st.id === manual.serviceTypeId);
@@ -326,7 +209,7 @@ export function VoiceLoggerApp({
                 <>
                   <button
                     type="button"
-                    onClick={toggleRecording}
+                    onClick={dictation.toggle}
                     className={`mb-4 block w-full rounded-xl px-6 py-5 text-lg font-bold tracking-wide transition-opacity hover:opacity-85 ${
                       isRecording ? "animate-pulse bg-[#ff4444] text-white" : "bg-[#06E1DC] text-[#071E37]"
                     }`}
@@ -345,7 +228,7 @@ export function VoiceLoggerApp({
                     {transcript || "Your spoken text will appear here..."}
                   </div>
 
-                  {transcript && !isRecording && transcript !== "Listening..." && (
+                  {transcript && !isRecording && transcript !== LISTENING_PLACEHOLDER && (
                     <button
                       type="button"
                       onClick={handleParseVoice}

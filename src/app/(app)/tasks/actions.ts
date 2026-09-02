@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
-import { notifyTaskAssigned, notifyTaskForReview } from "@/lib/email/notify";
+import {
+  notifyTaskAssigned,
+  notifyTaskCompleted,
+  notifyTaskForReview,
+} from "@/lib/email/notify";
 import {
   taskFormSchema,
   taskStatusSchema,
@@ -151,9 +155,13 @@ export async function updateTaskStatus(
 
   const { authUserId, appUser } = await requireOrgContext();
 
-  let becameForReview = false;
+  // What the delegator needs to hear about: work waiting on them, and work
+  // finished. Both only on the transition, never on a re-save of the same
+  // status -- a second identical email is how people learn to ignore the
+  // first.
+  let transition: "ForReview" | "Completed" | null = null;
   try {
-    becameForReview = await withRLS(authUserId, async (tx) => {
+    transition = await withRLS(authUserId, async (tx) => {
       const task = await tx.task.findUnique({
         where: { id: taskId },
         select: { assignedToUserId: true, status: true, completedAt: true },
@@ -173,13 +181,17 @@ export async function updateTaskStatus(
             status === "Completed" ? (task.completedAt ?? new Date()) : task.completedAt,
         },
       });
-      return status === "ForReview" && task.status !== "ForReview";
+      if (status === task.status) return null;
+      if (status === "ForReview") return "ForReview" as const;
+      if (status === "Completed") return "Completed" as const;
+      return null;
     });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Couldn't update the status." };
   }
 
-  if (becameForReview) await notifyTaskForReview(taskId);
+  if (transition === "ForReview") await notifyTaskForReview(taskId);
+  if (transition === "Completed") await notifyTaskCompleted(taskId);
   revalidatePath("/tasks");
   return { ok: true };
 }
