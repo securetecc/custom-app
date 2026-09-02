@@ -1,5 +1,7 @@
 import type { TxClient } from "@/lib/db/rls";
 import type { ResolvedRange } from "@/lib/dashboard/metrics";
+import { buildAging, type AgingReport } from "./aging";
+import { buildProfitability, type ProfitabilitySummary } from "./profitability";
 
 /**
  * Reporting aggregates: what each client is actually worth, and where the
@@ -67,6 +69,8 @@ export type PaymentSpeedRow = {
 
 export type ReportsData = {
   clients: ClientReportRow[];
+  aging: AgingReport;
+  profitability: ProfitabilitySummary;
   serviceTypes: ServiceTypeReportRow[];
   paymentSpeed: PaymentSpeedRow[];
   totals: {
@@ -89,7 +93,16 @@ function num(v: unknown): number {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<ReportsData> {
-  const [invoices, loggedByClient, byServiceType, serviceTypes, clients, settled] = await Promise.all([
+  const [
+    invoices,
+    loggedByClient,
+    byServiceType,
+    serviceTypes,
+    clients,
+    settled,
+    outstanding,
+    expenses,
+  ] = await Promise.all([
     // createdAt, matching how the dashboard buckets invoices -- "raised in
     // this period", not "covering this period".
     tx.invoice.findMany({
@@ -115,6 +128,33 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
     tx.invoice.findMany({
       where: { voidedAt: null, status: "Paid", sentAt: { not: null }, paidAt: { not: null } },
       select: { clientId: true, sentAt: true, paidAt: true, paymentMethod: true },
+    }),
+    // Ageing is about what is owed NOW, so it deliberately ignores the
+    // selected range: an unpaid invoice from March is still unpaid whichever
+    // month you happen to be looking at.
+    tx.invoice.findMany({
+      where: { voidedAt: null, status: { in: ["Invoiced", "Sent"] } },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        clientId: true,
+        totalAmount: true,
+        sentAt: true,
+        issuedAt: true,
+        createdAt: true,
+        client: { select: { name: true } },
+        payments: { select: { amount: true, receivedAt: true, method: true, methodOther: true } },
+      },
+    }),
+    tx.businessExpense.findMany({
+      select: {
+        amount: true,
+        frequency: true,
+        clientId: true,
+        startDate: true,
+        endDate: true,
+        activeStatus: true,
+      },
     }),
   ]);
 
@@ -241,6 +281,44 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
 
   return {
     clients: clientRows,
+    aging: buildAging(
+      outstanding.map((i) => ({
+        id: i.id,
+        invoiceNumber: i.invoiceNumber,
+        clientId: i.clientId,
+        clientName: i.client.name,
+        totalAmount: num(i.totalAmount),
+        sentAt: i.sentAt,
+        issuedAt: i.issuedAt,
+        createdAt: i.createdAt,
+        payments: i.payments.map((p) => ({
+          amount: num(p.amount),
+          receivedAt: p.receivedAt,
+          method: p.method,
+          methodOther: p.methodOther,
+        })),
+      })),
+      new Date(),
+    ),
+    profitability: buildProfitability({
+      invoicedByClient: new Map(
+        [...invoiced].map(([id, r]) => [id, { name: names.get(id) ?? "Unknown client", amount: r.amount }]),
+      ),
+      expenses: expenses.map((e) => ({
+        amount: num(e.amount),
+        frequency: e.frequency,
+        clientId: e.clientId,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        activeStatus: e.activeStatus,
+      })),
+      clientNames: names,
+      start: range.start,
+      end: range.end,
+      // The range's own month buckets, so a monthly cost is counted once per
+      // month the report covers rather than once per report.
+      monthsInRange: Math.max(1, range.buckets.length),
+    }),
     serviceTypes: serviceRows,
     paymentSpeed,
     totals: {
