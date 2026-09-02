@@ -26,7 +26,10 @@ export function TimeEntriesTabs() {
   const pathname = usePathname();
 
   return (
-    <div className="inline-flex w-fit items-center gap-[3px] rounded-lg bg-muted p-[3px]">
+    // Scrolls sideways rather than overflowing: three labels this long are
+    // wider than a phone, and the alternative -- abbreviating them -- costs
+    // the one thing a tab label is for.
+    <div className="flex max-w-full items-center gap-[3px] overflow-x-auto rounded-lg bg-muted p-[3px] sm:inline-flex sm:w-fit">
       {TABS.map((tab) => {
         const active = pathname === tab.href;
         return (
@@ -34,7 +37,7 @@ export function TimeEntriesTabs() {
             key={tab.href}
             href={tab.href}
             className={cn(
-              "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+              "shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors",
               active
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",

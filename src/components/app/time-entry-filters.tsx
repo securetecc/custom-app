@@ -53,11 +53,14 @@ export function TimeEntryFilters({
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    // Two per row on a phone, the original inline row from `sm` up. The
+    // fixed widths below are what a filter bar wants on a desktop and what
+    // leaves half a phone screen empty beside a 190px control.
+    <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Client</Label>
         <Select value={clientId} onValueChange={(v) => v && navigate({ clientId: v })}>
-          <SelectTrigger className="w-[190px]">
+          <SelectTrigger className="w-full sm:w-[190px]">
             <SelectValue>
               {(value) =>
                 value === "all" ? "All clients" : clients.find((c) => c.id === value)?.name ?? "All clients"
@@ -78,7 +81,7 @@ export function TimeEntryFilters({
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Period</Label>
         <Select value={range} onValueChange={(v) => v && navigate({ range: v as DateRangePreset })}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-full sm:w-[160px]">
             <SelectValue>{(value) => DATE_RANGE_PRESET_LABELS[value as DateRangePreset]}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -99,7 +102,7 @@ export function TimeEntryFilters({
               type="date"
               value={start}
               onChange={(e) => navigate({ start: e.target.value })}
-              className="w-[160px]"
+              className="w-full sm:w-[160px]"
             />
           </div>
           <div className="space-y-1.5">
@@ -108,7 +111,7 @@ export function TimeEntryFilters({
               type="date"
               value={end}
               onChange={(e) => navigate({ end: e.target.value })}
-              className="w-[160px]"
+              className="w-full sm:w-[160px]"
             />
           </div>
         </>

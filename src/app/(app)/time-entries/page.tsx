@@ -70,20 +70,24 @@ export default async function TimeEntriesPage({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <TimeEntriesTabs />
-        <div className="flex gap-2">
+        {/* Four actions do not fit across a phone -- as a single flex row the
+            last one, Log time, ran off the edge of the screen. A 2x2 grid at
+            full width instead: grid items stretch, so each is a large tap
+            target, and it becomes the original inline row from `sm` up. */}
+        <div className="grid w-full grid-cols-2 gap-2 [&>*]:h-10 sm:flex sm:w-auto sm:flex-wrap sm:[&>*]:h-8">
           <VoiceLoggerDialog clients={clientOptions} serviceTypes={serviceTypeOptions} />
-              <Button variant="outline" render={<Link href="/time-entries/import" />}>
-                <Upload className="mr-1 h-4 w-4" /> Import CSV
+          <Button variant="outline" render={<Link href="/time-entries/import" />}>
+            <Upload className="mr-1 h-4 w-4" /> Import CSV
+          </Button>
+          <AiTimeEntryDialog
+            clients={clientOptions}
+            serviceTypes={serviceTypeOptions}
+            trigger={
+              <Button variant="outline">
+                <Sparkles className="mr-1 h-4 w-4" /> AI entry
               </Button>
-              <AiTimeEntryDialog
-                clients={clientOptions}
-                serviceTypes={serviceTypeOptions}
-                trigger={
-                  <Button variant="outline">
-                    <Sparkles className="mr-1 h-4 w-4" /> AI entry
-                  </Button>
-                }
-              />
+            }
+          />
           <TimeEntryDialog
             clients={clientOptions}
             serviceTypes={serviceTypeOptions}
