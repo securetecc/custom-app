@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { sortRecurring } from "@/lib/recurring-order";
 import { ADDON_ITEM_TYPE_LABELS } from "@/lib/validations/recurring-charge";
 import { Pencil, Plus } from "lucide-react";
 
@@ -24,9 +25,10 @@ export default async function EditClientPage({
       tx.client.findUnique({
         where: { id },
         include: {
-          recurringCharges: {
-            orderBy: [{ billingFrequency: "asc" }, { description: "asc" }],
-          },
+          // Ordered in code, not SQL: the ranking is by what the service IS
+          // (site fee, then RMM, then email security), which no column sorts
+          // by -- see lib/recurring-order.ts.
+          recurringCharges: true,
         },
       }),
       tx.addonPricing.findMany({ where: { organizationId: appUser.organizationId } }),
@@ -98,7 +100,7 @@ export default async function EditClientPage({
               Stacking the secondary details under the description keeps
               everything readable without sideways movement. */}
           <Card className="divide-y">
-            {client.recurringCharges.map((charge) => (
+            {sortRecurring(client.recurringCharges).map((charge) => (
               <div key={charge.id} className="flex items-start gap-3 p-4">
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -110,6 +112,10 @@ export default async function EditClientPage({
                   <p className="text-sm text-muted-foreground">
                     {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
                     {charge.itemType ? ` · ${ADDON_ITEM_TYPE_LABELS[charge.itemType]}` : ""}
+                    {charge.quantity !== null && charge.unitPrice !== null
+                      ? ` · ${charge.quantity} × ${formatCurrency(Number(charge.unitPrice))}`
+                      : ""}
+                    {charge.startDate ? ` · since ${formatDate(charge.startDate)}` : ""}
                     {charge.reference ? ` · ${charge.reference}` : ""}
                     {charge.authorizedBy ? ` · authorized by ${charge.authorizedBy}` : ""}
                   </p>
@@ -138,6 +144,11 @@ export default async function EditClientPage({
                       billingFrequency: charge.billingFrequency,
                       activeStatus: charge.activeStatus,
                       itemType: charge.itemType,
+                      quantity: charge.quantity,
+                      unitPrice: charge.unitPrice === null ? null : Number(charge.unitPrice),
+                      startDate: charge.startDate
+                        ? charge.startDate.toISOString().slice(0, 10)
+                        : null,
                       authorizedBy: charge.authorizedBy ?? "",
                       notes: charge.notes ?? "",
                     }}

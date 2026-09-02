@@ -10,6 +10,13 @@ import {
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+/** yyyy-mm-dd -> the UTC midnight a @db.Date column stores. */
+function toDateOnly(value: string | null): Date | null {
+  if (!value) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 export async function createRecurringCharge(
   clientId: string,
   input: RecurringChargeFormValues,
@@ -42,6 +49,9 @@ export async function createRecurringCharge(
           notes: data.notes || null,
           description: data.description,
           amount: data.amount,
+          quantity: data.quantity,
+          unitPrice: data.unitPrice,
+          startDate: toDateOnly(data.startDate),
           billingFrequency: data.billingFrequency,
           activeStatus: data.activeStatus,
           itemType: data.itemType,
@@ -99,6 +109,9 @@ export async function updateRecurringCharge(
         data: {
           description: data.description,
           amount: data.amount,
+          quantity: data.quantity,
+          unitPrice: data.unitPrice,
+          startDate: toDateOnly(data.startDate),
           billingFrequency: data.billingFrequency,
           activeStatus: data.activeStatus,
           itemType: data.itemType,

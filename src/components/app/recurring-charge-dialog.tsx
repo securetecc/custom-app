@@ -84,6 +84,7 @@ export function RecurringChargeDialog({
     handleSubmit,
     reset,
     setValue,
+    getValues,
     watch,
     formState: { errors },
   } = useForm<RecurringChargeFormValues>({
@@ -94,11 +95,31 @@ export function RecurringChargeDialog({
       billingFrequency: "Monthly",
       activeStatus: true,
       itemType: null,
+      quantity: null,
+      unitPrice: null,
+      startDate: null,
       authorizedBy: "",
       notes: "",
       ...defaultValues,
     },
   });
+
+  /**
+   * Quantity x unit price fills in the amount.
+   *
+   * On blur rather than on every keystroke, and it never overwrites a figure
+   * that disagrees deliberately: amount is what actually gets billed, and a
+   * negotiated total has to be able to differ from the arithmetic.
+   */
+  function syncAmountFromUnits() {
+    const q = getValues("quantity");
+    const u = getValues("unitPrice");
+    if (q === null || u === null || Number.isNaN(q) || Number.isNaN(u)) return;
+    const current = getValues("amount");
+    if (current === 0 || Number.isNaN(current)) {
+      setValue("amount", Number((q * u).toFixed(2)));
+    }
+  }
 
   const billingFrequency = watch("billingFrequency");
   const activeStatus = watch("activeStatus");
@@ -208,6 +229,48 @@ export function RecurringChargeDialog({
                 Reference only -- classifies the charge and suggests an amount below; never
                 affects billing.
               </p>
+            </div>
+
+            {/* Seats x unit price. Optional, because a site fee is one thing
+                rather than "1 of something" -- but when a client adds a seat,
+                the count is what changed, and a total with no count behind it
+                cannot show that. */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="—"
+                  {...register("quantity", {
+                    setValueAs: (v) => (v === "" || v === null ? null : Number(v)),
+                  })}
+                  onBlur={syncAmountFromUnits}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unitPrice">Unit price ($)</Label>
+                <Input
+                  id="unitPrice"
+                  type="number"
+                  step="0.01"
+                  placeholder="—"
+                  {...register("unitPrice", {
+                    setValueAs: (v) => (v === "" || v === null ? null : Number(v)),
+                  })}
+                  onBlur={syncAmountFromUnits}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Started</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  {...register("startDate", { setValueAs: (v) => (v === "" ? null : v) })}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

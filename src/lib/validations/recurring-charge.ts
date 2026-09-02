@@ -5,12 +5,29 @@ import { z } from "zod";
 // from its output type and breaks useForm<T>'s single-type assumption.
 // Defaults come from useForm's defaultValues; normalization happens in the
 // server action.
-export const ADDON_ITEM_TYPES = ["DMARC", "MonitoringSeat", "RemoteMonitoring", "Other"] as const;
+/**
+ * In the order they are OFFERED, which is also the order they are listed in --
+ * see lib/recurring-order.ts. Site fee first, then RMM, then email security:
+ * that is how central each is to the business, and it is the order Tony reads
+ * a client record in.
+ */
+export const ADDON_ITEM_TYPES = [
+  "SiteFee",
+  "RMM",
+  "EmailSecurity",
+  "DMARC",
+  "RemoteMonitoring",
+  "MonitoringSeat",
+  "Other",
+] as const;
 
 export const ADDON_ITEM_TYPE_LABELS: Record<(typeof ADDON_ITEM_TYPES)[number], string> = {
+  SiteFee: "Site Fee",
+  RMM: "RMM",
+  EmailSecurity: "Email Security",
   DMARC: "DMARC",
-  MonitoringSeat: "Monitoring Seat",
   RemoteMonitoring: "Remote Monitoring",
+  MonitoringSeat: "Monitoring Seat",
   Other: "Other",
 };
 
@@ -25,6 +42,10 @@ export const recurringChargeFormSchema = z.object({
   // itself. itemType only ever pre-fills the amount field in the UI; it's
   // never read by billing logic.
   itemType: z.enum(ADDON_ITEM_TYPES).nullable(),
+  /// Seats/devices and the price each, when the charge is counted in units.
+  quantity: z.number().int().positive().nullable(),
+  unitPrice: z.number().nonnegative().nullable(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date").nullable(),
   authorizedBy: z.string().min(1, "Enter who authorized this charge"),
   // Operational context carried over from the master sheet's Notes column
   // ("18 devices x $25 -- verify count monthly"). Never shown to the client.

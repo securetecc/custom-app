@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { InvoiceCustomItems } from "@/components/app/invoice-custom-items";
 import { InvoicePaymentDetails } from "@/components/app/invoice-payment-details";
+import { InvoicePayments } from "@/components/app/invoice-payments";
+import { settle } from "@/lib/billing/payments";
 import {
   ConfirmInvoiceButton,
   MarkPaidButton,
@@ -41,6 +43,7 @@ export default async function InvoiceDetailPage({
         timeEntries: { include: { serviceType: true }, orderBy: { date: "asc" } },
         recurringCharges: true,
         reimbursableExpenses: { orderBy: { date: "asc" } },
+        payments: { orderBy: { receivedAt: "asc" } },
         customItems: { orderBy: { sortOrder: "asc" } },
       },
     }),
@@ -61,6 +64,18 @@ export default async function InvoiceDetailPage({
   const voided = Boolean(invoice.voidedAt);
   const clientRate = invoice.client.billingRate ? Number(invoice.client.billingRate) : null;
   const addressLine = formatAddressLine(invoice.client.address1, invoice.client.address2);
+
+  // The invoice's own status columns are a cache of these rows; the rows are
+  // the record. See lib/billing/payments.ts.
+  const settlement = settle(
+    Number(invoice.totalAmount),
+    invoice.payments.map((p) => ({
+      amount: Number(p.amount),
+      receivedAt: p.receivedAt,
+      method: p.method,
+      methodOther: p.methodOther,
+    })),
+  );
 
   const monthly = invoice.recurringCharges.filter((c) => c.billingFrequency === "Monthly");
   const annual = invoice.recurringCharges.filter((c) => c.billingFrequency === "Annual");
@@ -161,10 +176,40 @@ export default async function InvoiceDetailPage({
         {invoice.client.phone && <p className="text-sm">{invoice.client.phone}</p>}
       </Card>
 
+      {/* Shown on a voided invoice too: money that arrived, arrived, and the
+          record of it has to stay reachable to reconcile against a bank
+          statement. */}
+      {isAdmin && (invoice.payments.length > 0 || !voided) && (
+        <Card>
+          <div className="border-b px-4 py-3">
+            <h2 className="font-medium">Payments</h2>
+          </div>
+          <div className="p-4">
+            <InvoicePayments
+              invoiceId={invoice.id}
+              total={Number(invoice.totalAmount)}
+              received={settlement.received}
+              balance={settlement.balance}
+              state={settlement.state}
+              canEdit={!voided}
+              payments={invoice.payments.map((p) => ({
+                id: p.id,
+                amount: Number(p.amount),
+                receivedAt: p.receivedAt.toISOString().slice(0, 10),
+                method: p.method,
+                methodOther: p.methodOther,
+                reference: p.reference,
+                notes: p.notes,
+              }))}
+            />
+          </div>
+        </Card>
+      )}
+
       {!voided && isAdmin && (
         <Card>
           <div className="border-b px-4 py-3">
-            <h2 className="font-medium">Payment</h2>
+            <h2 className="font-medium">Dates</h2>
           </div>
           <div className="p-4">
             <InvoicePaymentDetails

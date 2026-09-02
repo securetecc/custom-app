@@ -56,6 +56,20 @@ enum BillingCadence {
   Quarterly
 }
 
+/// Where a client sits relative to the normal service area, which is what
+/// decides the on-site minimum and whether travel is billed one way or both.
+enum ServiceArea {
+  InArea
+  OutOfArea
+}
+
+/// How a recurring business cost repeats.
+enum ExpenseFrequency {
+  Monthly
+  Annual
+  OneOff
+}
+
 enum BillingType {
   Hourly
   Retainer
@@ -102,7 +116,14 @@ enum InvoiceStatus {
 /// Structured category for a recurring charge ("add-on"), replacing a free-text
 /// guess at what a charge is for. `Other` covers anything not in the fixed set
 /// AddonPricing has a default rate for.
+/// What a recurring charge IS, which is also what decides the order it is
+/// listed in on a client record. Alphabetical put "Antivirus" above the site
+/// fee; these are ranked by how central they are to the business instead --
+/// see RECURRING_CATEGORY_ORDER in lib/recurring-order.ts.
 enum AddonItemType {
+  SiteFee
+  RMM
+  EmailSecurity
   DMARC
   MonitoringSeat
   RemoteMonitoring
@@ -220,6 +241,8 @@ model Organization {
   tickets                  Ticket[]
   tasks                    Task[]
   emailSignatures          EmailSignature[]
+  payments                 Payment[]
+  businessExpenses         BusinessExpense[]
 
   @@map("organizations")
 }
@@ -256,6 +279,7 @@ model User {
   createdAt            DateTime     @default(now())
 
   emailSignatures            EmailSignature[]
+  recordedPayments           Payment[]
   loggedTimeEntries          TimeEntry[]           @relation("LoggedByUser")
   assignedTasks              Task[]                @relation("TaskAssignee")
   delegatedTasks             Task[]                @relation("TaskCreator")
@@ -295,6 +319,15 @@ model Client {
   /// invoice generator -- Tony still decides when to raise one.
   billingCadence      BillingCadence @default(Monthly)
   billingRate         Decimal?       @db.Decimal(10, 2)
+  /// A rate change already agreed but not yet in force -- e.g. everyone moving
+  /// to $125/hr on 1 Jan 2027. Applied automatically to entries DATED on or
+  /// after scheduledRateFrom, so the change lands by itself and nobody has to
+  /// remember to edit 30 client records that morning.
+  scheduledRate       Decimal?       @db.Decimal(10, 2)
+  scheduledRateFrom   DateTime?      @db.Date
+  /// Whether this client is inside the normal service area. Drives the on-site
+  /// minimum and how travel is billed -- see lib/billing/travel.ts.
+  serviceArea         ServiceArea    @default(InArea)
   activeStatus        Boolean        @default(true)
   notes               String?
   createdAt           DateTime       @default(now())
@@ -311,6 +344,7 @@ model Client {
   recurringCharges     RecurringCharge[]
   invoices             Invoice[]
   retainerPeriods      InvoiceRetainerPeriod[]
+  businessExpenses     BusinessExpense[]
 
   @@unique([organizationId, shortName])
   @@unique([organizationId, reference])
@@ -347,6 +381,14 @@ model TimeEntry {
   billableStatus BillableStatus  @default(Billable)
   serviceTypeId  String
   serviceType    ServiceType     @relation(fields: [serviceTypeId], references: [id])
+  /// Rate for THIS entry, overriding the service type and the client. For the
+  /// job that was quoted differently -- Tony asked to be able to change a rate
+  /// on the fly rather than have it permanently locked to the client record.
+  rateOverride   Decimal?        @db.Decimal(10, 2)
+  /// Travel time billed with this entry, in minutes. Separate from
+  /// durationHours so the invoice can show the work and the travel honestly,
+  /// and so changing the travel rule never rewrites recorded work.
+  travelMinutes  Int?
   // Null while unbilled; set once included on a generated invoice.
   invoiceId      String?
   invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -414,6 +456,15 @@ model RecurringCharge {
   /// the charge itself, not only in the audit log, because it's operational
   /// detail someone needs while looking at the charge.
   notes            String?
+  /// Seats/devices/licences. Null for a flat charge that is not counted in
+  /// units -- a site fee is one thing, not "1 of something".
+  quantity         Int?
+  /// Price per unit. amount stays the authoritative figure that gets billed;
+  /// these two explain how it was arrived at, so adding a seat is a visible
+  /// change to the count rather than an unexplained new total.
+  unitPrice        Decimal?         @db.Decimal(10, 2)
+  /// When this charge began. Date-only -- it is a calendar fact.
+  startDate        DateTime?        @db.Date
   billingFrequency BillingFrequency @default(Monthly)
   activeStatus     Boolean          @default(true)
   // Structured category + who signed off on it. Both optional -- older/plain
@@ -549,6 +600,7 @@ model Invoice {
   voidedAt       DateTime?
   createdAt      DateTime       @default(now())
 
+  payments             Payment[]
   timeEntries          TimeEntry[]
   reimbursableExpenses ReimbursableExpense[]
   recurringCharges     InvoiceRecurringCharge[]
@@ -764,4 +816,72 @@ model EmailSignature {
   @@unique([ownerUserId, name])
   @@index([organizationId])
   @@map("email_signatures")
+}
+
+/// One payment received against an invoice.
+///
+/// A row per payment, not a paid/unpaid flag on the invoice, because part
+/// payments are real here: $2,000 invoiced, $1,000 by ACH now and the rest
+/// later is two facts, and collapsing them loses the balance, both dates and
+/// both references. The invoice keeps `paidAt` and `paymentMethod` as a
+/// summary of these rows -- recomputed on every write, never edited directly.
+///
+/// Deliberately survives a void: what a client actually sent is a fact about
+/// money, and voiding a document does not unsend it.
+model Payment {
+  id               String        @id @default(uuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId        String
+  invoice          Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount           Decimal       @db.Decimal(10, 2)
+  /// Date-only: when the money was received, which is not necessarily when it
+  /// was entered, and can precede the invoice being sent.
+  receivedAt       DateTime      @db.Date
+  method           PaymentMethod
+  /// What "Other" actually was. Only meaningful when method is Other.
+  methodOther      String?
+  /// Check number, ACH trace, PayPal transaction id -- whatever identifies
+  /// this payment on a bank statement.
+  reference        String?
+  notes            String?
+  recordedByUserId String?
+  recordedByUser   User?         @relation(fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now())
+
+  @@index([organizationId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+/// A cost the business carries: GoToCentral, the PSA, VoIP, an email service.
+///
+/// Optionally attached to a client, which is what makes "what does this client
+/// cost us against what we bill them" answerable. Costs with no client are
+/// overhead and are reported separately rather than being spread across
+/// clients by some invented allocation -- a made-up split would produce a
+/// per-client profit figure that looks precise and is not.
+model BusinessExpense {
+  id             String           @id @default(uuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  vendor         String?
+  category       String?
+  amount         Decimal          @db.Decimal(10, 2)
+  frequency      ExpenseFrequency @default(Monthly)
+  /// Direct cost of serving one client. Null means overhead.
+  clientId       String?
+  client         Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  startDate      DateTime?        @db.Date
+  /// When it stopped. Null while it is still being paid.
+  endDate        DateTime?        @db.Date
+  activeStatus   Boolean          @default(true)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([clientId])
+  @@map("business_expenses")
 }
