@@ -11,7 +11,21 @@ function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
 
+/**
+ * `data-slot` is applied ONLY when Base UI renders its own element.
+ *
+ * With `render={<Button/>}` both sides want the attribute -- ours says
+ * "dialog-trigger", the Button says "button" -- and Base UI resolves that
+ * merge in a different order on the server than in the browser. React sees
+ * data-slot="button" in the SSR HTML and data-slot="dialog-trigger" from the
+ * client render and reports a hydration mismatch it explicitly will not
+ * patch up. Every dialog trigger in this app is a `render` trigger, so the
+ * attribute never reached the DOM anyway; all it did was produce the
+ * warning. When the caller supplies the element, the element names its own
+ * slot.
+ */
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  if (props.render) return <DialogPrimitive.Trigger {...props} />
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
 }
 

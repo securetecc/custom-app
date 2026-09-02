@@ -15,6 +15,9 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
 }
 
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
+  // Same rule as DialogTrigger: a caller-supplied element names its own
+  // slot, and setting both is what produces a hydration mismatch.
+  if (props.render) return <MenuPrimitive.Trigger {...props} />
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
