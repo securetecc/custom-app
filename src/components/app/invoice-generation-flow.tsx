@@ -98,6 +98,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
   const [preset, setPreset] = useState<Preset>("last-month");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
+  const [includeNonBillable, setIncludeNonBillable] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -117,7 +118,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
       return;
     }
     setLoading(true);
-    const result = await loadBillingCandidates({ clientId, ...period });
+    const result = await loadBillingCandidates({ clientId, ...period, includeNonBillable });
     setLoading(false);
 
     if (!result.ok) {
@@ -139,10 +140,9 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
     // Everything starts checked; unchecking is how you hold something back.
     // Entries with no resolvable rate start unchecked -- generation refuses
     // them, so pre-selecting would just guarantee an error.
+    const unrated = new Set(data.unratedEntryIds);
     setSelectedEntries(
-      new Set(
-        data.timeEntries.filter((e) => e.rate !== null).map((e) => e.id),
-      ),
+      new Set(data.timeEntries.filter((e) => !unrated.has(e.id)).map((e) => e.id)),
     );
     setSelectedCharges(new Set(data.recurringCharges.map((c) => c.id)));
     setSelectedExpenses(new Set(data.reimbursableExpenses.map((e) => e.id)));
@@ -156,6 +156,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
     const result = await generateInvoice({
       clientId,
       ...period,
+      includeNonBillable,
       timeEntryIds: [...selectedEntries],
       recurringChargeOccurrenceIds: [...selectedCharges],
       reimbursableExpenseIds: [...selectedExpenses],
@@ -191,6 +192,12 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
     setter(next);
   }
 
+  // Rows the server will refuse: hourly, billable, and no rate resolvable.
+  // A no-charge row also has no rate, but that is the point of it.
+  const unratedIds = new Set(candidates?.unratedEntryIds ?? []);
+  const selectableEntryIds =
+    candidates?.timeEntries.filter((e) => !unratedIds.has(e.id)).map((e) => e.id) ?? [];
+
   // Running total reflects only what's checked, recomputed from the values the
   // server already sent. The server recomputes independently on submit.
   const selectedEntryRows =
@@ -199,6 +206,7 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
     candidates?.recurringCharges.filter((c) => selectedCharges.has(c.id)) ?? [];
   const selectedExpenseRows =
     candidates?.reimbursableExpenses.filter((e) => selectedExpenses.has(e.id)) ?? [];
+  const noChargeRows = selectedEntryRows.filter((e) => e.billableStatus !== "Billable");
   const runningHours = selectedEntryRows.reduce((s, e) => s + e.hours, 0);
   const runningTotal =
     selectedEntryRows.reduce((s, e) => s + (e.amount ?? 0), 0) +
@@ -273,6 +281,22 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
             </div>
           )}
 
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Checkbox
+              id="includeNonBillable"
+              checked={includeNonBillable}
+              onCheckedChange={(v) => setIncludeNonBillable(v === true)}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="includeNonBillable">Include no-charge time entries</Label>
+              <p className="text-xs text-muted-foreground">
+                Lists the period&apos;s Non-Billable and Residual work on the invoice with its
+                hours and &ldquo;No charge&rdquo; in place of a rate. Nothing is added to the
+                total.
+              </p>
+            </div>
+          </div>
+
           <Button onClick={handleLoad} disabled={loading} className="w-full">
             {loading ? "Loading…" : "Load billable items"}
           </Button>
@@ -293,7 +317,8 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
           </div>
           <div className="text-right">
             <p className="text-sm text-muted-foreground">
-              {formatHours(runningHours)} hrs · {selectedEntryRows.length} entries ·{" "}
+              {formatHours(runningHours)} hrs · {selectedEntryRows.length} entries
+              {noChargeRows.length > 0 && ` (${noChargeRows.length} no charge)`} ·{" "}
               {selectedChargeRows.length} charges · {selectedExpenseRows.length} expenses
             </p>
             <p className="text-xl font-semibold">{formatCurrency(runningTotal)}</p>
@@ -321,9 +346,9 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
               className="text-sm text-muted-foreground underline"
               onClick={() =>
                 setSelectedEntries(
-                  selectedEntries.size === candidates.timeEntries.filter((e) => e.rate !== null).length
+                  selectedEntries.size === selectableEntryIds.length
                     ? new Set()
-                    : new Set(candidates.timeEntries.filter((e) => e.rate !== null).map((e) => e.id)),
+                    : new Set(selectableEntryIds),
                 )
               }
             >
@@ -344,11 +369,11 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
             </TableHeader>
             <TableBody>
               {candidates.timeEntries.map((entry) => (
-                <TableRow key={entry.id} data-unrated={entry.rate === null || undefined}>
+                <TableRow key={entry.id} data-unrated={unratedIds.has(entry.id) || undefined}>
                   <TableCell>
                     <Checkbox
                       checked={selectedEntries.has(entry.id)}
-                      disabled={entry.rate === null}
+                      disabled={unratedIds.has(entry.id)}
                       onCheckedChange={() =>
                         toggle(selectedEntries, entry.id, setSelectedEntries)
                       }
@@ -356,11 +381,22 @@ export function InvoiceGenerationFlow({ clients }: { clients: ClientOption[] }) 
                     />
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{formatDate(entry.date)}</TableCell>
-                  <TableCell className="max-w-md truncate">{entry.description}</TableCell>
+                  <TableCell className="max-w-md truncate">
+                    {entry.description}
+                    {entry.billableStatus !== "Billable" && (
+                      <span className="ml-2 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {entry.billableStatus === "Residual" ? "Residual" : "Non-billable"}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>{entry.serviceTypeCode}</TableCell>
                   <TableCell className="text-right">{formatHours(entry.hours)}</TableCell>
                   <TableCell className="text-right">
-                    {entry.rate === null ? "—" : formatCurrency(entry.rate)}
+                    {entry.billableStatus !== "Billable"
+                      ? "No charge"
+                      : entry.rate === null
+                        ? "—"
+                        : formatCurrency(entry.rate)}
                   </TableCell>
                   <TableCell className="text-right">
                     {entry.amount === null ? "—" : formatCurrency(entry.amount)}

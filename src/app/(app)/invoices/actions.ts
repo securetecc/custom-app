@@ -27,7 +27,8 @@ import type { InvoicePdfData } from "@/lib/pdf/types";
 import { createGmailDraft } from "@/lib/google/gmail";
 import { archiveInvoiceToDrive } from "@/lib/google/archive-invoice";
 import { invoiceEmail } from "@/lib/email/templates";
-import type { BillingFrequency } from "@/generated/prisma/enums";
+import type { BillableStatus, BillingFrequency } from "@/generated/prisma/enums";
+import { isNoCharge, NON_CHARGE_STATUSES } from "@/lib/billing/no-charge";
 
 export type ActionResult<T = undefined> =
   | ({ ok: true } & (T extends undefined ? object : { data: T }))
@@ -44,6 +45,9 @@ export type BillingCandidate = {
   amount: number | null;
   serviceTypeCode: string;
   serviceTypeLabel: string;
+  /** No-charge entries (Non-Billable, Residual) appear only when the review
+   *  screen asks for them, and go on the invoice as no-charge lines. */
+  billableStatus: BillableStatus;
 };
 
 export type RecurringCandidate = {
@@ -204,7 +208,10 @@ export async function loadBillingCandidates(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { clientId } = parsed.data;
+  const { clientId, includeNonBillable } = parsed.data;
+  const billableStatuses: BillableStatus[] = includeNonBillable
+    ? ["Billable", ...NON_CHARGE_STATUSES]
+    : ["Billable"];
   const periodStart = parseIsoDate(parsed.data.periodStart);
   const periodEnd = parseIsoDate(parsed.data.periodEnd);
 
@@ -220,7 +227,7 @@ export async function loadBillingCandidates(
           where: {
             clientId,
             invoiceId: null, // unbilled only
-            billableStatus: "Billable",
+            billableStatus: { in: billableStatuses },
             date: { gte: periodStart, lte: periodEnd },
           },
           include: { serviceType: true },
@@ -244,8 +251,9 @@ export async function loadBillingCandidates(
 
       const candidates: BillingCandidate[] = timeEntries.map((entry) => {
         const hours = Number(entry.durationHours);
-        // Retainer: hours are informational only, never billed per-entry.
-        if (isRetainer) {
+        // Retainer, and non-billable anywhere: hours are informational only,
+        // never billed per-entry.
+        if (isRetainer || isNoCharge(entry.billableStatus)) {
           return {
             id: entry.id,
             date: entry.date.toISOString().slice(0, 10),
@@ -255,6 +263,7 @@ export async function loadBillingCandidates(
             amount: null,
             serviceTypeCode: entry.serviceType.code,
             serviceTypeLabel: entry.serviceType.label,
+            billableStatus: entry.billableStatus,
           };
         }
         const override = entry.serviceType.rateOverride
@@ -270,6 +279,7 @@ export async function loadBillingCandidates(
           amount: rate === null ? null : Number((hours * rate).toFixed(2)),
           serviceTypeCode: entry.serviceType.code,
           serviceTypeLabel: entry.serviceType.label,
+          billableStatus: entry.billableStatus,
         };
       });
 
@@ -292,7 +302,11 @@ export async function loadBillingCandidates(
           amount: Number(e.amount),
         })),
         // Hourly only -- a Retainer entry with no rate isn't an error, it's expected.
-        unratedEntryIds: isRetainer ? [] : candidates.filter((c) => c.rate === null).map((c) => c.id),
+        unratedEntryIds: isRetainer
+          ? []
+          : candidates
+              .filter((c) => c.billableStatus === "Billable" && c.rate === null)
+              .map((c) => c.id),
       } satisfies BillingCandidates;
     });
 
@@ -323,8 +337,13 @@ export async function generateInvoice(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { clientId, timeEntryIds, recurringChargeOccurrenceIds, reimbursableExpenseIds } =
-    parsed.data;
+  const {
+    clientId,
+    timeEntryIds,
+    recurringChargeOccurrenceIds,
+    reimbursableExpenseIds,
+    includeNonBillable,
+  } = parsed.data;
   const periodStart = parseIsoDate(parsed.data.periodStart);
   const periodEnd = parseIsoDate(parsed.data.periodEnd);
 
@@ -359,7 +378,9 @@ export async function generateInvoice(
           id: { in: timeEntryIds },
           clientId,
           invoiceId: null,
-          billableStatus: "Billable",
+          billableStatus: includeNonBillable
+            ? { in: ["Billable", ...NON_CHARGE_STATUSES] }
+            : "Billable",
           date: { gte: periodStart, lte: periodEnd },
         },
         include: { serviceType: true },
@@ -422,7 +443,8 @@ export async function generateInvoice(
 
       const lineItems = entries.map((entry) => {
         const hours = Number(entry.durationHours);
-        if (isRetainer) {
+        const noCharge = isNoCharge(entry.billableStatus);
+        if (isRetainer || noCharge) {
           return {
             date: entry.date.toISOString().slice(0, 10),
             serviceCode: entry.serviceType.code,
@@ -431,6 +453,7 @@ export async function generateInvoice(
             hours,
             rate: null as number | null,
             amount: null as number | null,
+            noCharge,
           };
         }
         const override = entry.serviceType.rateOverride
@@ -455,7 +478,11 @@ export async function generateInvoice(
         };
       });
 
-      const totalHours = Number(lineItems.reduce((s, l) => s + l.hours, 0).toFixed(2));
+      // Billed hours only. Non-billable rows print their hours on the invoice
+      // but must not move a figure the dashboard and reports read as billable.
+      const totalHours = Number(
+        lineItems.reduce((s, l) => s + (l.noCharge ? 0 : l.hours), 0).toFixed(2),
+      );
       const chargeTotal = selectedOccurrences.reduce((s, o) => s + o.amount, 0);
       const reimbursableTotal = reimbursables.reduce((s, e) => s + Number(e.amount), 0);
 
@@ -680,7 +707,8 @@ export async function regenerateInvoicePdf(
       const clientRate = invoice.client.billingRate ? Number(invoice.client.billingRate) : null;
       const lineItems = invoice.timeEntries.map((entry) => {
         const hours = Number(entry.durationHours);
-        if (isRetainer) {
+        const noCharge = isNoCharge(entry.billableStatus);
+        if (isRetainer || noCharge) {
           return {
             date: entry.date.toISOString().slice(0, 10),
             serviceCode: entry.serviceType.code,
@@ -689,6 +717,7 @@ export async function regenerateInvoicePdf(
             hours,
             rate: null as number | null,
             amount: null as number | null,
+            noCharge,
           };
         }
         const override = entry.serviceType.rateOverride

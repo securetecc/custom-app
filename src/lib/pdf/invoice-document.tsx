@@ -255,7 +255,7 @@ function LineRow({ item }: { item: InvoicePdfLineItem | null }) {
         {item?.hours != null ? item.hours.toFixed(2) : " "}
       </Text>
       <Text style={[styles.cell, styles.cellNumeric, { width: COL.rate }]}>
-        {item?.rate != null ? currency(item.rate) : " "}
+        {item?.noCharge ? "No charge" : item?.rate != null ? currency(item.rate) : " "}
       </Text>
       <Text style={[styles.cell, styles.cellLast, styles.cellAmount, { width: COL.amount }]}>
         {/* Blank, not $0.00. The empty rows exist to hold the grid's shape --

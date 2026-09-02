@@ -16,6 +16,10 @@ export const invoicePeriodSchema = z
     clientId: z.string().min(1, "Select a client"),
     periodStart: isoDate,
     periodEnd: isoDate,
+    // Off by default: an invoice lists what is owed. Turned on, the period's
+    // non-billable work is offered for selection too, so the client can see
+    // the hours that were absorbed rather than only the ones they pay for.
+    includeNonBillable: z.boolean().default(false),
   })
   .refine((v) => v.periodStart <= v.periodEnd, {
     message: "Start date must be before the end date",
@@ -36,6 +40,9 @@ export const generateInvoiceSchema = z
     // submitted ids as a selection filter (same principle as time entries).
     recurringChargeOccurrenceIds: z.array(z.string()),
     reimbursableExpenseIds: z.array(z.string()),
+    /** Must match the review screen's toggle, or the re-verification below
+     *  will not find the non-billable entries the user selected. */
+    includeNonBillable: z.boolean().default(false),
   })
   .refine((v) => v.periodStart <= v.periodEnd, {
     message: "Start date must be before the end date",

@@ -33,6 +33,13 @@ export type InvoicePdfLineItem = {
   hours: number | null;
   rate: number | null;
   amount: number | null;
+  /**
+   * Work shown to the client but not charged for. The hours print, the rate
+   * column reads "No charge" and there is no amount -- an invoice that shows
+   * the goodwill work alongside the billed work, which is the point of
+   * putting it there at all.
+   */
+  noCharge?: boolean;
 };
 
 export type InvoicePdfData = {
