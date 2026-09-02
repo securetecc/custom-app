@@ -29,14 +29,14 @@ const NAV_ITEMS = [
   // configuration. Settings stays last because it is the one nobody visits
   // twice in a session.
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
-  { href: "/today", label: "Today", icon: Sunrise, adminOnly: false, soon: true },
+  { href: "/today", label: "Today", icon: Sunrise, adminOnly: false },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
   { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
   { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false },
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true, soon: true },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true, soon: true },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true },
   { href: "/documentation", label: "Docs", icon: BookLock, adminOnly: true, soon: true },
   { href: "/clients", label: "Clients", icon: Users, adminOnly: false },
   { href: "/reviews", label: "Reviews", icon: Star, adminOnly: true, soon: true },

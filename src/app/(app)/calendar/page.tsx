@@ -1,65 +1,124 @@
 import { CalendarDays } from "lucide-react";
-import { requireAdminContext } from "@/lib/auth";
-import { ComingSoon } from "@/components/app/coming-soon";
+import { requireOrgContext } from "@/lib/auth";
+import { pacificDayStart, PACIFIC_TZ } from "@/lib/cron/pacific";
+import { CALENDAR_SCOPE, listUpcomingEvents } from "@/lib/google/calendar";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-/** Planned: a read-only view of the calendars that already exist elsewhere. */
-export default async function CalendarPage() {
-  await requireAdminContext();
+/**
+ * Read-only view of the Workspace calendars, for the week ahead.
+ *
+ * Read-only deliberately. Tony asked to SEE his calendar beside the rest of
+ * the platform; a tool that can also move or delete his meetings is a much
+ * larger promise, and one nobody asked for.
+ */
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ days?: string }>;
+}) {
+  await requireOrgContext();
+  const { days } = await searchParams;
+  const span = Math.min(30, Math.max(1, Number(days) || 7));
+
+  const start = pacificDayStart();
+  const end = new Date(start.getTime() + span * 24 * 3_600_000);
+  const result = await listUpcomingEvents({ timeMin: start, timeMax: end, maxPerCalendar: 50 });
+
+  const dayFormat = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: PACIFIC_TZ,
+  });
+  const timeFormat = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: PACIFIC_TZ,
+  });
+  const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: PACIFIC_TZ });
+
+  // Grouped by Pacific day. An all-day event carries a plain yyyy-mm-dd and
+  // must NOT go through a Date -- that reads as UTC midnight and lands it on
+  // the previous day in Pacific.
+  const byDay = new Map<string, typeof events>();
+  const events = result.ok ? result.events : [];
+  for (const event of events) {
+    const key = event.allDay ? event.start.slice(0, 10) : dayKey.format(new Date(event.start));
+    byDay.set(key, [...(byDay.get(key) ?? []), event]);
+  }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
         <p className="text-muted-foreground">
-          Meetings and events from every connected email account, in one place.
+          The next {span} days across every calendar your Workspace account can see. Read-only —
+          nothing here changes an event.
         </p>
       </div>
 
-      <ComingSoon
-        icon={CalendarDays}
-        title="Coming soon"
-        description="Read-only, by design — everything shows here, nothing is created here."
-        points={[
-          "Every connected account's calendar in a single view — day, week and month.",
-          "Each event colour-coded by which account it came from, so it's clear at a glance which hat a meeting belongs to.",
-          "Today's schedule surfaced on the dashboard, next to the hours and tickets.",
-          "Read-only: events are created wherever they already are, and simply appear here.",
-        ]}
-        preview={
-          <div className="rounded-md border p-2">
-            <div className="mb-1.5 grid grid-cols-5 gap-1">
-              {["Mon 24", "Tue 25", "Wed 26", "Thu 27", "Fri 28"].map((d) => (
-                <p key={d} className="text-[10px] uppercase tracking-wider text-muted-foreground">{d}</p>
-              ))}
-            </div>
-            <div className="grid grid-cols-5 gap-1">
-              {[
-                [["9:00 PCC standup", "var(--viz-teal)"]],
-                [["11:30 Sergent migration", "var(--viz-1)"]],
-                [["10:00 UPH review", "var(--viz-teal)"], ["15:00 Dentist", "var(--viz-4)"]],
-                [],
-                [["13:00 Invoicing block", "var(--viz-1)"]],
-              ].map((day, i) => (
-                <div key={i} className="min-h-16 space-y-1 rounded border p-1">
-                  {day.map(([label, color]) => (
-                    <div
-                      key={label}
-                      className="rounded px-1 py-0.5 text-[9px] leading-tight"
-                      style={{ borderLeft: `2px solid ${color}`, background: "color-mix(in oklab, currentColor 6%, transparent)" }}
-                    >
-                      {label}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <p className="mt-2 text-[10px] text-muted-foreground">
-              Colour marks which account an event came from.
+      {!result.ok ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              {result.reason === "not-configured" ? "Not connected" : "Not authorized yet"}
+            </CardTitle>
+            <CardDescription>{result.message}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              The calendar uses the same service account as Gmail drafts and Drive archiving. It
+              needs one more scope granted in Workspace admin → Security → API controls →
+              Domain-wide delegation, on the existing client ID:
             </p>
-          </div>
-        }
-        note="Keeping it one-way is the whole point. Two-way sync means deciding what happens when the same event is edited in both places, and that is how duplicate and silently-deleted calendar entries happen. Google Calendar can use the service account already set up for Drive and Gmail; other providers need their own connection."
-      />
+            <code className="block rounded border bg-muted/40 p-2 text-xs">{CALENDAR_SCOPE}</code>
+            <p>Nothing else needs setting up — the page fills in once the scope is granted.</p>
+          </CardContent>
+        </Card>
+      ) : byDay.size === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Nothing scheduled in the next {span} days.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {[...byDay.entries()].map(([key, dayEvents]) => {
+            const [y, m, d] = key.split("-").map(Number);
+            return (
+              <Card key={key}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">
+                    {dayFormat.format(new Date(Date.UTC(y, m - 1, d, 12)))}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y">
+                    {dayEvents.map((e) => (
+                      <li key={e.id} className="flex items-baseline gap-3 py-2">
+                        <span className="w-32 shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {e.allDay
+                            ? "All day"
+                            : `${timeFormat.format(new Date(e.start))} – ${timeFormat.format(new Date(e.end))}`}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">{e.summary}</span>
+                          {(e.location || e.calendar) && (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {[e.location, e.calendar].filter(Boolean).join(" · ")}
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
