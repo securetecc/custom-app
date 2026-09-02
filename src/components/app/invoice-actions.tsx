@@ -23,6 +23,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { CheckCircle2 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 
@@ -74,16 +81,24 @@ export function ConfirmInvoiceButton({ invoiceId }: { invoiceId: string }) {
 export function SendInvoiceActions({
   invoiceId,
   googleConfigured,
+  signatures,
 }: {
   invoiceId: string;
   googleConfigured: boolean;
+  /** The signed-in user's own saved signatures, default first. */
+  signatures: { id: string; name: string; isDefault: boolean }[];
 }) {
   const [drafting, setDrafting] = useState(false);
   const [marking, setMarking] = useState(false);
+  // "" means no signature -- a plain-text draft, which is what this did
+  // before signatures existed.
+  const [signatureId, setSignatureId] = useState(
+    signatures.find((s) => s.isDefault)?.id ?? signatures[0]?.id ?? "",
+  );
 
   async function handleDraft() {
     setDrafting(true);
-    const result = await createInvoiceGmailDraft(invoiceId);
+    const result = await createInvoiceGmailDraft(invoiceId, signatureId || null);
     setDrafting(false);
     if (!result.ok) {
       toast.error(result.error);
@@ -118,6 +133,26 @@ export function SendInvoiceActions({
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
+        {signatures.length > 0 && (
+          <Select
+            value={signatureId || "none"}
+            onValueChange={(v) => setSignatureId(v === "none" ? "" : (v ?? ""))}
+          >
+            <SelectTrigger className="w-[190px]" aria-label="Signature">
+              <SelectValue placeholder="No signature">
+                {(value) => signatures.find((s) => s.id === value)?.name ?? "No signature"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No signature</SelectItem>
+              {signatures.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Button variant="outline" onClick={handleDraft} disabled={drafting || !googleConfigured}>
           {drafting ? "Creating draft…" : "Create Gmail draft"}
         </Button>

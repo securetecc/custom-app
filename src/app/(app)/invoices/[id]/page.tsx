@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOrgContext } from "@/lib/auth";
+import { withRLS } from "@/lib/db/rls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,7 +32,7 @@ export default async function InvoiceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { appUser, data: invoice } = await requireOrgContext((tx) =>
+  const { appUser, authUserId, data: invoice } = await requireOrgContext((tx) =>
     tx.invoice.findUnique({
       where: { id },
       include: {
@@ -46,6 +47,15 @@ export default async function InvoiceDetailPage({
   );
 
   if (!invoice) notFound();
+
+  // The draft is signed with one of the signed-in user's own signatures.
+  const signatures = await withRLS(authUserId, (tx) =>
+    tx.emailSignature.findMany({
+      where: { ownerUserId: appUser.id },
+      select: { id: true, name: true, isDefault: true },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    }),
+  );
 
   const isAdmin = appUser.role === "admin";
   const voided = Boolean(invoice.voidedAt);
@@ -100,7 +110,11 @@ export default async function InvoiceDetailPage({
             <ConfirmInvoiceButton invoiceId={invoice.id} />
           )}
           {!voided && isAdmin && invoice.status === "Invoiced" && (
-            <SendInvoiceActions invoiceId={invoice.id} googleConfigured={isGoogleConfigured()} />
+            <SendInvoiceActions
+              invoiceId={invoice.id}
+              googleConfigured={isGoogleConfigured()}
+              signatures={signatures}
+            />
           )}
           {!voided && isAdmin && (invoice.status === "Sent" || invoice.status === "Invoiced") && (
             <MarkPaidButton invoiceId={invoice.id} />

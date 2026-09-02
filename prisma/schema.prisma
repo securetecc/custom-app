@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
   // Vercel's serverless runtime is rhel-openssl-3.0.x. Declaring it
   // explicitly (rather than relying on "native" platform detection at
   // generate time) guarantees that engine binary exists in the build
@@ -10,7 +10,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Runtime connections go through Supabase's TRANSACTION pooler (port 6543)
   // with ?pgbouncer=true&connection_limit=1. Session mode (5432) hands each
   // client a dedicated Postgres connection for its whole session and caps out
@@ -146,16 +146,16 @@ enum TicketStatus {
 }
 
 model Organization {
-  id                  String   @id @default(uuid())
-  name                String
-  logoUrl             String?
-  brandColorPrimary   String   @default("#071E37")
-  brandColorAccent    String   @default("#06E1DC")
+  id                    String   @id @default(uuid())
+  name                  String
+  logoUrl               String?
+  brandColorPrimary     String   @default("#071E37")
+  brandColorAccent      String   @default("#06E1DC")
   /// The REAL, monitored inbox. Two distinct jobs, both of which need a human
   /// reading them: it's the `to:` for internal new-ticket alerts, and the
   /// `replyTo:` on client-facing mail. Deliberately NOT the `from:` — see
   /// notificationFromEmail.
-  supportEmail        String   @unique
+  supportEmail          String   @unique
   /// The `from:` for automated Resend mail (ticket confirmations, status
   /// changes, digests). Split out from supportEmail because outbound sending
   /// moved to a dedicated subdomain (noreply@alerts.securetecc.com) so its SPF
@@ -165,16 +165,16 @@ model Organization {
   notificationFromEmail String?
   // From address used specifically for outbound invoice emails (may differ
   // from supportEmail — e.g. a named staff mailbox rather than a shared inbox).
-  invoiceFromEmail    String?
-  phone               String?
+  invoiceFromEmail      String?
+  phone                 String?
   // Manual onboarding checklist flag: domain/DKIM verified in Resend.
   // Sends are blocked until this is true — see lib/email.
-  emailDomainVerified Boolean  @default(false)
+  emailDomainVerified   Boolean  @default(false)
   /// Monthly invoicing target the dashboard meter reads against. A business
   /// number, so it lives in the DB and is editable in Settings → Organization
   /// rather than being a constant someone has to redeploy to change.
-  monthlyRevenueGoal  Decimal  @default(20000) @db.Decimal(10, 2)
-  createdAt           DateTime @default(now())
+  monthlyRevenueGoal    Decimal  @default(20000) @db.Decimal(10, 2)
+  createdAt             DateTime @default(now())
 
   // --- Invoice letterhead -------------------------------------------------
   // The invoice PDF's letterhead names an individual biller (e.g. the owner),
@@ -197,61 +197,63 @@ model Organization {
   // to produce TKT-0001 (same approach as Client.lastInvoiceSequence).
   // Phase 6 note: the Sheets migration must seed this to the highest existing
   // ticket number, NOT leave it at 0.
-  lastTicketSequence  Int      @default(0)
+  lastTicketSequence     Int     @default(0)
 
-  users                  User[]
-  clients                Client[]
-  serviceTypes           ServiceType[]
-  timeEntries            TimeEntry[]
-  reimbursableExpenses   ReimbursableExpense[]
-  recurringCharges       RecurringCharge[]
+  users                    User[]
+  clients                  Client[]
+  serviceTypes             ServiceType[]
+  timeEntries              TimeEntry[]
+  reimbursableExpenses     ReimbursableExpense[]
+  recurringCharges         RecurringCharge[]
   recurringChargeAuditLogs RecurringChargeAuditLog[]
-  addonPricing           AddonPricing[]
-  invoiceRecurringCharges InvoiceRecurringCharge[]
-  invoiceRetainerPeriods  InvoiceRetainerPeriod[]
-  invoices               Invoice[]
-  tickets                Ticket[]
-  tasks                  Task[]
+  addonPricing             AddonPricing[]
+  invoiceRecurringCharges  InvoiceRecurringCharge[]
+  invoiceRetainerPeriods   InvoiceRetainerPeriod[]
+  invoices                 Invoice[]
+  tickets                  Ticket[]
+  tasks                    Task[]
+  emailSignatures          EmailSignature[]
 
   @@map("organizations")
 }
 
 model User {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                    String       @id @default(uuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   // Mirrors Supabase auth.users.id — this row is the app-side profile/role record.
-  authUserId     String       @unique
-  name           String
-  email          String
-  role           UserRole     @default(technician)
+  authUserId            String       @unique
+  name                  String
+  email                 String
+  role                  UserRole     @default(technician)
   /// Whether the 7pm Pacific "you haven't logged time today" nag goes to this
   /// person. Off by default and deliberately per-user rather than sent to
   /// every staff row: it's addressed to whoever actually logs billable hours,
   /// and mailing it to people who don't just trains them to ignore it.
-  receivesDailyReminder Boolean @default(false)
+  receivesDailyReminder Boolean      @default(false)
   /// Storage path in the private "avatars" bucket, not a URL -- the bucket is
   /// private, so what's shown is a short-lived signed URL minted per request.
-  avatarPath     String?
+  avatarPath            String?
   /// Who may CREATE and ASSIGN tasks. A per-user flag rather than a role
   /// check, because role=admin is already held by more than one person here
   /// and delegation is specifically the business owner's function. Explicit
   /// beats an email address hard-coded in application logic.
-  canDelegateTasks Boolean @default(false)
+  canDelegateTasks      Boolean      @default(false)
   /// Birthday as month/day integers rather than a Date. Only the day matters
   /// for a greeting, and storing a timestamp would mean a date-only value
   /// crossing timezones -- the exact bug that shifted the digest window and
   /// every imported time entry. Ints cannot drift. The year is deliberately
   /// not collected: it isn't needed and it's the sensitive half.
-  birthMonth     Int?
-  birthDay       Int?
-  createdAt      DateTime     @default(now())
+  birthMonth            Int?
+  birthDay              Int?
+  createdAt             DateTime     @default(now())
 
-  loggedTimeEntries          TimeEntry[]            @relation("LoggedByUser")
-  assignedTasks              Task[]                 @relation("TaskAssignee")
-  delegatedTasks             Task[]                 @relation("TaskCreator")
+  emailSignatures            EmailSignature[]
+  loggedTimeEntries          TimeEntry[]           @relation("LoggedByUser")
+  assignedTasks              Task[]                @relation("TaskAssignee")
+  delegatedTasks             Task[]                @relation("TaskCreator")
   loggedReimbursableExpenses ReimbursableExpense[]
-  assignedTickets            Ticket[]               @relation("AssignedToUser")
+  assignedTickets            Ticket[]              @relation("AssignedToUser")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -259,43 +261,43 @@ model User {
 }
 
 model Client {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  shortName      String
+  id                  String         @id @default(uuid())
+  organizationId      String
+  organization        Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String
+  shortName           String
   /// The person who owns the business. Renamed from contactName: it was doing
   /// two jobs, and whoever signs the contract is rarely whoever pays the bill.
-  ownerName      String?
+  ownerName           String?
   /// Who to address billing correspondence to, when that isn't the owner.
-  billingContactName String?
+  billingContactName  String?
   /// Billing email -- where invoices are sent. Named `email` from before there
   /// was more than one kind of contact on a client.
-  email          String?
-  phone          String?
-  address1       String?
-  address2       String?
-  cityStateZip   String?
+  email               String?
+  phone               String?
+  address1            String?
+  address2            String?
+  cityStateZip        String?
   /// Human-readable id carried over from the Operations Master Sheet
   /// ("CLI-016"). Distinct from `id` (a uuid) and from `shortName` (the
   /// invoice-number prefix) -- this exists so rows can be reconciled against
   /// the spreadsheet by eye. Null for clients the sheet never numbered.
-  reference      String?
-  billingType    BillingType  @default(Hourly)
+  reference           String?
+  billingType         BillingType    @default(Hourly)
   /// Monthly unless set otherwise. Drives the billing reminder, not the
   /// invoice generator -- Tony still decides when to raise one.
-  billingCadence BillingCadence @default(Monthly)
-  billingRate    Decimal?     @db.Decimal(10, 2)
-  activeStatus   Boolean      @default(true)
-  notes          String?
-  createdAt      DateTime     @default(now())
+  billingCadence      BillingCadence @default(Monthly)
+  billingRate         Decimal?       @db.Decimal(10, 2)
+  activeStatus        Boolean        @default(true)
+  notes               String?
+  createdAt           DateTime       @default(now())
   // Per-client invoice counter, incremented atomically inside the same
   // transaction that creates an Invoice (see invoices/actions.ts) to produce
   // {shortName}-{00001}. Never decremented -- a voided invoice keeps its
   // number, matching normal accounting practice.
   // Phase 6 note: the Sheets migration must seed this to each client's
   // highest existing invoice number, NOT leave it at 0.
-  lastInvoiceSequence Int     @default(0)
+  lastInvoiceSequence Int            @default(0)
 
   timeEntries          TimeEntry[]
   reimbursableExpenses ReimbursableExpense[]
@@ -327,28 +329,28 @@ model ServiceType {
 }
 
 model TimeEntry {
-  id             String         @id @default(uuid())
+  id             String          @id @default(uuid())
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   clientId       String
-  client         Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  date           DateTime       @db.Date
-  durationHours  Decimal        @db.Decimal(5, 2)
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date           DateTime        @db.Date
+  durationHours  Decimal         @db.Decimal(5, 2)
   description    String
-  billableStatus BillableStatus @default(Billable)
+  billableStatus BillableStatus  @default(Billable)
   serviceTypeId  String
-  serviceType    ServiceType    @relation(fields: [serviceTypeId], references: [id])
+  serviceType    ServiceType     @relation(fields: [serviceTypeId], references: [id])
   // Null while unbilled; set once included on a generated invoice.
   invoiceId      String?
-  invoice        Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   loggedByUserId String
-  loggedByUser   User           @relation("LoggedByUser", fields: [loggedByUserId], references: [id])
+  loggedByUser   User            @relation("LoggedByUser", fields: [loggedByUserId], references: [id])
   // Original voice/text input, kept only when this entry came from the AI parser.
   rawInput       String?
   // Provenance only -- never affects billing/rate logic. Defaults to Manual so
   // every pre-existing row needs no backfill.
   source         TimeEntrySource @default(Manual)
-  createdAt      DateTime       @default(now())
+  createdAt      DateTime        @default(now())
 
   @@index([organizationId])
   @@index([clientId])
@@ -435,7 +437,7 @@ model RecurringChargeAuditLog {
   organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   recurringChargeId String
   recurringCharge   RecurringCharge  @relation(fields: [recurringChargeId], references: [id], onDelete: Cascade)
-  action            String           // "created" | "updated"
+  action            String // "created" | "updated"
   itemType          AddonItemType?
   description       String
   amount            Decimal          @db.Decimal(10, 2)
@@ -496,18 +498,18 @@ model InvoiceRecurringCharge {
 }
 
 model Invoice {
-  id             String        @id @default(uuid())
+  id             String         @id @default(uuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   clientId       String
-  client         Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client         Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   // Format: {ClientShortName}-{00001}, 5-digit zero-padded, sequential per client.
   invoiceNumber  String
-  periodStart    DateTime      @db.Date
-  periodEnd      DateTime      @db.Date
-  totalHours     Decimal       @db.Decimal(7, 2)
-  totalAmount    Decimal       @db.Decimal(10, 2)
-  status         InvoiceStatus @default(Draft)
+  periodStart    DateTime       @db.Date
+  periodEnd      DateTime       @db.Date
+  totalHours     Decimal        @db.Decimal(7, 2)
+  totalAmount    Decimal        @db.Decimal(10, 2)
+  status         InvoiceStatus  @default(Draft)
   /// When the invoice was confirmed as final. Separate from sentAt: an invoice
   /// can be issued today and posted next week, and "which month does this
   /// belong to" is answered by this date, not by when it was emailed.
@@ -538,7 +540,7 @@ model Invoice {
   // Set when the invoice is voided/deleted instead of hard-deleting the row,
   // so archived PDFs and invoice-number history stay intact.
   voidedAt       DateTime?
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime       @default(now())
 
   timeEntries          TimeEntry[]
   reimbursableExpenses ReimbursableExpense[]
@@ -568,20 +570,20 @@ model Invoice {
 /// verbally. Editing the derived lines instead would mean rewriting the
 /// underlying records, which are shared with reporting and other invoices.
 model InvoiceCustomItem {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   invoiceId   String
-  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   /// Optional so a credit or note can carry no date, matching how charge rows render.
   date        DateTime? @db.Date
   description String
   /// Both nullable: a flat adjustment has no hours or rate, only an amount.
-  hours       Decimal? @db.Decimal(7, 2)
-  rate        Decimal? @db.Decimal(10, 2)
+  hours       Decimal?  @db.Decimal(7, 2)
+  rate        Decimal?  @db.Decimal(10, 2)
   /// Signed on purpose -- a negative amount is how a discount or credit is expressed.
-  amount      Decimal  @db.Decimal(10, 2)
+  amount      Decimal   @db.Decimal(10, 2)
   /// Keeps hand-added lines in the order they were entered.
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
 
   @@index([invoiceId])
   @@map("invoice_custom_items")
@@ -727,4 +729,32 @@ model Task {
   @@index([assignedToUserId])
   @@index([status])
   @@map("tasks")
+}
+
+/// A saved HTML email signature, so a Gmail draft can go out looking like the
+/// mail Tony sends by hand instead of bare plain text.
+///
+/// The HTML is stored as generated, not as the fields it was generated from:
+/// the builder measures text with a canvas to size its badges, which only a
+/// browser can do. Re-deriving it server-side is therefore impossible, and a
+/// signature that silently re-flowed after an unrelated code change would be
+/// worse than one frozen at the moment it was saved.
+model EmailSignature {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// Signatures are personal: each person sees and picks from their own.
+  ownerUserId    String
+  ownerUser      User         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  name           String
+  html           String
+  /// Pre-selected when drafting. At most one per owner, enforced in the
+  /// action by clearing the others in the same transaction.
+  isDefault      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([ownerUserId, name])
+  @@index([organizationId])
+  @@map("email_signatures")
 }

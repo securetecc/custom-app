@@ -1,4 +1,5 @@
 import { requireOrgContext } from "@/lib/auth";
+import { withRLS } from "@/lib/db/rls";
 import { SignatureGenerator } from "@/components/app/signature-generator";
 
 /**
@@ -10,7 +11,14 @@ import { SignatureGenerator } from "@/components/app/signature-generator";
  * case and forcing a login switch for it would be silly.
  */
 export default async function SignaturePage() {
-  const { appUser } = await requireOrgContext();
+  const { appUser, authUserId } = await requireOrgContext();
+  const savedSignatures = await withRLS(authUserId, (tx) =>
+    tx.emailSignature.findMany({
+      where: { ownerUserId: appUser.id },
+      select: { id: true, name: true, html: true, isDefault: true },
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    }),
+  );
 
   return (
     <div className="space-y-6">
@@ -21,7 +29,11 @@ export default async function SignaturePage() {
         </p>
       </div>
 
-      <SignatureGenerator defaultName={appUser.name} defaultEmail={appUser.email} />
+      <SignatureGenerator
+        defaultName={appUser.name}
+        defaultEmail={appUser.email}
+        savedSignatures={savedSignatures}
+      />
     </div>
   );
 }

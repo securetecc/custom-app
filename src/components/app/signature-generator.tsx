@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, Code2 } from "lucide-react";
+import { Copy, Code2, Star, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BACKGROUND_OPTIONS, buildSignatureHTML } from "@/lib/signature/build";
+import {
+  deleteSignature,
+  saveSignature,
+  setDefaultSignature,
+  type SavedSignature,
+} from "@/app/(app)/signature/actions";
 
 /**
  * The signature generator, wrapped in the app's own UI.
@@ -17,13 +24,18 @@ import { BACKGROUND_OPTIONS, buildSignatureHTML } from "@/lib/signature/build";
  * the note there. Everything in this file is chrome.
  *
  * The preview is rendered with dangerouslySetInnerHTML, which is safe and
- * necessary here for the same reason: the HTML is built by our own code from
- * four form fields, never fetched or stored, and the whole point of the tool
- * is to show the rendered card rather than escaped source. The fields are
- * interpolated into an HTML template, so a value containing markup would be
- * reflected -- but only into the author's own preview, and only from what
- * they just typed into their own browser. There is no path by which one
- * user's input reaches another's screen.
+ * necessary here: the HTML is built by our own code from four form fields,
+ * and the whole point of the tool is to show the rendered card rather than
+ * escaped source. The fields are interpolated into an HTML template, so a
+ * value containing markup would be reflected -- but only into the author's
+ * own preview, and only from what they just typed into their own browser.
+ *
+ * Saving changes where that HTML can end up, but not who controls it: a saved
+ * signature is readable only by its owner (RLS, see
+ * supabase/migrations/0008_email_signatures.sql) and is attached only to that
+ * owner's own outgoing draft. Someone putting markup in their own signature
+ * is writing their own email, which they could do in Gmail anyway. There is
+ * still no path by which one user's input reaches another's screen.
  */
 
 const PLACEHOLDERS = {
@@ -36,16 +48,21 @@ const PLACEHOLDERS = {
 export function SignatureGenerator({
   defaultName,
   defaultEmail,
+  savedSignatures,
 }: {
+  savedSignatures: SavedSignature[];
   defaultName: string;
   defaultEmail: string;
 }) {
+  const router = useRouter();
   const [name, setName] = useState(defaultName);
   const [position, setPosition] = useState("");
   const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState(defaultEmail);
   const [background, setBackground] = useState(BACKGROUND_OPTIONS[0]);
   const [showCode, setShowCode] = useState(false);
+  const [saveName, setSaveName] = useState(defaultName ? `${defaultName} — main` : "");
+  const [saving, setSaving] = useState(false);
 
   /**
    * The builder measures the rendered title with a <canvas> -- that is what
@@ -104,6 +121,43 @@ export function SignatureGenerator({
     } catch {
       toast.error("Couldn't copy — select the code below and copy it manually.");
     }
+  }
+
+  /**
+   * Saves the RENDERED html, not the fields it came from -- the builder sizes
+   * its badges with a canvas measurement, which only a browser can do, so the
+   * server could never rebuild this from four strings.
+   */
+  async function handleSave(makeDefault: boolean) {
+    if (!html) return;
+    setSaving(true);
+    const result = await saveSignature({
+      name: saveName.trim(),
+      html,
+      isDefault: makeDefault || savedSignatures.length === 0,
+    });
+    setSaving(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`Saved "${result.data.name}" — pick it when creating a Gmail draft.`);
+    router.refresh();
+  }
+
+  async function handleSetDefault(id: string) {
+    const result = await setDefaultSignature(id);
+    if (!result.ok) return toast.error(result.error);
+    toast.success("Default signature updated");
+    router.refresh();
+  }
+
+  async function handleDelete(id: string, label: string) {
+    if (!confirm(`Delete the signature "${label}"?`)) return;
+    const result = await deleteSignature(id);
+    if (!result.ok) return toast.error(result.error);
+    toast.success("Signature deleted");
+    router.refresh();
   }
 
   async function copyCode() {
@@ -193,6 +247,75 @@ export function SignatureGenerator({
                 />
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Saved signatures</CardTitle>
+            <CardDescription>
+              Save the signature above to sign Gmail drafts with it — the invoice draft button
+              lets you pick from this list. Only you can see your own signatures.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[220px] flex-1 space-y-2">
+                <Label htmlFor="saveName">Name this signature</Label>
+                <Input
+                  id="saveName"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  placeholder="Tony — main"
+                />
+              </div>
+              <Button onClick={() => handleSave(false)} disabled={!html || !saveName.trim() || saving}>
+                {saving ? "Saving…" : "Save signature"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Saving under a name that already exists replaces it.
+            </p>
+
+            {savedSignatures.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nothing saved yet.</p>
+            ) : (
+              <ul className="divide-y rounded-md border">
+                {savedSignatures.map((sig) => (
+                  <li key={sig.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm">{sig.name}</span>
+                      {sig.isDefault && (
+                        <span className="shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
+                          Default
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 gap-1">
+                      {!sig.isDefault && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleSetDefault(sig.id)}
+                          aria-label={`Make ${sig.name} the default`}
+                        >
+                          <Star className="h-4 w-4" />
+                          Make default
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(sig.id, sig.name)}
+                        aria-label={`Delete ${sig.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
 

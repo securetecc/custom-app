@@ -25,6 +25,7 @@ import {
 } from "@/lib/storage/invoices";
 import type { InvoicePdfData } from "@/lib/pdf/types";
 import { createGmailDraft } from "@/lib/google/gmail";
+import { noteWithSignatureHtml } from "@/lib/email/html-body";
 import { archiveInvoiceToDrive } from "@/lib/google/archive-invoice";
 import { invoiceEmail } from "@/lib/email/templates";
 import type { BillableStatus, BillingFrequency } from "@/generated/prisma/enums";
@@ -841,8 +842,14 @@ export async function regenerateInvoicePdf(
  */
 export async function createInvoiceGmailDraft(
   id: string,
+  /**
+   * Which saved signature to sign the draft with. Omitted means "my default";
+   * an explicit null means send it plain, which is what the draft did before
+   * signatures existed.
+   */
+  signatureId?: string | null,
 ): Promise<ActionResult<{ draftUrl: string; reused: boolean }>> {
-  const { authUserId } = await requireAdminContext();
+  const { authUserId, appUser } = await requireAdminContext();
 
   try {
     const invoice = await withRLS(authUserId, (tx) =>
@@ -892,12 +899,27 @@ export async function createInvoiceGmailDraft(
       },
     );
 
+    // A signature is the sender's own row; RLS keeps this to signatures the
+    // signed-in user owns, so an id from elsewhere simply finds nothing.
+    const signature =
+      signatureId === null
+        ? null
+        : await withRLS(authUserId, (tx) =>
+            tx.emailSignature.findFirst({
+              where: signatureId
+                ? { id: signatureId, ownerUserId: appUser.id }
+                : { ownerUserId: appUser.id, isDefault: true },
+              select: { html: true },
+            }),
+          );
+
     const draft = await createGmailDraft(
       {
       to: invoice.client.email,
       from: invoice.organization.invoiceFromEmail ?? invoice.organization.supportEmail,
       subject: email.subject,
       text: email.text,
+      html: signature ? noteWithSignatureHtml(email.text, signature.html) : undefined,
         attachment: {
           filename: invoicePdfFileName(invoice.invoiceNumber, invoice.client.name),
           content: pdf,
