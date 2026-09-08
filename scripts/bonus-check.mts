@@ -89,10 +89,12 @@ if (!report) {
   // The L-V line is the only entry in the month that exercises the payout
   // rule. If the base comes out at $14,650 the payout rate is not applied.
   const lv = report.serviceTypes.find((t) => t.code === "L-V");
+  check("every service-type row carries a real rate, never 'mixed'",
+    report.serviceTypes.every((t) => typeof t.billedRate === "number" && t.billedRate > 0), true);
   check("L-V hours 7.00", lv?.hours.toFixed(2), "7.00");
-  check("L-V billed at $150.00", lv?.billedRate?.toFixed(2), "150.00");
+  check("L-V billed at $150.00", lv?.billedRate.toFixed(2), "150.00");
   check("L-V pays out $75.00", lv?.payoutRate?.toFixed(2), "75.00");
-  check("L-V qualifies at $75.00/hr", lv?.qualifyingRate?.toFixed(2), "75.00");
+  check("L-V qualifies at $75.00/hr", lv?.qualifyingRate.toFixed(2), "75.00");
   check("L-V contributes $525.00", lv?.qualifying.toFixed(2), "525.00");
 
   const fullRate = report.serviceTypes.filter((t) => t.code !== "L-V");

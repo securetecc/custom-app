@@ -38,14 +38,23 @@ export type ClientCompRow = {
   qualifying: number;
 };
 
+/**
+ * One row per service type AND billed rate, not per service type.
+ *
+ * A client on a custom rate, or work spanning the January change, means the
+ * same service type billed at two different figures in one month. Collapsing
+ * those into one row would have to show "mixed" where the rate goes, and this
+ * is the table that exists to make the number auditable -- anyone should be
+ * able to see where a $75 or a $30 came from. Two rows, each with a real
+ * rate, does that; one row saying "mixed" does not.
+ */
 export type ServiceTypeCompRow = {
   code: string;
   label: string;
   hours: number;
-  /** Null when entries of this type were billed at more than one rate. */
-  billedRate: number | null;
+  billedRate: number;
   payoutRate: number | null;
-  qualifyingRate: number | null;
+  qualifyingRate: number;
   qualifying: number;
 };
 
@@ -178,7 +187,8 @@ export async function loadCompensationReport(
   }));
 
   const byClient = new Map<string, ClientCompRow>();
-  const byType = new Map<string, ServiceTypeCompRow & { rates: Set<number> }>();
+  // Keyed on the type AND the rate, so a custom rate gets its own row.
+  const byType = new Map<string, ServiceTypeCompRow>();
   const commissionRows: CommissionRow[] = [];
 
   let baseCents = 0;
@@ -218,20 +228,19 @@ export async function loadCompensationReport(
     client.qualifying += fromCents(lineCents);
     byClient.set(entry.client.id, client);
 
-    const type = byType.get(entry.serviceType.code) ?? {
+    const typeKey = `${entry.serviceType.code}@${billedRate}`;
+    const type = byType.get(typeKey) ?? {
       code: entry.serviceType.code,
       label: entry.serviceType.label,
       hours: 0,
-      billedRate: null,
+      billedRate,
       payoutRate,
-      qualifyingRate: null,
+      qualifyingRate: fromCents(toCents(billedRate) - toCents(payoutRate ?? 0)),
       qualifying: 0,
-      rates: new Set<number>(),
     };
     type.hours += entryHours;
     type.qualifying += fromCents(lineCents);
-    type.rates.add(billedRate);
-    byType.set(entry.serviceType.code, type);
+    byType.set(typeKey, type);
 
     // Commission: BBZ-performed IT hours, at 10% of what was BILLED -- not of
     // the qualifying figure. It is a share of what the client paid, so the
@@ -281,21 +290,13 @@ export async function loadCompensationReport(
       .map((c) => ({ ...c, hours: round2(c.hours), qualifying: round2(c.qualifying) }))
       .sort((a, b) => b.qualifying - a.qualifying || a.name.localeCompare(b.name)),
     serviceTypes: [...byType.values()]
-      .map(({ rates, ...row }) => {
-        // One rate across every entry of this type is the normal case and the
-        // one worth showing. Mixed rates -- a negotiated client rate, or work
-        // spanning the January change -- show blank rather than a figure that
-        // looks authoritative and is only one of several.
-        const single = rates.size === 1 ? [...rates][0] : null;
-        return {
-          ...row,
-          hours: round2(row.hours),
-          billedRate: single,
-          qualifyingRate: single === null ? null : round2(single - (row.payoutRate ?? 0)),
-          qualifying: round2(row.qualifying),
-        };
-      })
-      .sort((a, b) => b.qualifying - a.qualifying || a.code.localeCompare(b.code)),
+      .map((row) => ({ ...row, hours: round2(row.hours), qualifying: round2(row.qualifying) }))
+      .sort(
+        (a, b) =>
+          b.qualifying - a.qualifying ||
+          a.code.localeCompare(b.code) ||
+          b.billedRate - a.billedRate,
+      ),
     qualifyingBase: fromCents(baseCents),
     ratePercent: bonus.ratePercent,
     band: bonus.band,

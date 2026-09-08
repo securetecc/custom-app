@@ -208,6 +208,8 @@ export default async function CompensationReportPage({
               <CardDescription>
                 Where a $75 or a $30 comes from. An hour enters at its net figure: where SecureTECC
                 pays a third party out of a billed hour, only SecureTECC&apos;s share qualifies.
+                A service type billed at two rates in one month — a custom rate, or work spanning
+                a rate change — gets a row for each, so every row shows a real figure.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -227,20 +229,20 @@ export default async function CompensationReportPage({
                   </TableHeader>
                   <TableBody>
                     {report.serviceTypes.map((t) => (
-                      <TableRow key={t.code}>
+                      <TableRow key={`${t.code}@${t.billedRate}`}>
                         <TableCell>
                           <span className="font-medium">{t.code}</span>
                           <span className="ml-2 text-muted-foreground">{t.label}</span>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{hrs(t.hours)}</TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {t.billedRate === null ? "mixed" : usd(t.billedRate)}
+                          {usd(t.billedRate)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">
                           {t.payoutRate === null ? "—" : usd(t.payoutRate)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {t.qualifyingRate === null ? "mixed" : usd(t.qualifyingRate)}
+                          {usd(t.qualifyingRate)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{usd(t.qualifying)}</TableCell>
                       </TableRow>
