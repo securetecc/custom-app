@@ -74,9 +74,10 @@ export async function loadBountyReport(
 
   for (const client of clients) {
     if (!qualifiesForBounty(client.leadSource)) {
-      // Worth surfacing rather than silently skipping: a client with no lead
-      // source recorded is one where the answer was never captured, which is
-      // fixable at the client record -- unlike one recorded as a referral.
+      // Worth surfacing rather than silently skipping: a client with NO lead
+      // source is one where the answer was never captured, which is fixable
+      // at the client record. A client marked Legacy or Referral has been
+      // answered and is not on this list.
       if (client.leadSource === null && client.invoices.length > 0) {
         unattributed.push({ clientId: client.id, name: client.name });
       }

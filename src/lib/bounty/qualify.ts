@@ -12,6 +12,10 @@ import type { LeadSource } from "@/generated/prisma/enums";
  * A blank field pays nothing. That is the schedule's rule and it is
  * deliberate: after the fact neither side can prove where a client came from,
  * so a bounty resting on memory would cost more in goodwill than it is worth.
+ *
+ * Legacy is the answer for a client who was already here before any of this
+ * existed. It pays nothing either, but it is an ANSWER -- the report stops
+ * asking about them, which blank does not.
  */
 export const QUALIFYING_LEAD_SOURCES: LeadSource[] = [
   "Website",
@@ -28,6 +32,7 @@ export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
   Referral: "Referral — Tony's network",
   ExistingClient: "Referred by an existing client",
   ReturningClient: "Returning after a gap",
+  Legacy: "Legacy client — was already here",
   Other: "Other",
 };
 

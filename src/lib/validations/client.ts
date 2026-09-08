@@ -49,6 +49,7 @@ export const clientFormSchema = z.object({
       "Referral",
       "ExistingClient",
       "ReturningClient",
+      "Legacy",
       "Other",
     ])
     .nullable(),

@@ -52,6 +52,15 @@ check("$24,999.99 is 7.50%", rateAt(24999.99), 7.5);
 check("$25,000.00 exactly is 10.00%", rateAt(25000), 10);
 check("$40,000 is still 10% — the top band does not escalate", rateAt(40000), 10);
 
+console.log("\nAbove $25,000 the rate is flat 10% — no further escalators\n");
+check("$25,000.00 exactly", rateAt(25000), 10);
+check("$25,000.01", rateAt(25000.01), 10);
+check("$30,000", rateAt(30000), 10);
+check("$50,000", rateAt(50000), 10);
+check("$250,000", rateAt(250000), 10);
+check("$30,000 pays $3,000.00", bonusAt(30000), 3000);
+check("$100,000 pays $10,000.00", bonusAt(100000), 10000);
+
 console.log("\nThe rate applies to the whole base, not the amount above the threshold\n");
 check("$16,500 pays $618.75 (schedule, section 3.1)", bonusAt(16500), 618.75);
 check("$11,000 pays $137.50", bonusAt(11000), 137.5);

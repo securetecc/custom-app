@@ -3,6 +3,7 @@ import { resolveRate, toRate } from "@/lib/billing/rates";
 import { loadBountyReport, type BountyReport } from "./bounty";
 import {
   bonusFor,
+  nextRung,
   fromCents,
   qualifyingCents,
   roundHalfUpCents,
@@ -80,6 +81,10 @@ export type CompensationReport = {
     billedTotal: number;
     total: number;
   };
+  /** What the next rung of the escalator needs, or null at the top. */
+  nextBand: { need: number; at: number; ratePercent: number; bonusThen: number } | null;
+  /** The top band's floor -- the figure the whole structure is aimed at. */
+  ceiling: { at: number; ratePercent: number; progress: number } | null;
   /** New-client bounties, with the ones maturing this month payable now. */
   bounty: BountyReport;
   /** Hours in the month not yet on an invoice. They still count. */
@@ -260,6 +265,9 @@ export async function loadCompensationReport(
     row.commission = round2((row.billed * commissionPercent) / 100);
   }
 
+  const rung = nextRung(baseCents, bands);
+  const topBand = bands.find((b) => b.upperInclusive === null) ?? null;
+
   const retainer = Number(org.bbzRetainerAmount);
   const bonusAmount = fromCents(bonus.bonusCents);
   const commissionAmount = fromCents(commissionTotalCents);
@@ -300,6 +308,27 @@ export async function loadCompensationReport(
       billedTotal: fromCents(commissionBilledCents),
       total: commissionAmount,
     },
+    nextBand: rung
+      ? {
+          need: fromCents(rung.needCents),
+          at: fromCents(rung.atCents),
+          ratePercent: rung.ratePercent,
+          bonusThen: fromCents(rung.bonusThenCents),
+        }
+      : null,
+    ceiling: topBand
+      ? (() => {
+          // The smallest figure that actually lands in the top band, not the
+          // band's exclusive floor -- so this reads $25,000.00 rather than
+          // $24,999.99, which is the figure Tony and the schedule both use.
+          const at = fromCents(toCents(topBand.lowerExclusive) + 1);
+          return {
+            at,
+            ratePercent: topBand.ratePercent,
+            progress: at > 0 ? Math.min(1, fromCents(baseCents) / at) : 0,
+          };
+        })()
+      : null,
     bounty,
     unbilledHours: round2(unbilledHours),
     bands,

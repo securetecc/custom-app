@@ -107,6 +107,55 @@ export default async function CompensationReportPage({
             </CardContent>
           </Card>
 
+          {/* The escalator is a target, not just a lookup: the arrangement
+              exists to move the month up the ladder, so the report says what
+              the next rung costs rather than leaving it to be worked out by
+              hand each month. */}
+          {(report.nextBand || report.ceiling) && report.billableHours > 0 && (
+            <Card>
+              <CardContent className="space-y-3 py-5">
+                {report.ceiling && (
+                  <>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="text-sm">
+                        {report.ceiling.progress >= 1 ? (
+                          <>
+                            At or above {usd(report.ceiling.at)} — the top of the escalator, a flat{" "}
+                            {report.ceiling.ratePercent.toFixed(2)}% of the whole base.
+                          </>
+                        ) : (
+                          <>
+                            {Math.round(report.ceiling.progress * 100)}% of the way to{" "}
+                            {usd(report.ceiling.at)} a month, where the rate reaches{" "}
+                            {report.ceiling.ratePercent.toFixed(2)}% and stops climbing.
+                          </>
+                        )}
+                      </p>
+                      {report.nextBand && (
+                        <p className="text-sm text-muted-foreground">
+                          {usd(report.nextBand.need)} more this month reaches{" "}
+                          {report.nextBand.ratePercent.toFixed(2)}% —{" "}
+                          {usd(report.nextBand.bonusThen)} instead of {usd(report.bonus)}.
+                        </p>
+                      )}
+                    </div>
+                    <div
+                      className="h-2 w-full overflow-hidden rounded-full"
+                      style={{ background: "color-mix(in oklab, var(--foreground) 10%, transparent)" }}
+                      role="img"
+                      aria-label={`${Math.round(report.ceiling.progress * 100)} percent of the way to ${usd(report.ceiling.at)}`}
+                    >
+                      <div
+                        className="h-full rounded-full bg-accent"
+                        style={{ width: `${Math.max(1, Math.round(report.ceiling.progress * 100))}%` }}
+                      />
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">By client</CardTitle>

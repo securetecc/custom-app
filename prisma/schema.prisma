@@ -79,6 +79,10 @@ enum LeadSource {
   Referral
   ExistingClient
   ReturningClient
+  /// A client who was already here before any of this was tracked. Not a new
+  /// client, so no bounty -- but distinct from "nobody ever recorded it",
+  /// which is a gap to be filled rather than an answer.
+  Legacy
   Other
 }
 

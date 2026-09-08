@@ -89,6 +89,37 @@ export function bonusFor(baseCents: number, bands: BonusBandRow[]): BonusResult 
   };
 }
 
+/**
+ * What the next rung costs, and what it would pay.
+ *
+ * The escalator is a target, not just a lookup: the point of the arrangement
+ * is to get the month up the ladder. Saying "another $875 moves this month
+ * from 2.50% to 3.75%, worth $187 more" is the number that changes behaviour,
+ * and it is otherwise arithmetic someone has to do by hand every month.
+ *
+ * Null once the top band is reached -- above it there is nothing further to
+ * climb, which is itself worth saying.
+ */
+export function nextRung(
+  baseCents: number,
+  bands: BonusBandRow[],
+): { needCents: number; atCents: number; ratePercent: number; bonusThenCents: number } | null {
+  const higher = bands
+    .filter((b) => toCents(b.lowerExclusive) >= baseCents)
+    .sort((a, b) => a.lowerExclusive - b.lowerExclusive);
+  const next = higher[0];
+  if (!next) return null;
+
+  // A cent past the floor is the smallest figure that lands in the band.
+  const atCents = toCents(next.lowerExclusive) + 1;
+  return {
+    needCents: atCents - baseCents,
+    atCents,
+    ratePercent: next.ratePercent,
+    bonusThenCents: roundHalfUpCents((atCents * next.ratePercent) / 100),
+  };
+}
+
 /** Cents back to a number of dollars, for display and storage. */
 export function fromCents(cents: number): number {
   return cents / 100;
