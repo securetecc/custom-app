@@ -97,6 +97,7 @@ export function RecurringChargeDialog({
       itemType: null,
       quantity: null,
       unitPrice: null,
+      cost: null,
       startDate: null,
       authorizedBy: "",
       notes: "",
@@ -273,7 +274,7 @@ export function RecurringChargeDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="amount">Amount ($)</Label>
                 <Input
@@ -285,6 +286,22 @@ export function RecurringChargeDialog({
                 {errors.amount && (
                   <p className="text-xs text-destructive">{errors.amount.message}</p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cost">Cost to us ($)</Label>
+                <Input
+                  id="cost"
+                  type="number"
+                  step="0.01"
+                  placeholder="Nothing"
+                  {...register("cost", {
+                    setValueAs: (v) => (v === "" || v === null ? null : Number(v)),
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  What delivering this costs per period. The margin is the difference.
+                </p>
               </div>
 
               <div className="space-y-2">

@@ -45,6 +45,9 @@ export const recurringChargeFormSchema = z.object({
   /// Seats/devices and the price each, when the charge is counted in units.
   quantity: z.number().int().positive().nullable(),
   unitPrice: z.number().nonnegative().nullable(),
+  /// What the service costs SecureTECC each period. The margin is the
+  /// difference from the amount charged.
+  cost: z.number().nonnegative().nullable(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date").nullable(),
   authorizedBy: z.string().min(1, "Enter who authorized this charge"),
   // Operational context carried over from the master sheet's Notes column

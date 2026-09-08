@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { sortRecurring } from "@/lib/recurring-order";
+import { marginOf, nextBillingDate } from "@/lib/billing/recurring-schedule";
 import { ADDON_ITEM_TYPE_LABELS } from "@/lib/validations/recurring-charge";
 import { Pencil, Plus } from "lucide-react";
 
@@ -126,6 +127,15 @@ export default async function EditClientPage({
                       ? ` · ${charge.quantity} × ${formatCurrency(Number(charge.unitPrice))}`
                       : ""}
                     {charge.startDate ? ` · since ${formatDate(charge.startDate)}` : ""}
+                    {(() => {
+                      const next = nextBillingDate({
+                        startDate: charge.startDate,
+                        frequency: charge.billingFrequency,
+                        activeStatus: charge.activeStatus,
+                        asOf: new Date(),
+                      });
+                      return next ? ` · next ${formatDate(next)}` : "";
+                    })()}
                     {charge.reference ? ` · ${charge.reference}` : ""}
                     {charge.authorizedBy ? ` · authorized by ${charge.authorizedBy}` : ""}
                   </p>
@@ -141,6 +151,13 @@ export default async function EditClientPage({
                   <p className="text-xs text-muted-foreground">
                     {charge.billingFrequency === "Annual" ? "per year" : "per month"}
                   </p>
+                  {charge.cost !== null && (
+                    <p className="text-xs text-muted-foreground">
+                      {formatCurrency(Number(charge.cost))} cost ·{" "}
+                      {formatCurrency(marginOf(Number(charge.amount), Number(charge.cost)) ?? 0)}{" "}
+                      margin
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1">
@@ -156,6 +173,7 @@ export default async function EditClientPage({
                       itemType: charge.itemType,
                       quantity: charge.quantity,
                       unitPrice: charge.unitPrice === null ? null : Number(charge.unitPrice),
+                      cost: charge.cost === null ? null : Number(charge.cost),
                       startDate: charge.startDate
                         ? charge.startDate.toISOString().slice(0, 10)
                         : null,

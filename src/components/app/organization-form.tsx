@@ -16,7 +16,8 @@ import {
   setEmailDomainVerified,
   updateOrganization,
   updateStaffRole,
-  updateTicketEmailOptIn,
+  updateNotificationPreference,
+  type NotificationPreference,
 } from "@/app/(app)/settings/organization/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -371,7 +372,16 @@ export function StaffSection({
   staff,
   currentUserId,
 }: {
-  staff: { id: string; name: string; email: string; role: string; receivesTicketEmails: boolean }[];
+  staff: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    receivesTicketEmails: boolean;
+    notifyTaskAssigned: boolean;
+    notifyTaskForReview: boolean;
+    notifyTaskCompleted: boolean;
+  }[];
   currentUserId: string;
 }) {
   return (
@@ -398,8 +408,34 @@ export function StaffSection({
               </p>
               <p className="text-sm text-muted-foreground">{user.email}</p>
             </div>
-            <div className="flex items-center gap-4">
-              <TicketEmailToggle userId={user.id} initial={user.receivesTicketEmails} />
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {/* What this person is emailed about. Off never means
+                  uninformed -- the ticket is in the shared inbox and the task
+                  is on the board either way. */}
+              <NotificationToggle
+                userId={user.id}
+                preference="notifyTaskAssigned"
+                label="Task assigned"
+                initial={user.notifyTaskAssigned}
+              />
+              <NotificationToggle
+                userId={user.id}
+                preference="notifyTaskForReview"
+                label="For review"
+                initial={user.notifyTaskForReview}
+              />
+              <NotificationToggle
+                userId={user.id}
+                preference="notifyTaskCompleted"
+                label="Task done"
+                initial={user.notifyTaskCompleted}
+              />
+              <NotificationToggle
+                userId={user.id}
+                preference="receivesTicketEmails"
+                label="Ticket assigned"
+                initial={user.receivesTicketEmails}
+              />
               <StaffRoleSelect userId={user.id} role={user.role} />
             </div>
           </div>
@@ -410,13 +446,22 @@ export function StaffSection({
 }
 
 /**
- * Whether tickets assigned to this person are emailed to them.
+ * One email preference for one person.
  *
- * Off does not mean uninformed: the ticket still lands in the watched ticket
- * inbox and on the tickets page. It exists because someone who lives in the
- * platform every day does not need the same thing twice.
+ * Optimistic, and reverted if the write fails -- a checkbox that appears to
+ * save and did not is worse than one that visibly refuses.
  */
-function TicketEmailToggle({ userId, initial }: { userId: string; initial: boolean }) {
+function NotificationToggle({
+  userId,
+  preference,
+  label,
+  initial,
+}: {
+  userId: string;
+  preference: NotificationPreference;
+  label: string;
+  initial: boolean;
+}) {
   const [on, setOn] = useState(initial);
   const [pending, setPending] = useState(false);
 
@@ -428,18 +473,18 @@ function TicketEmailToggle({ userId, initial }: { userId: string; initial: boole
         onCheckedChange={async (next: boolean | "indeterminate") => {
           const previous = on;
           const value = next === true;
-          setOn(value); // optimistic -- reverted below if the write fails
+          setOn(value);
           setPending(true);
-          const result = await updateTicketEmailOptIn(userId, value);
+          const result = await updateNotificationPreference(userId, preference, value);
           setPending(false);
           if (!result.ok) {
             setOn(previous);
             toast.error(result.error);
           }
         }}
-        aria-label="Email this person when a ticket is assigned to them"
+        aria-label={`Email ${label.toLowerCase()} notifications to this person`}
       />
-      Ticket emails
+      {label}
     </label>
   );
 }

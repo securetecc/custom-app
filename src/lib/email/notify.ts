@@ -287,7 +287,12 @@ export async function notifyTaskAssigned(taskId: string): Promise<SendResult> {
   if (!task) return { ok: false, error: "Task not found." };
 
   const pending = task.assignees.filter(
-    (a) => a.notifiedAt === null && a.userId !== task.createdByUserId,
+    (a) =>
+      a.notifiedAt === null &&
+      a.userId !== task.createdByUserId &&
+      // Off is a real choice, not a failure: the task is on the board either
+      // way, and someone living in the platform does not need it twice.
+      a.user.notifyTaskAssigned,
   );
   if (pending.length === 0) {
     return { ok: false, skipped: true, error: "Nobody new to tell" };
@@ -352,6 +357,9 @@ export async function notifyTaskForReview(taskId: string): Promise<SendResult> {
   if (task.assignedToUserId === task.createdByUserId) {
     return { ok: false, skipped: true, error: "Self-assigned" };
   }
+  if (!task.createdByUser.notifyTaskForReview) {
+    return { ok: false, skipped: true, error: "Delegator has review email turned off" };
+  }
 
   const org = task.organization as OrgRow;
   const email = taskForReviewEmail(
@@ -385,6 +393,9 @@ export async function notifyTaskCompleted(taskId: string): Promise<SendResult> {
   if (!task) return { ok: false, error: "Task not found." };
   if (task.assignedToUserId === task.createdByUserId) {
     return { ok: false, skipped: true, error: "Self-assigned" };
+  }
+  if (!task.createdByUser.notifyTaskCompleted) {
+    return { ok: false, skipped: true, error: "Delegator has completion email turned off" };
   }
 
   const org = task.organization as OrgRow;

@@ -186,26 +186,48 @@ export async function updateStaffRole(
   return { ok: true };
 }
 
+export type NotificationPreference =
+  | "receivesTicketEmails"
+  | "notifyTaskAssigned"
+  | "notifyTaskForReview"
+  | "notifyTaskCompleted";
+
+const NOTIFICATION_PREFERENCES: NotificationPreference[] = [
+  "receivesTicketEmails",
+  "notifyTaskAssigned",
+  "notifyTaskForReview",
+  "notifyTaskCompleted",
+];
+
 /**
- * Toggles whether ticket mail addressed to this person reaches their inbox.
+ * Toggles one email preference for one person.
  *
- * Not admin-only on purpose: this is a personal notification preference, and
- * anyone should be able to turn their own off. Admins can set it for others,
- * which the role check below enforces. Turning it off changes nothing about
- * the shared ticket inbox or the board -- the ticket is still there.
+ * One action over a named column rather than four near-identical ones. The
+ * name is checked against the list above, so a caller can never point this at
+ * an arbitrary column.
+ *
+ * Not admin-only on purpose: these are personal preferences and anyone should
+ * be able to turn their own off. Admins can set them for others, which the
+ * role check enforces. Off never means uninformed -- the ticket is still in
+ * the shared inbox and the task is still on the board.
  */
-export async function updateTicketEmailOptIn(
+export async function updateNotificationPreference(
   userId: string,
-  receives: boolean,
+  preference: NotificationPreference,
+  enabled: boolean,
 ): Promise<ActionResult> {
+  if (!NOTIFICATION_PREFERENCES.includes(preference)) {
+    return { ok: false, error: "Unknown notification setting." };
+  }
+
   const { authUserId, appUser } = await requireOrgContext();
   if (appUser.role !== "admin" && appUser.id !== userId) {
-    return { ok: false, error: "You can only change your own notification setting." };
+    return { ok: false, error: "You can only change your own notification settings." };
   }
 
   try {
     await withRLS(authUserId, (tx) =>
-      tx.user.update({ where: { id: userId }, data: { receivesTicketEmails: receives } }),
+      tx.user.update({ where: { id: userId }, data: { [preference]: enabled } }),
     );
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };

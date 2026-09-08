@@ -306,6 +306,12 @@ model User {
   /// that goes to ticketNotificationEmail, not here. On by default: someone
   /// handed a ticket should hear about it unless they say otherwise.
   receivesTicketEmails Boolean      @default(true)
+  /// Told when a task is assigned to them.
+  notifyTaskAssigned   Boolean      @default(true)
+  /// Told when a task they delegated is marked ready for review.
+  notifyTaskForReview  Boolean      @default(true)
+  /// Told when a task they delegated is completed.
+  notifyTaskCompleted  Boolean      @default(true)
   /// Storage path in the private "avatars" bucket, not a URL -- the bucket is
   /// private, so what's shown is a short-lived signed URL minted per request.
   avatarPath           String?
@@ -542,6 +548,11 @@ model RecurringCharge {
   /// these two explain how it was arrived at, so adding a seat is a visible
   /// change to the count rather than an unexplained new total.
   unitPrice        Decimal?         @db.Decimal(10, 2)
+  /// What this service costs SecureTECC each period -- the licence, the seat
+  /// fee, whatever is paid out to deliver it. Null means it costs nothing
+  /// directly. The margin on the charge is the difference, and it is the
+  /// number that says whether a recurring line is worth carrying.
+  cost             Decimal?         @db.Decimal(10, 2)
   /// When this charge began. Date-only -- it is a calendar fact.
   startDate        DateTime?        @db.Date
   billingFrequency BillingFrequency @default(Monthly)
