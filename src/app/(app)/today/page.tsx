@@ -26,7 +26,15 @@ export default async function TodayPage() {
   const [tasks, todayTime, openTickets] = await withRLS(authUserId, (tx) =>
     Promise.all([
       tx.task.findMany({
-        where: { assignedToUserId: appUser.id, status: { not: "Completed" } },
+        // Assigned to me in either sense: the task filed under me, or one I
+        // share with someone else.
+        where: {
+          status: { not: "Completed" },
+          OR: [
+            { assignedToUserId: appUser.id },
+            { assignees: { some: { userId: appUser.id } } },
+          ],
+        },
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { priority: "desc" }],
         take: 8,
       }),

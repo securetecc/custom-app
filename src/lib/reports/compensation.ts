@@ -94,6 +94,9 @@ export type CompensationReport = {
   nextBand: { need: number; at: number; ratePercent: number; bonusThen: number } | null;
   /** The top band's floor -- the figure the whole structure is aimed at. */
   ceiling: { at: number; ratePercent: number; progress: number } | null;
+  /** True for a month before the arrangement began: the hours are real, the
+   *  money is not, so every payable figure is zero. */
+  beforeStart: boolean;
   /** New-client bounties, with the ones maturing this month payable now. */
   bounty: BountyReport;
   /** Hours in the month not yet on an invoice. They still count. */
@@ -173,7 +176,11 @@ export async function loadCompensationReport(
     }),
     tx.bonusBand.findMany({ orderBy: { lowerExclusive: "asc" } }),
     tx.organization.findFirstOrThrow({
-      select: { bbzRetainerAmount: true, bbzCommissionPercent: true },
+      select: {
+        bbzRetainerAmount: true,
+        bbzCommissionPercent: true,
+        bbzStartMonth: true,
+      },
     }),
     // Paid once, at the twelve-month mark, on top of whatever the escalator
     // pays that month -- so it belongs to a month the same way the bonus does.
@@ -277,9 +284,14 @@ export async function loadCompensationReport(
   const rung = nextRung(baseCents, bands);
   const topBand = bands.find((b) => b.upperInclusive === null) ?? null;
 
-  const retainer = Number(org.bbzRetainerAmount);
-  const bonusAmount = fromCents(bonus.bonusCents);
-  const commissionAmount = fromCents(commissionTotalCents);
+  // Before the arrangement began there was no retainer, no bonus and no
+  // commission -- the work happened, the money did not. Reporting the hours
+  // is useful; reporting a payment for them would be a claim about a month
+  // nobody had agreed anything for.
+  const beforeStart = month < org.bbzStartMonth;
+  const retainer = beforeStart ? 0 : Number(org.bbzRetainerAmount);
+  const bonusAmount = beforeStart ? 0 : fromCents(bonus.bonusCents);
+  const commissionAmount = beforeStart ? 0 : fromCents(commissionTotalCents);
 
   return {
     month,
@@ -298,11 +310,14 @@ export async function loadCompensationReport(
           b.billedRate - a.billedRate,
       ),
     qualifyingBase: fromCents(baseCents),
-    ratePercent: bonus.ratePercent,
+    ratePercent: beforeStart ? 0 : bonus.ratePercent,
     band: bonus.band,
     bonus: bonusAmount,
+    beforeStart,
     retainer,
-    totalPayment: round2(retainer + bonusAmount + commissionAmount + bounty.dueTotal),
+    totalPayment: round2(
+      retainer + bonusAmount + commissionAmount + (beforeStart ? 0 : bounty.dueTotal),
+    ),
     commission: {
       percent: commissionPercent,
       rows: commissionRows.sort((a, b) => a.date.localeCompare(b.date)),

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -87,6 +88,7 @@ export function TaskDialog({
     startDate: null,
     dueDate: null,
     assignedToUserId: "",
+    additionalAssigneeIds: [],
   };
 
   const {
@@ -155,7 +157,18 @@ export function TaskDialog({
   }
 
   const assignedToUserId = watch("assignedToUserId");
+  const additionalAssigneeIds = watch("additionalAssigneeIds");
   const priority = watch("priority");
+
+  /** Anyone can be added alongside the primary, except the primary. */
+  function toggleAlso(userId: string) {
+    const current = additionalAssigneeIds ?? [];
+    setValue(
+      "additionalAssigneeIds",
+      current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId],
+      { shouldDirty: true },
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={closeAndReset}>
@@ -321,6 +334,35 @@ export function TaskDialog({
                   </Select>
                 </div>
               </div>
+
+              {/* A task can belong to more than one person -- work involving
+                  both Zia and Ian is one task with two owners, not two tasks
+                  that drift apart. Everyone ticked is emailed, and everyone
+                  ticked can move it. */}
+              {staff.filter((s) => s.id !== assignedToUserId).length > 0 && (
+                <div className="space-y-2">
+                  <Label>Also assigned to</Label>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-md border p-3">
+                    {staff
+                      .filter((s) => s.id !== assignedToUserId)
+                      .map((person) => (
+                        <label
+                          key={person.id}
+                          className="flex cursor-pointer items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            checked={(additionalAssigneeIds ?? []).includes(person.id)}
+                            onCheckedChange={() => toggleAlso(person.id)}
+                          />
+                          {person.name}
+                        </label>
+                      ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Everyone assigned is emailed and can move the task.
+                  </p>
+                </div>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">

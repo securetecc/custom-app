@@ -26,21 +26,25 @@ export default async function CompensationReportPage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const { month: requested } = await searchParams;
-  // Defaults to the month just ended, which is the one being paid: the
-  // schedule says the figure is calculated in the first five business days
-  // of the month for the month before it.
+  const { authUserId } = await requireOrgContext();
+
+  const startMonth = await withRLS(authUserId, async (tx) => {
+    const org = await tx.organization.findFirstOrThrow({ select: { bbzStartMonth: true } });
+    return org.bbzStartMonth;
+  });
+
+  // Defaults to the month just ended -- the schedule calculates in the first
+  // five business days of the month for the month before it -- but never
+  // earlier than the month the arrangement began. On 31 August that
+  // arithmetic lands on July, a month in which there was no retainer to
+  // report and no bonus to owe.
   const today = pacificDayStart();
   const previous = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
-  const fallback = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    timeZone: PACIFIC_TZ,
-  })
-    .format(previous)
-    .slice(0, 7);
+  const previousMonth = `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, "0")}`;
+  const fallback = previousMonth < startMonth ? startMonth : previousMonth;
   const month = /^\d{4}-\d{2}$/.test(requested ?? "") ? requested! : fallback;
+  const beforeStart = month < startMonth;
 
-  const { authUserId } = await requireOrgContext();
   const report = await withRLS(authUserId, (tx) => loadCompensationReport(tx, month));
 
   return (
@@ -56,6 +60,22 @@ export default async function CompensationReportPage({
           <MonthPicker month={month} />
         </Suspense>
       </div>
+
+      {beforeStart && (
+        <div
+          className="rounded-lg border p-4 text-sm"
+          style={{
+            borderColor: "var(--viz-warn)",
+            background: "color-mix(in oklab, var(--viz-warn) 8%, transparent)",
+          }}
+        >
+          The retainer and bonus begin in{" "}
+          {new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+            new Date(`${startMonth}-01T00:00:00Z`),
+          )}
+          . Anything shown for an earlier month is the work that was done, not money that was owed.
+        </div>
+      )}
 
       {!report ? (
         <Card>

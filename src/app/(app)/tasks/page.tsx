@@ -28,6 +28,7 @@ export default async function TasksPage() {
         ],
         include: {
           assignedToUser: { select: { id: true, name: true } },
+          assignees: { include: { user: { select: { id: true, name: true } } } },
           createdByUser: { select: { name: true } },
         },
       }),
@@ -48,11 +49,21 @@ export default async function TasksPage() {
     dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
     assigneeId: t.assignedToUser.id,
     assigneeName: t.assignedToUser.name,
+    // Every owner, primary first, so a card shows who the work belongs to
+    // rather than only whose column it happens to sit in.
+    assignees: [
+      { id: t.assignedToUser.id, name: t.assignedToUser.name },
+      ...t.assignees
+        .filter((a) => a.userId !== t.assignedToUser.id)
+        .map((a) => ({ id: a.user.id, name: a.user.name })),
+    ],
     createdByName: t.createdByUser.name,
   }));
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: PACIFIC_TZ }).format(pacificDayStart());
-  const mine = board.filter((t) => t.assigneeId === appUser.id && t.status !== "Completed").length;
+  const mine = board.filter(
+    (t) => t.assignees.some((a) => a.id === appUser.id) && t.status !== "Completed",
+  ).length;
   const waiting = board.filter((t) => t.status === "ForReview").length;
 
   return (

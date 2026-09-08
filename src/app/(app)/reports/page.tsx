@@ -8,7 +8,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RangeFilter } from "@/components/app/dashboard/range-filter";
 import { resolveRange } from "@/lib/dashboard/metrics";
 import { loadReports } from "@/lib/reports/metrics";
-import { AGING_LABELS } from "@/lib/reports/aging";
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -28,7 +27,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
   const range = resolveRange(sp.range, sp.from, sp.to);
 
   const { data } = await requireAdminContext((tx) => loadReports(tx, range));
-  const { clients, serviceTypes, totals, paymentSpeed, aging, profitability } = data!;
+  const { clients, serviceTypes, totals, paymentSpeed } = data!;
 
   // The PDF route re-resolves the range from these same params, so the
   // download is always the report on screen rather than a default period.
@@ -55,6 +54,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
           </Suspense>
           {/* A plain anchor, not a button: downloads want a real href so
               open-in-new-tab and save-as behave. */}
+          <Link
+            href="/accounting/aging"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Money owed
+          </Link>
           <Link
             href="/reports/compensation"
             className={buttonVariants({ variant: "outline", size: "sm" })}
@@ -141,136 +146,6 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {c.loggedBillable}h / {c.loggedNonBillable}h
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Money owed, by age</CardTitle>
-          <CardDescription>
-            Counted from the day each invoice was sent, because that is when the client&apos;s
-            clock starts. Part-paid invoices count only their balance. This ignores the period
-            filter — an unpaid invoice from March is still unpaid whichever month you are
-            looking at.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {aging.rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nothing outstanding — every invoice raised has been paid.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead className="text-right">{AGING_LABELS.current}</TableHead>
-                  <TableHead className="text-right">{AGING_LABELS.d31_60}</TableHead>
-                  <TableHead className="text-right">{AGING_LABELS.d61_90}</TableHead>
-                  <TableHead className="text-right">{AGING_LABELS.d90plus}</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {aging.rows.map((r) => (
-                  <TableRow key={r.clientId}>
-                    <TableCell className="font-medium">
-                      <Link href={`/clients/${r.clientId}`} className="hover:underline">
-                        {r.name}
-                      </Link>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        oldest {r.oldestDays}d
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{r.current ? usd(r.current) : "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.d31_60 ? usd(r.d31_60) : "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.d61_90 ? usd(r.d61_90) : "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {r.d90plus ? usd(r.d90plus) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">{usd(r.total)}</TableCell>
-                  </TableRow>
-                ))}
-                <TableRow>
-                  <TableCell className="font-semibold">Total owed</TableCell>
-                  <TableCell className="text-right tabular-nums">{usd(aging.totals.current)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{usd(aging.totals.d31_60)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{usd(aging.totals.d61_90)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{usd(aging.totals.d90plus)}</TableCell>
-                  <TableCell className="text-right tabular-nums font-semibold">
-                    {usd(aging.totals.total)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Revenue against cost</CardTitle>
-          <CardDescription>
-            Costs recorded in Settings → Expenses. A cost attached to a client is set against
-            what that client was billed; overhead is reported here and deliberately NOT split
-            across clients — an invented split makes a per-client profit look precise when it
-            is a guess.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-4">
-            <Stat label="Invoiced" value={usd(profitability.revenue)} hint={range.label.toLowerCase()} />
-            <Stat label="Direct costs" value={usd(profitability.directCosts)} hint="attached to a client" />
-            <Stat label="Overhead" value={usd(profitability.overhead)} hint="not client-specific" />
-            <Stat
-              label="Net"
-              value={usd(profitability.netProfit)}
-              hint={
-                profitability.revenue > 0
-                  ? `${Math.round((profitability.netProfit / profitability.revenue) * 100)}% of invoiced`
-                  : "nothing invoiced"
-              }
-            />
-          </div>
-
-          {profitability.clients.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No costs recorded yet. Add them in Settings → Expenses and this fills itself.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead className="text-right">Invoiced</TableHead>
-                  <TableHead className="text-right">Direct cost</TableHead>
-                  <TableHead className="text-right">Margin</TableHead>
-                  <TableHead className="text-right">Margin %</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {profitability.clients.map((c) => (
-                  <TableRow key={c.clientId}>
-                    <TableCell className="font-medium">
-                      <Link href={`/clients/${c.clientId}`} className="hover:underline">
-                        {c.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{usd(c.invoiced)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {c.directCost > 0 ? usd(c.directCost) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {usd(c.margin)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {c.marginRatio === null ? "—" : `${Math.round(c.marginRatio * 100)}%`}
                     </TableCell>
                   </TableRow>
                 ))}

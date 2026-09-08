@@ -267,41 +267,79 @@ function formatTaskDate(d: Date | null): string | null {
  * Silent when someone assigns a task to themselves -- they already know, and
  * a notification for your own action reads as a bug.
  */
+/**
+ * Tells everyone newly assigned to a task.
+ *
+ * A task can belong to more than one person, so this mails each of them --
+ * except whoever created it, who does not need telling what they just typed,
+ * and except anyone already told, which is what `notifiedAt` records. Editing
+ * a due date must not re-mail the whole list.
+ */
 export async function notifyTaskAssigned(taskId: string): Promise<SendResult> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    include: { organization: true, assignedToUser: true, createdByUser: true },
+    include: {
+      organization: true,
+      createdByUser: true,
+      assignees: { include: { user: true } },
+    },
   });
   if (!task) return { ok: false, error: "Task not found." };
-  if (task.assignedToUserId === task.createdByUserId) {
-    return { ok: false, skipped: true, error: "Self-assigned" };
+
+  const pending = task.assignees.filter(
+    (a) => a.notifiedAt === null && a.userId !== task.createdByUserId,
+  );
+  if (pending.length === 0) {
+    return { ok: false, skipped: true, error: "Nobody new to tell" };
   }
 
   const org = task.organization as OrgRow;
-  const email = taskAssignedEmail(
-    brandingOf(org),
-    {
-      title: task.title,
-      description: task.description,
-      priority: task.priority,
-      assigneeName: task.assignedToUser.name,
-      assignedByName: task.createdByUser.name,
-      startDate: formatTaskDate(task.startDate),
-      dueDate: formatTaskDate(task.dueDate),
-    },
-    appUrl("/tasks"),
-  );
+  const results: SendResult[] = [];
 
-  return sendEmail({
-    to: task.assignedToUser.email,
-    from: senderOf(org),
-    // Replies go to the person who delegated it, not into a noreply void --
-    // "quick question about this task" is the likeliest response.
-    replyTo: task.createdByUser.email,
-    subject: email.subject,
-    html: email.html,
-    emailDomainVerified: org.emailDomainVerified,
-  });
+  for (const assignee of pending) {
+    const email = taskAssignedEmail(
+      brandingOf(org),
+      {
+        title: task.title,
+        description: task.description,
+        priority: task.priority,
+        assigneeName: assignee.user.name,
+        assignedByName: task.createdByUser.name,
+        startDate: formatTaskDate(task.startDate),
+        dueDate: formatTaskDate(task.dueDate),
+      },
+      appUrl("/tasks"),
+    );
+
+    const sent = await sendEmail({
+      to: assignee.user.email,
+      from: senderOf(org),
+      // Replies go to the person who delegated it, not into a noreply void --
+      // "quick question about this task" is the likeliest response.
+      replyTo: task.createdByUser.email,
+      subject: email.subject,
+      html: email.html,
+      emailDomainVerified: org.emailDomainVerified,
+    });
+    results.push(sent);
+
+    // Stamped only on a real send, so a failure is retried next time rather
+    // than silently marked as delivered.
+    if (sent.ok) {
+      await prisma.taskAssignee.update({
+        where: { taskId_userId: { taskId, userId: assignee.userId } },
+        data: { notifiedAt: new Date() },
+      });
+    }
+  }
+
+  // One failure is reported; otherwise the first real send stands in for the
+  // batch, which is all the caller does anything with.
+  const failed = results.find((r) => !r.ok && !r.skipped);
+  if (failed) return failed;
+  return (
+    results.find((r) => r.ok) ?? { ok: false, skipped: true, error: "Nothing sent" }
+  );
 }
 
 /** Tells the delegator that a task is waiting on their review. */

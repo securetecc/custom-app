@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
 import type { DashboardMetrics } from "@/lib/dashboard/metrics";
 
 const usd = (n: number) =>
@@ -92,6 +95,17 @@ export function GoalMeter({ goal }: { goal: DashboardMetrics["goal"] }) {
             </span>
           </div>
         </div>
+
+        {/* Straight to this month's invoicing, not the generic Reports page:
+            the question the meter raises is "what is behind this figure",
+            and the answer is the current month's invoices by client. */}
+        <Link
+          href="/reports?range=mtd"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          View invoicing reports
+          <ArrowRight className="ml-1 h-4 w-4" />
+        </Link>
 
         {goal.pipeline > 0 && (
           <p className="border-t pt-3 text-xs text-muted-foreground">

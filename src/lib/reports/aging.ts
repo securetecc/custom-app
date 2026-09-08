@@ -34,17 +34,32 @@ export type AgingRow = {
   oldestDays: number;
 };
 
+/** One outstanding invoice, at the detail needed to chase it. */
+export type AgingInvoiceRow = {
+  id: string;
+  invoiceNumber: string;
+  clientId: string;
+  clientName: string;
+  /** The date the invoice was raised. */
+  invoiceDate: string;
+  sentAt: string | null;
+  /** Sent date plus the org's payment terms; null until it is sent. */
+  dueDate: string | null;
+  /** Days since it was sent -- the client's clock, not ours. */
+  days: number;
+  /** Days past the due date. Zero when it is not yet due. */
+  daysOverdue: number;
+  total: number;
+  paid: number;
+  balance: number;
+  bucket: AgingBucket;
+  status: string;
+};
+
 export type AgingReport = {
   rows: AgingRow[];
   totals: Record<AgingBucket, number> & { total: number };
-  invoices: {
-    id: string;
-    invoiceNumber: string;
-    clientName: string;
-    balance: number;
-    days: number;
-    bucket: AgingBucket;
-  }[];
+  invoices: AgingInvoiceRow[];
 };
 
 export function bucketFor(days: number): AgingBucket {
@@ -59,6 +74,7 @@ type AgingInput = {
   invoiceNumber: string;
   clientId: string;
   clientName: string;
+  status: string;
   totalAmount: number;
   sentAt: Date | null;
   issuedAt: Date | null;
@@ -66,7 +82,13 @@ type AgingInput = {
   payments: { amount: number; receivedAt: Date; method: PaymentMethodValue; methodOther: string | null }[];
 };
 
-export function buildAging(invoices: AgingInput[], asOf: Date): AgingReport {
+const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+
+export function buildAging(
+  invoices: AgingInput[],
+  asOf: Date,
+  paymentTermsDays = 30,
+): AgingReport {
   const rows = new Map<string, AgingRow>();
   const totals = { current: 0, d31_60: 0, d61_90: 0, d90plus: 0, total: 0 };
   const detail: AgingReport["invoices"] = [];
@@ -99,13 +121,30 @@ export function buildAging(invoices: AgingInput[], asOf: Date): AgingReport {
     totals[bucket] += s.balance;
     totals.total += s.balance;
 
+    // Due only once it has actually been sent: an invoice sitting unsent is
+    // not late, it is unsent, and calling it overdue blames the client for
+    // something on our side of the desk.
+    const dueDate = inv.sentAt
+      ? new Date(inv.sentAt.getTime() + paymentTermsDays * 86_400_000)
+      : null;
+
     detail.push({
       id: inv.id,
       invoiceNumber: inv.invoiceNumber,
+      clientId: inv.clientId,
       clientName: inv.clientName,
-      balance: s.balance,
+      invoiceDate: iso(inv.issuedAt ?? inv.createdAt)!,
+      sentAt: iso(inv.sentAt),
+      dueDate: iso(dueDate),
       days,
+      daysOverdue: dueDate
+        ? Math.max(0, Math.floor((asOf.getTime() - dueDate.getTime()) / 86_400_000))
+        : 0,
+      total: inv.totalAmount,
+      paid: s.received,
+      balance: s.balance,
       bucket,
+      status: inv.status,
     });
   }
 

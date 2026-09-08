@@ -50,11 +50,15 @@ export function OrganizationForm({ defaultValues }: { defaultValues: Organizatio
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<OrganizationFormValues>({
     resolver: zodResolver(organizationFormSchema),
     defaultValues,
   });
+
+  const monthlyRevenueGoal = watch("monthlyRevenueGoal");
 
   async function onSubmit(values: OrganizationFormValues) {
     setSubmitting(true);
@@ -191,6 +195,25 @@ export function OrganizationForm({ defaultValues }: { defaultValues: Organizatio
             {errors.monthlyRevenueGoal && (
               <p className="text-xs text-destructive">{errors.monthlyRevenueGoal.message}</p>
             )}
+            {/* The rungs of the compensation ladder, so raising the bar is a
+                decision rather than a data-entry job. $10,000 is the current
+                floor; the field stays free-form for anything between. */}
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {[10000, 15000, 20000, 25000].map((amount) => (
+                <Button
+                  key={amount}
+                  type="button"
+                  size="sm"
+                  variant={monthlyRevenueGoal === amount ? "default" : "outline"}
+                  onClick={() => setValue("monthlyRevenueGoal", amount, { shouldDirty: true })}
+                >
+                  ${(amount / 1000).toFixed(0)}k
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The dashboard meter reads against this. $10k is the current floor, not the ceiling.
+            </p>
           </div>
         </div>
 

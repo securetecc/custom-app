@@ -50,16 +50,23 @@ export async function createTask(input: TaskFormValues): Promise<ActionResult> {
     return { ok: false, error: "You don't have permission to assign tasks." };
   }
 
+  // The primary first, then anyone else, de-duplicated -- picking the primary
+  // again in the extra list is an easy thing to do and should not create two
+  // rows or two emails.
+  const assigneeIds = [...new Set([data.assignedToUserId, ...data.additionalAssigneeIds])];
+
   let taskId: string;
   try {
     taskId = await withRLS(authUserId, async (tx) => {
-      // The assignee must be a real colleague in this org. RLS scopes the
+      // Every assignee must be a real colleague in this org. RLS scopes the
       // lookup, so an id from another organisation simply isn't found.
-      const assignee = await tx.user.findUnique({
-        where: { id: data.assignedToUserId },
+      const found = await tx.user.findMany({
+        where: { id: { in: assigneeIds } },
         select: { id: true },
       });
-      if (!assignee) throw new Error("That person isn't in your organisation.");
+      if (found.length !== assigneeIds.length) {
+        throw new Error("One of those people isn't in your organisation.");
+      }
 
       const created = await tx.task.create({
         data: {
@@ -73,6 +80,12 @@ export async function createTask(input: TaskFormValues): Promise<ActionResult> {
           createdByUserId: appUser.id,
         },
         select: { id: true },
+      });
+
+      // The primary is a membership row too, so "who is on this task" is one
+      // question with one answer rather than a column ORed with a join.
+      await tx.taskAssignee.createMany({
+        data: assigneeIds.map((userId) => ({ taskId: created.id, userId })),
       });
       return created.id;
     });
@@ -104,14 +117,20 @@ export async function updateTask(taskId: string, input: TaskFormValues): Promise
     return { ok: false, error: "You don't have permission to edit tasks." };
   }
 
-  let reassignedTo: string | null = null;
+  const assigneeIds = [...new Set([data.assignedToUserId, ...data.additionalAssigneeIds])];
+
+  // Whether anyone NEW was put on this task. Only they are emailed -- telling
+  // the existing assignees again because a due date moved is how people learn
+  // to ignore the notification.
+  let addedAnyone = false;
   try {
-    reassignedTo = await withRLS(authUserId, async (tx) => {
+    addedAnyone = await withRLS(authUserId, async (tx) => {
       const before = await tx.task.findUnique({
         where: { id: taskId },
-        select: { assignedToUserId: true },
+        select: { assignedToUserId: true, assignees: { select: { userId: true } } },
       });
       if (!before) throw new Error("Task not found.");
+      const had = new Set(before.assignees.map((a) => a.userId));
 
       await tx.task.update({
         where: { id: taskId },
@@ -124,15 +143,22 @@ export async function updateTask(taskId: string, input: TaskFormValues): Promise
           assignedToUserId: data.assignedToUserId,
         },
       });
-      // Only a CHANGE of assignee warrants another email -- re-notifying on
-      // every edit would train people to ignore the notifications.
-      return before.assignedToUserId !== data.assignedToUserId ? data.assignedToUserId : null;
+
+      // Replace the membership wholesale: an edit is the full new set, and
+      // reconciling additions against removals row by row is a bug waiting
+      // for the day someone swaps both assignees at once.
+      await tx.taskAssignee.deleteMany({ where: { taskId } });
+      await tx.taskAssignee.createMany({
+        data: assigneeIds.map((userId) => ({ taskId, userId })),
+      });
+
+      return assigneeIds.some((id) => !had.has(id));
     });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Couldn't update the task." };
   }
 
-  if (reassignedTo) await notifyTaskAssigned(taskId);
+  if (addedAnyone) await notifyTaskAssigned(taskId);
   revalidatePath("/tasks");
   return { ok: true };
 }
@@ -164,10 +190,19 @@ export async function updateTaskStatus(
     transition = await withRLS(authUserId, async (tx) => {
       const task = await tx.task.findUnique({
         where: { id: taskId },
-        select: { assignedToUserId: true, status: true, completedAt: true },
+        select: {
+          assignedToUserId: true,
+          status: true,
+          completedAt: true,
+          assignees: { select: { userId: true } },
+        },
       });
       if (!task) throw new Error("Task not found.");
-      if (!appUser.canDelegateTasks && task.assignedToUserId !== appUser.id) {
+      // Anyone assigned may move it, not only the person it is filed under.
+      const isAssigned =
+        task.assignedToUserId === appUser.id ||
+        task.assignees.some((a) => a.userId === appUser.id);
+      if (!appUser.canDelegateTasks && !isAssigned) {
         throw new Error("You can only update tasks assigned to you.");
       }
 

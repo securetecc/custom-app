@@ -224,7 +224,11 @@ model Organization {
   /// Monthly invoicing target the dashboard meter reads against. A business
   /// number, so it lives in the DB and is editable in Settings → Organization
   /// rather than being a constant someone has to redeploy to change.
-  monthlyRevenueGoal      Decimal  @default(20000) @db.Decimal(10, 2)
+  ///
+  /// $10,000 is the current floor, not the ambition -- the compensation
+  /// schedule's own ladder runs to $25,000. Settings offers those rungs as
+  /// one-click presets so raising the bar is a decision, not a data-entry job.
+  monthlyRevenueGoal      Decimal  @default(10000) @db.Decimal(10, 2)
   /// BBZ Studio's fixed monthly retainer, shown beside the bonus so one
   /// screen answers what is owed. A figure from the compensation schedule, so
   /// it lives in the database and is edited in Settings rather than deployed.
@@ -234,6 +238,14 @@ model Organization {
   /// BBZ's share of everything a qualifying new client pays in its first
   /// twelve months, as a percentage. Paid once, at the twelve-month mark.
   bbzBountyPercent        Decimal  @default(5) @db.Decimal(5, 2)
+  /// Days after an invoice is sent that payment is due. Drives the due date
+  /// and the ageing report; a business term, so it lives here rather than as
+  /// a constant nobody can change.
+  paymentTermsDays        Int      @default(30)
+  /// The first month the retainer and bonus are in effect, "YYYY-MM". The
+  /// compensation report never opens on a month before this one -- there was
+  /// no arrangement then, and a July figure would imply one.
+  bbzStartMonth           String   @default("2026-08")
   createdAt               DateTime @default(now())
 
   // --- Invoice letterhead -------------------------------------------------
@@ -320,6 +332,7 @@ model User {
   loggedTimeEntries          TimeEntry[]           @relation("LoggedByUser")
   performedTimeEntries       TimeEntry[]           @relation("PerformedByUser")
   assignedTasks              Task[]                @relation("TaskAssignee")
+  taskAssignments            TaskAssignee[]
   delegatedTasks             Task[]                @relation("TaskCreator")
   loggedReimbursableExpenses ReimbursableExpense[]
   assignedTickets            Ticket[]              @relation("AssignedToUser")
@@ -839,10 +852,15 @@ model Task {
   startDate DateTime? @db.Date
   dueDate   DateTime? @db.Date
 
+  /// The PRIMARY assignee, and the one the row is filed under. Every task has
+  /// one; a task with several has the rest in `assignees` alongside it, and
+  /// that table always contains the primary too, so membership is one query
+  /// and the row-level policy has a single thing to check.
   assignedToUserId String
-  assignedToUser   User   @relation("TaskAssignee", fields: [assignedToUserId], references: [id])
+  assignedToUser   User           @relation("TaskAssignee", fields: [assignedToUserId], references: [id])
+  assignees        TaskAssignee[]
   createdByUserId  String
-  createdByUser    User   @relation("TaskCreator", fields: [createdByUserId], references: [id])
+  createdByUser    User           @relation("TaskCreator", fields: [createdByUserId], references: [id])
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -979,4 +997,25 @@ model BonusBand {
   @@unique([organizationId, lowerExclusive])
   @@index([organizationId])
   @@map("bonus_bands")
+}
+
+/// Who a task is assigned to, when that is more than one person.
+///
+/// Work involving both Zia and Ian is one task with two owners, not two
+/// tasks that drift apart. The primary assignee on the task row is ALSO a row
+/// here, so "am I on this task" is one lookup rather than a column check
+/// ORed with a join -- which is what the row-level policy relies on.
+model TaskAssignee {
+  taskId     String
+  task       Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Everyone assigned gets told; this records that it happened, so a task
+  /// edited five times does not email the same person five times.
+  notifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@id([taskId, userId])
+  @@index([userId])
+  @@map("task_assignees")
 }

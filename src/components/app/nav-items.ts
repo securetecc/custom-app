@@ -13,6 +13,7 @@ import {
   BookLock,
   Star,
   ChartLine,
+  Landmark,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -46,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false },
   { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
   { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
+  { href: "/accounting", label: "Accounting", icon: Landmark, adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true, soon: true },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true },
   { href: "/documentation", label: "Docs", icon: BookLock, adminOnly: true, soon: true },

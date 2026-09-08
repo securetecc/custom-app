@@ -39,6 +39,13 @@ export const taskFormSchema = z
     startDate: dateOnly,
     dueDate: dateOnly,
     assignedToUserId: z.string().min(1, "Choose who this is for"),
+    /// Everyone else this is also for. The primary above is not repeated
+    /// here; the action stores all of them together.
+    ///
+    /// No `.default([])`: a zod default makes the resolver's input type
+    /// optional while its output type stays required, which
+    /// useForm<TaskFormValues> cannot reconcile. The form supplies [].
+    additionalAssigneeIds: z.array(z.string()),
   })
   .refine(
     (v) => !v.startDate || !v.dueDate || v.startDate <= v.dueDate,

@@ -33,6 +33,8 @@ export type BoardTask = {
   dueDate: string | null;
   assigneeId: string;
   assigneeName: string;
+  /** Everyone the task belongs to, primary first. */
+  assignees: { id: string; name: string }[];
   createdByName: string;
 };
 
@@ -121,7 +123,7 @@ function TaskCard({
   // Only the assignee and the delegator may move a task -- the same rule the
   // action enforces. Showing a control that always errors is worse than not
   // showing it.
-  const canMove = canDelegate || task.assigneeId === selfUserId;
+  const canMove = canDelegate || task.assignees.some((a) => a.id === selfUserId);
   const overdue =
     task.dueDate !== null && task.dueDate < today && task.status !== "Completed";
 
@@ -171,9 +173,11 @@ function TaskCard({
       )}
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        <Badge variant="outline" className="font-normal">
-          {task.assigneeId === selfUserId ? "You" : task.assigneeName}
-        </Badge>
+        {task.assignees.map((a) => (
+          <Badge key={a.id} variant="outline" className="font-normal">
+            {a.id === selfUserId ? "You" : a.name}
+          </Badge>
+        ))}
         {task.dueDate && (
           <span className={overdue ? "text-destructive" : undefined}>
             {overdue ? "Overdue " : "Due "}
@@ -215,6 +219,9 @@ function TaskCard({
                 startDate: task.startDate,
                 dueDate: task.dueDate,
                 assignedToUserId: task.assigneeId,
+                additionalAssigneeIds: task.assignees
+                  .filter((a) => a.id !== task.assigneeId)
+                  .map((a) => a.id),
               }}
               trigger={
                 <Button variant="ghost" size="sm" className="h-8 px-2" aria-label="Edit task">

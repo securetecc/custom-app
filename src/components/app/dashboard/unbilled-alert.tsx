@@ -77,9 +77,17 @@ export function UnbilledAlert({
           </p>
         </div>
 
-        <Link href="/invoices/new" className={buttonVariants({ size: "sm" })}>
-          Generate an invoice
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/accounting/to-bill"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            See it all
+          </Link>
+          <Link href="/invoices/new" className={buttonVariants({ size: "sm" })}>
+            Generate an invoice
+          </Link>
+        </div>
       </div>
 
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
@@ -95,8 +103,13 @@ export function UnbilledAlert({
           </li>
         ))}
         {needsBilling.length > worst.length && (
-          <li className="text-xs text-muted-foreground">
-            +{needsBilling.length - worst.length} more
+          <li className="text-xs">
+            {/* The rest of the list is a report, not a longer banner: this is
+                the dashboard, and everything past the worst few belongs on a
+                page built to be read. */}
+            <Link href="/accounting/to-bill" className="text-muted-foreground hover:underline">
+              +{needsBilling.length - worst.length} more →
+            </Link>
           </li>
         )}
       </ul>

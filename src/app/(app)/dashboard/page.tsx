@@ -8,7 +8,7 @@ import { RevenueChart } from "@/components/app/dashboard/revenue-chart";
 import { ClientShare } from "@/components/app/dashboard/client-share";
 import { RangeFilter } from "@/components/app/dashboard/range-filter";
 import { TodayStatus } from "@/components/app/dashboard/today-status";
-import { Collections, TicketAttention } from "@/components/app/dashboard/collections";
+import { TicketAttention } from "@/components/app/dashboard/collections";
 import { BillingFocus } from "@/components/app/dashboard/billing-focus";
 import { UnbilledAlert } from "@/components/app/dashboard/unbilled-alert";
 import { buildGreeting } from "@/lib/greeting";
@@ -102,16 +102,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         </CardContent>
       </Card>
 
+      {/* To bill and tickets stay: both are "something needs doing today".
+          Sent-vs-paid, the chase list and payment methods moved to
+          Accounting -- a receivables ledger is a question you sit down with,
+          not one the first screen of the day should be answering. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <BillingFocus
           thisMonth={metrics.thisMonth}
           needsBilling={metrics.needsBilling}
           monthLabel={metrics.goal.monthLabel}
-        />
-        <Collections
-          collections={metrics.collections}
-          awaitingPayment={metrics.awaitingPayment}
-          paymentMethods={metrics.paymentMethods}
         />
         <TicketAttention tickets={metrics.tickets} />
       </div>
