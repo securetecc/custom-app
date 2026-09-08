@@ -207,6 +207,9 @@ export async function commitTimeEntryImport(rows: ResolvedImportRow[]): Promise<
           description: r.description,
           billableStatus: r.billableStatus,
           loggedByUserId: appUser.id,
+          // An import carries no per-row attribution, so the work is
+          // credited to whoever ran it -- editable afterwards on the entry.
+          performedByUserId: appUser.id,
           source: "CsvImport",
         })),
       });

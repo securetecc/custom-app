@@ -55,6 +55,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
           </Suspense>
           {/* A plain anchor, not a button: downloads want a real href so
               open-in-new-tab and save-as behave. */}
+          <Link
+            href="/reports/compensation"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            BBZ compensation
+          </Link>
           <a href={pdfHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
             <Download className="h-4 w-4" />
             Download PDF

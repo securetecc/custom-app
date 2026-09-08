@@ -29,6 +29,8 @@ export function TimeEntryFilters({
   start,
   end,
   clients,
+  staff,
+  performedBy = "all",
 }: {
   basePath?: string;
   clientId: string; // "all" or a client id
@@ -36,13 +38,25 @@ export function TimeEntryFilters({
   start: string; // yyyy-mm-dd, only meaningful when range === "custom"
   end: string;
   clients: ClientOption[];
+  /** Omitted on the pages that have no performedBy to filter by. */
+  staff?: { id: string; name: string }[];
+  performedBy?: string; // "all" or a user id
 }) {
   const router = useRouter();
 
-  function navigate(next: Partial<{ clientId: string; range: DateRangePreset; start: string; end: string }>) {
-    const merged = { clientId, range, start, end, ...next };
+  function navigate(
+    next: Partial<{
+      clientId: string;
+      range: DateRangePreset;
+      start: string;
+      end: string;
+      performedBy: string;
+    }>,
+  ) {
+    const merged = { clientId, range, start, end, performedBy, ...next };
     const params = new URLSearchParams();
     if (merged.clientId !== "all") params.set("client", merged.clientId);
+    if (merged.performedBy !== "all") params.set("performedBy", merged.performedBy);
     if (merged.range !== "all") params.set("range", merged.range);
     if (merged.range === "custom") {
       if (merged.start) params.set("start", merged.start);
@@ -93,6 +107,29 @@ export function TimeEntryFilters({
           </SelectContent>
         </Select>
       </div>
+
+      {staff && staff.length > 1 && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Performed by</Label>
+          <Select value={performedBy} onValueChange={(v) => v && navigate({ performedBy: v })}>
+            <SelectTrigger className="w-full sm:w-[170px]">
+              <SelectValue>
+                {(value) =>
+                  value === "all" ? "Anyone" : (staff.find((s) => s.id === value)?.name ?? "Anyone")
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Anyone</SelectItem>
+              {staff.map((person) => (
+                <SelectItem key={person.id} value={person.id}>
+                  {person.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {range === "custom" && (
         <>

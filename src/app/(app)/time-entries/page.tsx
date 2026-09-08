@@ -25,30 +25,44 @@ import { Plus, Pencil, Sparkles, Upload } from "lucide-react";
 export default async function TimeEntriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string; range?: string; start?: string; end?: string }>;
+  searchParams: Promise<{
+    client?: string;
+    range?: string;
+    start?: string;
+    end?: string;
+    performedBy?: string;
+  }>;
 }) {
   const params = await searchParams;
   const clientId = params.client ?? "all";
+  const performedBy = params.performedBy ?? "all";
   const range: DateRangePreset = isDateRangePreset(params.range) ? params.range : "all";
   const start = params.start ?? "";
   const end = params.end ?? "";
   const dateRange = resolveDateRange(range, start, end);
 
   const {
-    data: [entries, clients, serviceTypes],
+    data: [entries, clients, serviceTypes, staff],
   } = await requireOrgContext((tx) =>
     Promise.all([
       tx.timeEntry.findMany({
         where: {
           ...(clientId !== "all" ? { clientId } : {}),
+          ...(performedBy !== "all" ? { performedByUserId: performedBy } : {}),
           ...(dateRange ? { date: dateRange } : {}),
         },
         orderBy: { date: "desc" },
         take: 200,
-        include: { client: true, serviceType: true, loggedByUser: true },
+        include: {
+          client: true,
+          serviceType: true,
+          loggedByUser: true,
+          performedByUser: { select: { id: true, name: true } },
+        },
       }),
       tx.client.findMany({ where: { activeStatus: true }, orderBy: { name: "asc" } }),
       tx.serviceType.findMany({ orderBy: { code: "asc" } }),
+      tx.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     ]),
   );
 
@@ -91,6 +105,7 @@ export default async function TimeEntriesPage({
           <TimeEntryDialog
             clients={clientOptions}
             serviceTypes={serviceTypeOptions}
+            staff={staff}
             trigger={
               <Button>
                 <Plus className="mr-1 h-4 w-4" /> Log time
@@ -106,6 +121,8 @@ export default async function TimeEntriesPage({
         start={start}
         end={end}
         clients={clientOptions}
+        staff={staff}
+        performedBy={performedBy}
       />
 
       <Card>
@@ -118,6 +135,7 @@ export default async function TimeEntriesPage({
               <TableHead>Hours</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Performed by</TableHead>
               <TableHead>Billed</TableHead>
               <TableHead className="w-20" />
             </TableRow>
@@ -135,6 +153,10 @@ export default async function TimeEntriesPage({
                   {entry.description}
                 </TableCell>
                 <TableCell>{BILLABLE_STATUS_LABELS[entry.billableStatus]}</TableCell>
+                {/* Who did the work, which is not always who typed it in.
+                    Attribution and the commission report read this; the bonus
+                    deliberately does not. */}
+                <TableCell className="whitespace-nowrap">{entry.performedByUser.name}</TableCell>
                 <TableCell>
                   <Badge variant={entry.invoiceId ? "secondary" : "outline"}>
                     {entry.invoiceId ? "Billed" : "Unbilled"}
@@ -152,7 +174,12 @@ export default async function TimeEntriesPage({
                       durationHours: Number(entry.durationHours),
                       description: entry.description,
                       billableStatus: entry.billableStatus,
+                      rateOverride:
+                        entry.rateOverride === null ? null : Number(entry.rateOverride),
+                      travelMinutes: entry.travelMinutes,
+                      performedByUserId: entry.performedByUser.id,
                     }}
+                    staff={staff}
                     trigger={
                       <Button variant="ghost" size="icon-sm">
                         <Pencil className="h-4 w-4" />
@@ -165,7 +192,7 @@ export default async function TimeEntriesPage({
             ))}
             {entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                   No time entries match these filters.
                 </TableCell>
               </TableRow>

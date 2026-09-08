@@ -45,6 +45,7 @@ export function TimeEntryDialog({
   defaultValues,
   clients,
   serviceTypes,
+  staff,
   trigger,
   open: controlledOpen,
   onOpenChange,
@@ -53,6 +54,8 @@ export function TimeEntryDialog({
   defaultValues?: Partial<TimeEntryFormValues>;
   clients: ClientOption[];
   serviceTypes: ServiceTypeOption[];
+  /** Everyone the work could be attributed to. Empty hides the field. */
+  staff?: { id: string; name: string }[];
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -80,6 +83,7 @@ export function TimeEntryDialog({
       billableStatus: "Billable",
       rateOverride: null,
       travelMinutes: null,
+      performedByUserId: null,
       ...defaultValues,
     },
   });
@@ -104,6 +108,7 @@ export function TimeEntryDialog({
   const clientId = watch("clientId");
   const serviceTypeId = watch("serviceTypeId");
   const billableStatus = watch("billableStatus");
+  const performedByUserId = watch("performedByUserId");
   const selectedServiceType = serviceTypes.find((st) => st.id === serviceTypeId);
 
   return (
@@ -217,6 +222,34 @@ export function TimeEntryDialog({
                 </Select>
               </div>
             </div>
+
+            {staff && staff.length > 1 && (
+              <div className="space-y-2">
+                <Label>Performed by</Label>
+                <Select
+                  value={performedByUserId ?? ""}
+                  onValueChange={(v) => setValue("performedByUserId", v || null)}
+                >
+                  <SelectTrigger>
+                    {/* base-ui renders the raw value (a uuid) without this mapper */}
+                    <SelectValue placeholder="Me">
+                      {(value) => staff.find((s) => s.id === value)?.name ?? "Me"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staff.map((person) => (
+                      <SelectItem key={person.id} value={person.id}>
+                        {person.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Who actually did the work — not always who typed it in. Used for attribution and
+                  the commission report; it never affects the bonus.
+                </p>
+              </div>
+            )}
 
             {/* Both optional and both deliberately below the main fields:
                 the usual entry needs neither, and putting them first would

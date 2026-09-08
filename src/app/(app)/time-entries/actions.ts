@@ -2,11 +2,28 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrgContext } from "@/lib/auth";
-import { withRLS } from "@/lib/db/rls";
+import { withRLS, type TxClient } from "@/lib/db/rls";
 import { timeEntryFormSchema, type TimeEntryFormValues } from "@/lib/validations/time-entry";
 import { billableHours, isOnSiteCode } from "@/lib/billing/travel";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * The user id to record as having performed the work.
+ *
+ * Verified against the database rather than taken on trust: this drives the
+ * commission report, so an unchecked id from the client would be a way to
+ * attribute someone else's hours -- and money -- to yourself.
+ */
+async function resolvePerformedBy(
+  tx: TxClient,
+  submitted: string | null | undefined,
+  fallbackUserId: string,
+): Promise<string> {
+  if (!submitted || submitted === fallbackUserId) return fallbackUserId;
+  const user = await tx.user.findUnique({ where: { id: submitted }, select: { id: true } });
+  return user?.id ?? fallbackUserId;
+}
 
 export async function createTimeEntry(
   input: TimeEntryFormValues,
@@ -55,6 +72,10 @@ export async function createTimeEntry(
           rateOverride: data.rateOverride,
           travelMinutes: data.travelMinutes,
           loggedByUserId: appUser.id,
+          // Defaults to whoever is logging it. RLS scopes the lookup, so a
+          // submitted id from another organisation resolves to nobody and
+          // falls back to the logger rather than being written.
+          performedByUserId: await resolvePerformedBy(tx, data.performedByUserId, appUser.id),
           rawInput: rawInput ?? null,
           // Presence of rawInput is already this codebase's existing signal
           // for "came from the AI/voice parser" -- source just makes it a
@@ -78,7 +99,7 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
   }
   const data = parsed.data;
 
-  const { authUserId } = await requireOrgContext();
+  const { authUserId, appUser } = await requireOrgContext();
 
   try {
     await withRLS(authUserId, async (tx) => {
@@ -111,6 +132,7 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
           billableStatus: data.billableStatus,
           rateOverride: data.rateOverride,
           travelMinutes: data.travelMinutes,
+          performedByUserId: await resolvePerformedBy(tx, data.performedByUserId, appUser.id),
         },
       });
     });

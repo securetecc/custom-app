@@ -202,6 +202,12 @@ model Organization {
   /// number, so it lives in the DB and is editable in Settings → Organization
   /// rather than being a constant someone has to redeploy to change.
   monthlyRevenueGoal      Decimal  @default(20000) @db.Decimal(10, 2)
+  /// BBZ Studio's fixed monthly retainer, shown beside the bonus so one
+  /// screen answers what is owed. A figure from the compensation schedule, so
+  /// it lives in the database and is edited in Settings rather than deployed.
+  bbzRetainerAmount       Decimal  @default(1000) @db.Decimal(10, 2)
+  /// BBZ's share of what a BBZ-performed IT hour billed for, as a percentage.
+  bbzCommissionPercent    Decimal  @default(10) @db.Decimal(5, 2)
   createdAt               DateTime @default(now())
 
   // --- Invoice letterhead -------------------------------------------------
@@ -243,6 +249,7 @@ model Organization {
   emailSignatures          EmailSignature[]
   payments                 Payment[]
   businessExpenses         BusinessExpense[]
+  bonusBands               BonusBand[]
 
   @@map("organizations")
 }
@@ -264,6 +271,10 @@ model User {
   /// Storage path in the private "avatars" bucket, not a URL -- the bucket is
   /// private, so what's shown is a short-lived signed URL minted per request.
   avatarPath           String?
+  /// Whether this person is BBZ Studio rather than SecureTECC. Drives the
+  /// commission report only: an IT hour performed by a BBZ person earns BBZ
+  /// 10% of what it billed for. Nothing else in the app reads it.
+  isBbzStudio          Boolean      @default(false)
   /// Who may CREATE and ASSIGN tasks. A per-user flag rather than a role
   /// check, because role=admin is already held by more than one person here
   /// and delegation is specifically the business owner's function. Explicit
@@ -281,6 +292,7 @@ model User {
   emailSignatures            EmailSignature[]
   recordedPayments           Payment[]
   loggedTimeEntries          TimeEntry[]           @relation("LoggedByUser")
+  performedTimeEntries       TimeEntry[]           @relation("PerformedByUser")
   assignedTasks              Task[]                @relation("TaskAssignee")
   delegatedTasks             Task[]                @relation("TaskCreator")
   loggedReimbursableExpenses ReimbursableExpense[]
@@ -361,6 +373,18 @@ model ServiceType {
   billingMinimumHours Decimal      @db.Decimal(5, 2)
   // Overrides the client's standard billingRate when set (e.g. Low Voltage).
   rateOverride        Decimal?     @db.Decimal(10, 2)
+  /// What SecureTECC pays OUT per hour on this service type -- the
+  /// subcontractor's or partner's share of the billed rate. Null means
+  /// nothing is paid out and the whole billed rate is SecureTECC's.
+  ///
+  /// A field rather than a constant so a rate change follows through the
+  /// bonus report without amending the compensation schedule or shipping a
+  /// deploy. Seeded L-V 75.00, W-D 20.00, A-I 20.00.
+  payoutRate          Decimal?     @db.Decimal(10, 2)
+  /// Whether an hour of this type earns BBZ Studio its 10% commission when a
+  /// BBZ person performed it. IT service lines only -- W-D and A-I are
+  /// already paid hourly, and L-V is the subcontractor's.
+  commissionEligible  Boolean      @default(false)
 
   timeEntries TimeEntry[]
 
@@ -370,40 +394,46 @@ model ServiceType {
 }
 
 model TimeEntry {
-  id             String          @id @default(uuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId       String
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  date           DateTime        @db.Date
-  durationHours  Decimal         @db.Decimal(5, 2)
-  description    String
-  billableStatus BillableStatus  @default(Billable)
-  serviceTypeId  String
-  serviceType    ServiceType     @relation(fields: [serviceTypeId], references: [id])
+  id                String          @id @default(uuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId          String
+  client            Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date              DateTime        @db.Date
+  durationHours     Decimal         @db.Decimal(5, 2)
+  description       String
+  billableStatus    BillableStatus  @default(Billable)
+  serviceTypeId     String
+  serviceType       ServiceType     @relation(fields: [serviceTypeId], references: [id])
   /// Rate for THIS entry, overriding the service type and the client. For the
   /// job that was quoted differently -- Tony asked to be able to change a rate
   /// on the fly rather than have it permanently locked to the client record.
-  rateOverride   Decimal?        @db.Decimal(10, 2)
+  rateOverride      Decimal?        @db.Decimal(10, 2)
   /// Travel time billed with this entry, in minutes. Separate from
   /// durationHours so the invoice can show the work and the travel honestly,
   /// and so changing the travel rule never rewrites recorded work.
-  travelMinutes  Int?
+  travelMinutes     Int?
   // Null while unbilled; set once included on a generated invoice.
-  invoiceId      String?
-  invoice        Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  loggedByUserId String
-  loggedByUser   User            @relation("LoggedByUser", fields: [loggedByUserId], references: [id])
+  invoiceId         String?
+  invoice           Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  loggedByUserId    String
+  loggedByUser      User            @relation("LoggedByUser", fields: [loggedByUserId], references: [id])
+  /// Who actually did the work, which is not always who typed it in -- Tony
+  /// logs entries for other people. Attribution and the commission report
+  /// read this; the bonus deliberately does NOT (see lib/bonus/calculate.ts).
+  performedByUserId String
+  performedByUser   User            @relation("PerformedByUser", fields: [performedByUserId], references: [id])
   // Original voice/text input, kept only when this entry came from the AI parser.
-  rawInput       String?
+  rawInput          String?
   // Provenance only -- never affects billing/rate logic. Defaults to Manual so
   // every pre-existing row needs no backfill.
-  source         TimeEntrySource @default(Manual)
-  createdAt      DateTime        @default(now())
+  source            TimeEntrySource @default(Manual)
+  createdAt         DateTime        @default(now())
 
   @@index([organizationId])
   @@index([clientId])
   @@index([invoiceId])
+  @@index([performedByUserId])
   @@map("time_entries")
 }
 
@@ -884,4 +914,33 @@ model BusinessExpense {
   @@index([organizationId])
   @@index([clientId])
   @@map("business_expenses")
+}
+
+/// One rung of the performance-bonus escalator.
+///
+/// A table rather than a constant in code: the compensation schedule says the
+/// thresholds get re-based whenever the rate card changes, and that must not
+/// need a deploy.
+///
+/// Bands are EXCLUSIVE at the bottom and INCLUSIVE at the top, which is the
+/// single easiest thing here to get backwards -- $20,000.00 exactly pays
+/// 5.00%, not 6.25%. scripts/bonus-check.mts asserts that boundary directly.
+/// The rate applies to the WHOLE qualifying base, not to the portion above
+/// the threshold.
+model BonusBand {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// The band covers (lowerExclusive, upperInclusive]. The bottom band has a
+  /// lowerExclusive of 0; the top band has no ceiling, stored as null.
+  lowerExclusive Decimal      @db.Decimal(12, 2)
+  upperInclusive Decimal?     @db.Decimal(12, 2)
+  /// Percentage, as written in the schedule: 1.25 means 1.25%.
+  ratePercent    Decimal      @db.Decimal(5, 2)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, lowerExclusive])
+  @@index([organizationId])
+  @@map("bonus_bands")
 }

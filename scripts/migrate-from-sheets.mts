@@ -360,6 +360,7 @@ async function main() {
               : "Billable",
           invoiceId: r.invoicenumber ? (invoiceIdByNumber.get(r.invoicenumber) ?? null) : null,
           loggedByUserId: loggedBy.id,
+          performedByUserId: loggedBy.id,
         },
       });
       plan.entries++;

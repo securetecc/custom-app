@@ -125,6 +125,7 @@ async function main() {
         "confirmed resolution with the end user.",
       billableStatus: i % 11 === 0 ? ("NonBillable" as const) : ("Billable" as const),
       loggedByUserId: user.id,
+      performedByUserId: user.id,
     };
   });
   await prisma.timeEntry.createMany({ data: entries });
@@ -166,6 +167,7 @@ async function main() {
       description: `Assisted with printer configuration and driver rollout (#${i + 1}).`,
       billableStatus: "Billable" as const,
       loggedByUserId: user.id,
+      performedByUserId: user.id,
     })),
   });
 

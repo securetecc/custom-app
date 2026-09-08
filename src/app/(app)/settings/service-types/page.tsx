@@ -46,6 +46,8 @@ export default async function ServiceTypesPage() {
               <TableHead>Label</TableHead>
               <TableHead>Billing minimum</TableHead>
               <TableHead>Rate override</TableHead>
+              <TableHead>Payout rate</TableHead>
+              <TableHead>Commission</TableHead>
               <TableHead className="w-24" />
             </TableRow>
           </TableHeader>
@@ -58,6 +60,16 @@ export default async function ServiceTypesPage() {
                 <TableCell>
                   {st.rateOverride ? `$${st.rateOverride.toString()}/hr` : "Client's standard rate"}
                 </TableCell>
+                {/* What SecureTECC pays out per hour, and whether the type
+                    earns BBZ commission. Both feed the compensation report --
+                    fields rather than constants so a rate change follows
+                    without a deploy. */}
+                <TableCell>
+                  {st.payoutRate ? `$${st.payoutRate.toString()}/hr` : "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {st.commissionEligible ? "Yes" : "No"}
+                </TableCell>
                 <TableCell className="flex justify-end gap-1">
                   <ServiceTypeDialog
                     serviceTypeId={st.id}
@@ -66,6 +78,8 @@ export default async function ServiceTypesPage() {
                       label: st.label,
                       billingMinimumHours: Number(st.billingMinimumHours),
                       rateOverride: st.rateOverride ? Number(st.rateOverride) : undefined,
+                      payoutRate: st.payoutRate ? Number(st.payoutRate) : undefined,
+                      commissionEligible: st.commissionEligible,
                     }}
                     trigger={
                       <Button variant="ghost" size="icon-sm">
@@ -79,7 +93,7 @@ export default async function ServiceTypesPage() {
             ))}
             {serviceTypes.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   No service types yet.
                 </TableCell>
               </TableRow>

@@ -30,6 +30,8 @@ export async function createServiceType(input: ServiceTypeFormValues): Promise<A
           label: data.label,
           billingMinimumHours: data.billingMinimumHours,
           rateOverride: normalizeRateOverride(data.rateOverride),
+          payoutRate: normalizeRateOverride(data.payoutRate),
+          commissionEligible: data.commissionEligible,
         },
       }),
     );
@@ -63,6 +65,8 @@ export async function updateServiceType(id: string, input: ServiceTypeFormValues
           label: data.label,
           billingMinimumHours: data.billingMinimumHours,
           rateOverride: normalizeRateOverride(data.rateOverride),
+          payoutRate: normalizeRateOverride(data.payoutRate),
+          commissionEligible: data.commissionEligible,
         },
       }),
     );

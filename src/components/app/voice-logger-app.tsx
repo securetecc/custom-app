@@ -48,6 +48,9 @@ const emptyDraft: Partial<TimeEntryFormValues> = {
   billableStatus: "Billable",
   rateOverride: null,
   travelMinutes: null,
+  // Whoever is logging it. The server resolves this and never trusts a
+  // submitted id it cannot verify.
+  performedByUserId: null,
 };
 
 export function VoiceLoggerApp({

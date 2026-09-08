@@ -13,6 +13,15 @@ export const timeEntryFormSchema = z.object({
   /// One-way travel time in minutes, for on-site work. The billing rule
   /// (one way or return) comes from the client's service area, not from here.
   travelMinutes: z.number().int().min(0).max(600).nullable(),
+  /// Who actually did the work. Defaults to the person logging it, and is
+  /// editable because Tony logs entries for work someone else did. Empty
+  /// means "whoever is logging this", resolved server-side -- the client is
+  /// never trusted to name a user id it made up.
+  /// Optional as well as nullable: an absent key means "whoever is logging
+  /// this", which is what the Voice Logger and the AI parser submit. Making
+  /// it required would have made those two paths fail validation and refuse
+  /// to save, silently, on a field the person filling them never sees.
+  performedByUserId: z.string().nullish(),
 });
 
 export type TimeEntryFormValues = z.infer<typeof timeEntryFormSchema>;

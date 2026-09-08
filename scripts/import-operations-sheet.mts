@@ -296,6 +296,7 @@ async function main() {
         source: (r.rawvoiceinput === "MANUAL-ENTRY" ? "Manual" : "Voice") as "Manual" | "Voice",
         invoiceId: r.invoiceid ? (invoiceIds.get(r.invoiceid) ?? null) : null,
         loggedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
+        performedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
       });
     }
     if (entryData.length) await tx.timeEntry.createMany({ data: entryData });
@@ -316,6 +317,7 @@ async function main() {
         amount: toMoney(r.amount),
         invoiceId: r.invoiceid ? (invoiceIds.get(r.invoiceid) ?? null) : null,
         loggedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
+        performedByUserId: (byEmail.get((r.loggedby ?? "").toLowerCase()) ?? tony).id,
       });
     }
     if (expenseData.length) await tx.reimbursableExpense.createMany({ data: expenseData });

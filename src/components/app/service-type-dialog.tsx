@@ -12,6 +12,7 @@ import { createServiceType, updateServiceType } from "@/app/(app)/settings/servi
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,8 @@ export function ServiceTypeDialog({
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<ServiceTypeFormValues>({
     resolver: zodResolver(serviceTypeFormSchema),
@@ -46,9 +49,13 @@ export function ServiceTypeDialog({
       label: "",
       billingMinimumHours: 0.25,
       rateOverride: undefined,
+      payoutRate: undefined,
+      commissionEligible: false,
       ...defaultValues,
     },
   });
+
+  const commissionEligible = watch("commissionEligible");
 
   async function onSubmit(values: ServiceTypeFormValues) {
     setSubmitting(true);
@@ -116,6 +123,36 @@ export function ServiceTypeDialog({
                   placeholder="Uses client's standard rate"
                   {...register("rateOverride", { valueAsNumber: true })}
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="payoutRate">Payout rate ($/hr)</Label>
+                <Input
+                  id="payoutRate"
+                  type="number"
+                  step="0.01"
+                  placeholder="Nothing paid out"
+                  {...register("payoutRate", { valueAsNumber: true })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  What SecureTECC pays out per hour on this type — the subcontractor&apos;s or
+                  partner&apos;s share. Only the remainder counts toward the performance bonus.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Commission</Label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-md border p-3">
+                  <Checkbox
+                    checked={commissionEligible}
+                    onCheckedChange={(v) => setValue("commissionEligible", v === true)}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    A BBZ-performed hour of this type earns BBZ its commission. IT service lines
+                    only — web and automation work is already paid hourly.
+                  </span>
+                </label>
               </div>
             </div>
           </div>
