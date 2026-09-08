@@ -14,6 +14,8 @@ import { prisma } from "../src/lib/db/prisma";
 import { withRLS } from "../src/lib/db/rls";
 import { bonusFor, toCents, fromCents, type BonusBandRow } from "../src/lib/bonus/calculate";
 import { loadCompensationReport } from "../src/lib/reports/compensation";
+import { bountyForClient } from "../src/lib/bounty/calculate";
+import { qualifiesForBounty } from "../src/lib/bounty/qualify";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -122,6 +124,75 @@ if (!report) {
   console.log("\nCommission — every August entry is attributed to Tony, so it is nil\n");
   check("commission $0.00", report.commission.total.toFixed(2), "0.00");
   check("no commission rows", report.commission.rows.length, 0);
+}
+
+console.log("\nNew-client bounty\n");
+{
+  const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
+  const windowStart = day("2026-01-15");
+
+  // 5% of everything paid inside the first twelve months.
+  const plain = bountyForClient({
+    invoices: [
+      { invoiceId: "a", total: 2000, reimbursable: 0, payments: [{ amount: 2000, receivedAt: day("2026-03-01") }] },
+      { invoiceId: "b", total: 500, reimbursable: 0, payments: [{ amount: 500, receivedAt: day("2026-11-01") }] },
+    ],
+    windowStart,
+    bountyPercent: 5,
+    asOf: day("2027-06-01"),
+  });
+  check("$2,500 paid in the window earns $125", plain.bounty.toFixed(2), "125.00");
+  check("the window closes on the anniversary", plain.windowEnd.toISOString().slice(0, 10), "2027-01-15");
+  check("it has matured by June 2027", plain.matured, true);
+
+  // Money arriving after the anniversary is outside the window.
+  const late = bountyForClient({
+    invoices: [
+      { invoiceId: "a", total: 1000, reimbursable: 0, payments: [{ amount: 1000, receivedAt: day("2027-02-01") }] },
+    ],
+    windowStart,
+    bountyPercent: 5,
+    asOf: day("2027-06-01"),
+  });
+  check("a payment after the anniversary does not count", late.qualifyingRevenue.toFixed(2), "0.00");
+
+  // Reimbursables never count -- SecureTECC earns nothing on them.
+  const withExpenses = bountyForClient({
+    invoices: [
+      { invoiceId: "a", total: 2000, reimbursable: 400, payments: [{ amount: 2000, receivedAt: day("2026-03-01") }] },
+    ],
+    windowStart,
+    bountyPercent: 5,
+    asOf: day("2027-06-01"),
+  });
+  check("a $400 reimbursable is excluded from a $2,000 invoice", withExpenses.qualifyingRevenue.toFixed(2), "1600.00");
+  check("so the bounty is $80, not $100", withExpenses.bounty.toFixed(2), "80.00");
+
+  // A part payment contributes its share of the non-reimbursable portion.
+  const partPaid = bountyForClient({
+    invoices: [
+      { invoiceId: "a", total: 2000, reimbursable: 400, payments: [{ amount: 1000, receivedAt: day("2026-03-01") }] },
+    ],
+    windowStart,
+    bountyPercent: 5,
+    asOf: day("2027-06-01"),
+  });
+  check("$1,000 of that invoice counts $800", partPaid.qualifyingRevenue.toFixed(2), "800.00");
+
+  // Churn needs no separate rule: unpaid is uncounted.
+  const unpaid = bountyForClient({
+    invoices: [{ invoiceId: "a", total: 5000, reimbursable: 0, payments: [] }],
+    windowStart,
+    bountyPercent: 5,
+    asOf: day("2027-06-01"),
+  });
+  check("an invoice never paid earns nothing", unpaid.bounty.toFixed(2), "0.00");
+
+  check("a website lead qualifies", qualifiesForBounty("Website"), true);
+  check("Google Business Profile qualifies", qualifiesForBounty("GoogleBusinessProfile"), true);
+  check("a referral does not", qualifiesForBounty("Referral"), false);
+  check("a returning client does not", qualifiesForBounty("ReturningClient"), false);
+  check("nothing recorded does not", qualifiesForBounty(null), false);
 }
 
 console.log(`\n${failures === 0 ? "All checks passed." : `${failures} FAILED.`}`);

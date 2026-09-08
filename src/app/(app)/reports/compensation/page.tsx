@@ -5,6 +5,7 @@ import { withRLS } from "@/lib/db/rls";
 import { PACIFIC_TZ, pacificDayStart } from "@/lib/cron/pacific";
 import { loadCompensationReport } from "@/lib/reports/compensation";
 import { MonthPicker } from "@/components/app/month-picker";
+import { LEAD_SOURCE_LABELS } from "@/lib/bounty/qualify";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -99,7 +100,7 @@ export default async function CompensationReportPage({
                   value={usd(report.totalPayment)}
                   hint={`${usd(report.retainer)} retainer${
                     report.commission.total > 0 ? ` + ${usd(report.commission.total)} commission` : ""
-                  }`}
+                  }${report.bounty.dueTotal > 0 ? ` + ${usd(report.bounty.dueTotal)} bounty` : ""}`}
                   emphasis
                 />
               </div>
@@ -262,6 +263,135 @@ export default async function CompensationReportPage({
 
           <Card>
             <CardHeader className="pb-3">
+              <CardTitle className="text-base">New-client bounty</CardTitle>
+              <CardDescription>
+                {report.bounty.percent}% of everything a qualifying new client pays in its first
+                twelve months — labor, monitoring, seats, DMARC and the annual licence line, but
+                never reimbursed expenses, which SecureTECC earns nothing on. Counted on money
+                actually received, so a client who leaves early carries only what they paid. Paid
+                once, in the month the twelve months are up.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+                  Due in {report.monthLabel}
+                </p>
+                {report.bounty.due.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No bounty matures this month.
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Came from</TableHead>
+                        <TableHead>First twelve months</TableHead>
+                        <TableHead className="text-right">They paid</TableHead>
+                        <TableHead className="text-right">Bounty</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {report.bounty.due.map((b) => (
+                        <TableRow key={b.clientId}>
+                          <TableCell className="font-medium">
+                            <Link href={`/clients/${b.clientId}`} className="hover:underline">
+                              {b.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            {b.leadSource ? LEAD_SOURCE_LABELS[b.leadSource] : "—"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {b.windowStart} → {b.windowEnd}
+                            {b.windowStartSource === "first payment" && (
+                              <span className="ml-1 text-xs">(from first payment)</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {usd(b.qualifyingRevenue)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums">
+                            {usd(b.bounty)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow>
+                        <TableCell colSpan={4} className="font-semibold">
+                          Total
+                        </TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums">
+                          {usd(report.bounty.dueTotal)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+
+              {report.bounty.accruing.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+                    Still accruing — not owed yet
+                  </p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Came from</TableHead>
+                        <TableHead>Window closes</TableHead>
+                        <TableHead className="text-right">Paid so far</TableHead>
+                        <TableHead className="text-right">Bounty so far</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {report.bounty.accruing.map((b) => (
+                        <TableRow key={b.clientId} className="text-muted-foreground">
+                          <TableCell>
+                            <Link href={`/clients/${b.clientId}`} className="hover:underline">
+                              {b.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            {b.leadSource ? LEAD_SOURCE_LABELS[b.leadSource] : "—"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">{b.windowEnd}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {usd(b.qualifyingRevenue)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{usd(b.bounty)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {report.bounty.unattributed.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {report.bounty.unattributed.length} client
+                  {report.bounty.unattributed.length === 1 ? " has" : "s have"} no
+                  &ldquo;how did you hear about us?&rdquo; recorded, so no bounty can be paid on
+                  {report.bounty.unattributed.length === 1 ? " it" : " them"}:{" "}
+                  {report.bounty.unattributed.slice(0, 6).map((c, i) => (
+                    <span key={c.clientId}>
+                      {i > 0 && ", "}
+                      <Link href={`/clients/${c.clientId}`} className="hover:underline">
+                        {c.name}
+                      </Link>
+                    </span>
+                  ))}
+                  {report.bounty.unattributed.length > 6 &&
+                    ` and ${report.bounty.unattributed.length - 6} more`}
+                  . Set it on the client record.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base">What is owed for {report.monthLabel}</CardTitle>
             </CardHeader>
             <CardContent>
@@ -284,6 +414,19 @@ export default async function CompensationReportPage({
                     <TableCell>Commission</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {usd(report.commission.total)}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>
+                      New-client bounty
+                      {report.bounty.due.length > 0 && (
+                        <span className="ml-2 text-muted-foreground">
+                          {report.bounty.due.map((b) => b.name).join(", ")}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {usd(report.bounty.dueTotal)}
                     </TableCell>
                   </TableRow>
                   <TableRow>

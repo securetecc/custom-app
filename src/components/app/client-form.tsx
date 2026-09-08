@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { clientFormSchema, type ClientFormValues } from "@/lib/validations/client";
 import { SERVICE_AREA_LABELS } from "@/lib/billing/travel";
+import { LEAD_SOURCE_LABELS } from "@/lib/bounty/qualify";
 import { createClientRecord, updateClientRecord } from "@/app/(app)/clients/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,9 @@ export function ClientForm({
       scheduledRate: undefined,
       scheduledRateFrom: null,
       serviceArea: "InArea",
+      leadSource: null,
+      leadSourceNote: null,
+      relationshipStartedOn: null,
       activeStatus: true,
       notes: "",
       ...defaultValues,
@@ -81,6 +85,7 @@ export function ClientForm({
   const billingType = watch("billingType");
   const billingCadence = watch("billingCadence");
   const serviceArea = watch("serviceArea");
+  const leadSource = watch("leadSource");
   const activeStatus = watch("activeStatus");
 
   return (
@@ -229,6 +234,66 @@ export function ClientForm({
               In area: one-hour on-site minimum, travel billed one way. Outside: two hours, and
               travel both ways.
             </p>
+          </div>
+
+          {/* Intake attribution. It decides the new-client bounty entirely,
+              and it has to be answered when the client arrives -- after the
+              fact nobody can prove where they came from, so a blank field
+              pays nothing rather than starting an argument. */}
+          <div className="space-y-2">
+            <Label htmlFor="leadSource">How did you hear about us?</Label>
+            <Select
+              value={leadSource ?? "unrecorded"}
+              onValueChange={(v) =>
+                setValue(
+                  "leadSource",
+                  v === "unrecorded" ? null : (v as ClientFormValues["leadSource"]),
+                )
+              }
+            >
+              <SelectTrigger id="leadSource">
+                <SelectValue placeholder="Not recorded">
+                  {(value) =>
+                    value === "unrecorded" || !value
+                      ? "Not recorded"
+                      : LEAD_SOURCE_LABELS[value as NonNullable<ClientFormValues["leadSource"]>]
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unrecorded">Not recorded</SelectItem>
+                {Object.entries(LEAD_SOURCE_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Answered at intake. The website, Google Business Profile, SEO and campaigns earn
+              BBZ the new-client bounty; a referral or a returning client does not.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="relationshipStartedOn">Relationship started</Label>
+            <Input
+              id="relationshipStartedOn"
+              type="date"
+              {...register("relationshipStartedOn", { setValueAs: (v) => (v === "" ? null : v) })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Opens the twelve-month bounty window. Left blank, their first payment opens it.
+            </p>
+          </div>
+
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="leadSourceNote">Attribution detail</Label>
+            <Input
+              id="leadSourceNote"
+              placeholder="Which campaign, or who referred them"
+              {...register("leadSourceNote", { setValueAs: (v) => (v === "" ? null : v) })}
+            />
           </div>
 
           <div className="space-y-2 sm:col-span-2">

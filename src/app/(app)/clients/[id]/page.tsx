@@ -77,6 +77,11 @@ export default async function EditClientPage({
                 ? client.scheduledRateFrom.toISOString().slice(0, 10)
                 : null,
               serviceArea: client.serviceArea,
+              leadSource: client.leadSource,
+              leadSourceNote: client.leadSourceNote,
+              relationshipStartedOn: client.relationshipStartedOn
+                ? client.relationshipStartedOn.toISOString().slice(0, 10)
+                : null,
               activeStatus: client.activeStatus,
               notes: client.notes ?? "",
             }}

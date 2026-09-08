@@ -19,7 +19,11 @@ export default async function CompensationSettingsPage() {
     Promise.all([
       tx.organization.findUniqueOrThrow({
         where: { id: appUser.organizationId },
-        select: { bbzRetainerAmount: true, bbzCommissionPercent: true },
+        select: {
+          bbzRetainerAmount: true,
+          bbzCommissionPercent: true,
+          bbzBountyPercent: true,
+        },
       }),
       tx.bonusBand.findMany({ orderBy: { lowerExclusive: "asc" } }),
     ]),
@@ -38,6 +42,7 @@ export default async function CompensationSettingsPage() {
       <CompensationSettings
         retainerAmount={Number(org.bbzRetainerAmount)}
         commissionPercent={Number(org.bbzCommissionPercent)}
+        bountyPercent={Number(org.bbzBountyPercent)}
         bands={bands.map((b) => ({
           lowerExclusive: Number(b.lowerExclusive),
           upperInclusive: b.upperInclusive === null ? null : Number(b.upperInclusive),

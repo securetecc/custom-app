@@ -7,6 +7,9 @@ export const compensationSettingsSchema = z.object({
   commissionPercent: z
     .union([z.number(), z.nan()])
     .refine((v) => !Number.isNaN(v) && v >= 0 && v <= 100, "Enter a percentage between 0 and 100"),
+  bountyPercent: z
+    .union([z.number(), z.nan()])
+    .refine((v) => !Number.isNaN(v) && v >= 0 && v <= 100, "Enter a percentage between 0 and 100"),
 });
 
 export type CompensationSettingsValues = z.infer<typeof compensationSettingsSchema>;

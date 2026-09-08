@@ -63,6 +63,25 @@ enum ServiceArea {
   OutOfArea
 }
 
+/// "How did you hear about us?", answered at intake.
+///
+/// The new-client bounty depends entirely on this: BBZ earns it where the
+/// client arrived through work BBZ does -- the website, the Google Business
+/// Profile, SEO or a campaign -- and not where Tony brought them in himself.
+/// A blank field pays nothing, deliberately: neither side can prove it after
+/// the fact, and a rule that depends on memory costs more in goodwill than
+/// the bounty is worth. See lib/bounty/qualify.ts for which values pay.
+enum LeadSource {
+  Website
+  GoogleBusinessProfile
+  SEO
+  Campaign
+  Referral
+  ExistingClient
+  ReturningClient
+  Other
+}
+
 /// How a recurring business cost repeats.
 enum ExpenseFrequency {
   Monthly
@@ -208,6 +227,9 @@ model Organization {
   bbzRetainerAmount       Decimal  @default(1000) @db.Decimal(10, 2)
   /// BBZ's share of what a BBZ-performed IT hour billed for, as a percentage.
   bbzCommissionPercent    Decimal  @default(10) @db.Decimal(5, 2)
+  /// BBZ's share of everything a qualifying new client pays in its first
+  /// twelve months, as a percentage. Paid once, at the twelve-month mark.
+  bbzBountyPercent        Decimal  @default(5) @db.Decimal(5, 2)
   createdAt               DateTime @default(now())
 
   // --- Invoice letterhead -------------------------------------------------
@@ -304,52 +326,61 @@ model User {
 }
 
 model Client {
-  id                  String         @id @default(uuid())
-  organizationId      String
-  organization        Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name                String
-  shortName           String
+  id                    String         @id @default(uuid())
+  organizationId        String
+  organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                  String
+  shortName             String
   /// The person who owns the business. Renamed from contactName: it was doing
   /// two jobs, and whoever signs the contract is rarely whoever pays the bill.
-  ownerName           String?
+  ownerName             String?
   /// Who to address billing correspondence to, when that isn't the owner.
-  billingContactName  String?
+  billingContactName    String?
   /// Billing email -- where invoices are sent. Named `email` from before there
   /// was more than one kind of contact on a client.
-  email               String?
-  phone               String?
-  address1            String?
-  address2            String?
-  cityStateZip        String?
+  email                 String?
+  phone                 String?
+  address1              String?
+  address2              String?
+  cityStateZip          String?
   /// Human-readable id carried over from the Operations Master Sheet
   /// ("CLI-016"). Distinct from `id` (a uuid) and from `shortName` (the
   /// invoice-number prefix) -- this exists so rows can be reconciled against
   /// the spreadsheet by eye. Null for clients the sheet never numbered.
-  reference           String?
-  billingType         BillingType    @default(Hourly)
+  reference             String?
+  billingType           BillingType    @default(Hourly)
   /// Monthly unless set otherwise. Drives the billing reminder, not the
   /// invoice generator -- Tony still decides when to raise one.
-  billingCadence      BillingCadence @default(Monthly)
-  billingRate         Decimal?       @db.Decimal(10, 2)
+  billingCadence        BillingCadence @default(Monthly)
+  billingRate           Decimal?       @db.Decimal(10, 2)
   /// A rate change already agreed but not yet in force -- e.g. everyone moving
   /// to $125/hr on 1 Jan 2027. Applied automatically to entries DATED on or
   /// after scheduledRateFrom, so the change lands by itself and nobody has to
   /// remember to edit 30 client records that morning.
-  scheduledRate       Decimal?       @db.Decimal(10, 2)
-  scheduledRateFrom   DateTime?      @db.Date
+  scheduledRate         Decimal?       @db.Decimal(10, 2)
+  scheduledRateFrom     DateTime?      @db.Date
   /// Whether this client is inside the normal service area. Drives the on-site
   /// minimum and how travel is billed -- see lib/billing/travel.ts.
-  serviceArea         ServiceArea    @default(InArea)
-  activeStatus        Boolean        @default(true)
-  notes               String?
-  createdAt           DateTime       @default(now())
+  serviceArea           ServiceArea    @default(InArea)
+  /// Where this client came from, recorded at intake before any work is
+  /// scheduled. Null means it was never recorded, which pays no bounty.
+  leadSource            LeadSource?
+  /// The detail behind the answer -- which campaign, who referred them.
+  leadSourceNote        String?
+  /// The day the relationship started, which opens the twelve-month bounty
+  /// window. Left null, the window opens at the client's first payment --
+  /// see lib/bounty/calculate.ts, which reports which of the two it used.
+  relationshipStartedOn DateTime?      @db.Date
+  activeStatus          Boolean        @default(true)
+  notes                 String?
+  createdAt             DateTime       @default(now())
   // Per-client invoice counter, incremented atomically inside the same
   // transaction that creates an Invoice (see invoices/actions.ts) to produce
   // {shortName}-{00001}. Never decremented -- a voided invoice keeps its
   // number, matching normal accounting practice.
   // Phase 6 note: the Sheets migration must seed this to each client's
   // highest existing invoice number, NOT leave it at 0.
-  lastInvoiceSequence Int            @default(0)
+  lastInvoiceSequence   Int            @default(0)
 
   timeEntries          TimeEntry[]
   reimbursableExpenses ReimbursableExpense[]

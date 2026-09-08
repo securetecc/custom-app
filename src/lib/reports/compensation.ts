@@ -1,5 +1,6 @@
 import type { TxClient } from "@/lib/db/rls";
 import { resolveRate, toRate } from "@/lib/billing/rates";
+import { loadBountyReport, type BountyReport } from "./bounty";
 import {
   bonusFor,
   fromCents,
@@ -71,7 +72,7 @@ export type CompensationReport = {
   band: BonusBandRow | null;
   bonus: number;
   retainer: number;
-  /** retainer + bonus + commission -- the single figure that gets paid. */
+  /** retainer + bonus + commission + any bounty maturing this month. */
   totalPayment: number;
   commission: {
     percent: number;
@@ -79,6 +80,8 @@ export type CompensationReport = {
     billedTotal: number;
     total: number;
   };
+  /** New-client bounties, with the ones maturing this month payable now. */
+  bounty: BountyReport;
   /** Hours in the month not yet on an invoice. They still count. */
   unbilledHours: number;
   bands: BonusBandRow[];
@@ -117,7 +120,7 @@ export async function loadCompensationReport(
   const bounds = monthBounds(month);
   if (!bounds) return null;
 
-  const [entries, bandRows, org] = await Promise.all([
+  const [entries, bandRows, org, bounty] = await Promise.all([
     tx.timeEntry.findMany({
       where: {
         // Billable only. Non-billable and Residual hours are excluded by the
@@ -158,6 +161,9 @@ export async function loadCompensationReport(
     tx.organization.findFirstOrThrow({
       select: { bbzRetainerAmount: true, bbzCommissionPercent: true },
     }),
+    // Paid once, at the twelve-month mark, on top of whatever the escalator
+    // pays that month -- so it belongs to a month the same way the bonus does.
+    loadBountyReport(tx, bounds.start, bounds.end),
   ]);
 
   const bands: BonusBandRow[] = bandRows.map((b) => ({
@@ -287,13 +293,14 @@ export async function loadCompensationReport(
     band: bonus.band,
     bonus: bonusAmount,
     retainer,
-    totalPayment: round2(retainer + bonusAmount + commissionAmount),
+    totalPayment: round2(retainer + bonusAmount + commissionAmount + bounty.dueTotal),
     commission: {
       percent: commissionPercent,
       rows: commissionRows.sort((a, b) => a.date.localeCompare(b.date)),
       billedTotal: fromCents(commissionBilledCents),
       total: commissionAmount,
     },
+    bounty,
     unbilledHours: round2(unbilledHours),
     bands,
   };

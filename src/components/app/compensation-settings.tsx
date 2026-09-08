@@ -26,15 +26,18 @@ type BandDraft = { lowerExclusive: string; upperInclusive: string; ratePercent: 
 export function CompensationSettings({
   retainerAmount,
   commissionPercent,
+  bountyPercent,
   bands,
 }: {
   retainerAmount: number;
   commissionPercent: number;
+  bountyPercent: number;
   bands: { lowerExclusive: number; upperInclusive: number | null; ratePercent: number }[];
 }) {
   const router = useRouter();
   const [retainer, setRetainer] = useState(String(retainerAmount));
   const [commission, setCommission] = useState(String(commissionPercent));
+  const [bounty, setBounty] = useState(String(bountyPercent));
   const [savingSettings, setSavingSettings] = useState(false);
 
   const [drafts, setDrafts] = useState<BandDraft[]>(
@@ -51,6 +54,7 @@ export function CompensationSettings({
     const result = await updateCompensationSettings({
       retainerAmount: Number(retainer),
       commissionPercent: Number(commission),
+      bountyPercent: Number(bounty),
     });
     setSavingSettings(false);
     if (!result.ok) return toast.error(result.error);
@@ -86,10 +90,11 @@ export function CompensationSettings({
         <div>
           <h2 className="font-medium">Retainer and commission</h2>
           <p className="text-sm text-muted-foreground">
-            The monthly retainer, and BBZ&apos;s share of what a BBZ-performed IT hour billed for.
+            The monthly retainer, BBZ&apos;s share of what a BBZ-performed IT hour billed for, and
+            the bounty on a new client&apos;s first year.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="retainer">Monthly retainer ($)</Label>
             <Input
@@ -111,6 +116,19 @@ export function CompensationSettings({
             />
             <p className="text-xs text-muted-foreground">
               Which service types earn it is set per type in Settings → Service types.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bounty">New-client bounty (%)</Label>
+            <Input
+              id="bounty"
+              type="number"
+              step="0.01"
+              value={bounty}
+              onChange={(e) => setBounty(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Of everything a qualifying new client pays in its first twelve months, paid once.
             </p>
           </div>
         </div>

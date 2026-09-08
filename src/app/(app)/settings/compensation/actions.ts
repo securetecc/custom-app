@@ -29,6 +29,7 @@ export async function updateCompensationSettings(
         data: {
           bbzRetainerAmount: parsed.data.retainerAmount,
           bbzCommissionPercent: parsed.data.commissionPercent,
+          bbzBountyPercent: parsed.data.bountyPercent,
         },
       }),
     );

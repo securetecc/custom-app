@@ -37,6 +37,28 @@ export const clientFormSchema = z.object({
   /// Inside the normal service area, or outside it. Decides the on-site
   /// minimum and whether travel bills one way or both.
   serviceArea: z.enum(["InArea", "OutOfArea"]),
+  /// "How did you hear about us?", answered at intake before work is
+  /// scheduled. Empty means it was never recorded, which pays no bounty --
+  /// see lib/bounty/qualify.ts.
+  leadSource: z
+    .enum([
+      "Website",
+      "GoogleBusinessProfile",
+      "SEO",
+      "Campaign",
+      "Referral",
+      "ExistingClient",
+      "ReturningClient",
+      "Other",
+    ])
+    .nullable(),
+  leadSourceNote: z.string().nullable(),
+  /// Opens the twelve-month bounty window. Left blank, the first payment
+  /// opens it instead.
+  relationshipStartedOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date")
+    .nullable(),
   // No `.default()` here for the same reason billingRate has no transform:
   // it would make the resolver's input type optional while the output type
   // stays required, which useForm<ClientFormValues> can't reconcile. The
