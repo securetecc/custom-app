@@ -283,7 +283,8 @@ export function ClientForm({
               {...register("relationshipStartedOn", { setValueAs: (v) => (v === "" ? null : v) })}
             />
             <p className="text-xs text-muted-foreground">
-              Opens the twelve-month bounty window. Left blank, their first payment opens it.
+              Opens the twelve-month bounty window. Left blank, the first time entry logged
+              against them opens it.
             </p>
           </div>
 

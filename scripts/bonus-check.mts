@@ -14,7 +14,7 @@ import { prisma } from "../src/lib/db/prisma";
 import { withRLS } from "../src/lib/db/rls";
 import { bonusFor, toCents, fromCents, type BonusBandRow } from "../src/lib/bonus/calculate";
 import { loadCompensationReport } from "../src/lib/reports/compensation";
-import { bountyForClient } from "../src/lib/bounty/calculate";
+import { bountyForClient, resolveWindowStart } from "../src/lib/bounty/calculate";
 import { qualifiesForBounty } from "../src/lib/bounty/qualify";
 
 let failures = 0;
@@ -196,6 +196,34 @@ console.log("\nNew-client bounty\n");
     asOf: day("2027-06-01"),
   });
   check("an invoice never paid earns nothing", unpaid.bounty.toFixed(2), "0.00");
+
+  const start = (r: string | null, e: string | null, p: string | null) =>
+    resolveWindowStart({
+      recorded: r ? day(r) : null,
+      firstTimeEntry: e ? day(e) : null,
+      firstPayment: p ? day(p) : null,
+    });
+  check(
+    "the first time entry opens the window, not the first payment",
+    start(null, "2026-06-29", "2026-08-15")?.start.toISOString().slice(0, 10),
+    "2026-06-29",
+  );
+  check(
+    "and says so",
+    start(null, "2026-06-29", "2026-08-15")?.source,
+    "first time entry",
+  );
+  check(
+    "a date set at intake beats both",
+    start("2026-05-01", "2026-06-29", "2026-08-15")?.start.toISOString().slice(0, 10),
+    "2026-05-01",
+  );
+  check(
+    "a recurring-only client with no time entries falls back to first payment",
+    start(null, null, "2026-08-15")?.source,
+    "first payment",
+  );
+  check("nothing at all opens no window", start(null, null, null), null);
 
   check("a website lead qualifies", qualifiesForBounty("Website"), true);
   check("Google Business Profile qualifies", qualifiesForBounty("GoogleBusinessProfile"), true);

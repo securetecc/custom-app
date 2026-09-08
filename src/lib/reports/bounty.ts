@@ -1,5 +1,11 @@
 import type { TxClient } from "@/lib/db/rls";
-import { bountyForClient, windowEndFor, type BountyInvoice } from "@/lib/bounty/calculate";
+import {
+  bountyForClient,
+  resolveWindowStart,
+  windowEndFor,
+  type BountyInvoice,
+  type WindowStartSource,
+} from "@/lib/bounty/calculate";
 import { qualifiesForBounty } from "@/lib/bounty/qualify";
 import type { LeadSource } from "@/generated/prisma/enums";
 
@@ -10,8 +16,8 @@ export type BountyRow = {
   leadSourceNote: string | null;
   windowStart: string;
   windowEnd: string;
-  /** Whether the start date was set at intake or inferred from first payment. */
-  windowStartSource: "recorded" | "first payment";
+  /** Where the window's start date came from. */
+  windowStartSource: WindowStartSource;
   qualifyingRevenue: number;
   bounty: number;
   matured: boolean;
@@ -51,6 +57,11 @@ export async function loadBountyReport(
         leadSource: true,
         leadSourceNote: true,
         relationshipStartedOn: true,
+        // The earliest work done for this client. That is when the
+        // relationship actually started, so that is when the twelve months
+        // start -- billable or not, because the first thing done for a new
+        // client is often not billed.
+        timeEntries: { select: { date: true }, orderBy: { date: "asc" }, take: 1 },
         invoices: {
           where: { voidedAt: null },
           select: {
@@ -94,16 +105,19 @@ export async function loadBountyReport(
       })),
     }));
 
-    // Set at intake where it exists. Otherwise the first payment opens the
-    // window, which is the earliest defensible date and is stated on the row
-    // so nobody has to guess which was used.
     const payments = invoices.flatMap((i) => i.payments);
     const earliestPayment = payments.reduce<Date | null>(
       (earliest, p) => (earliest === null || p.receivedAt < earliest ? p.receivedAt : earliest),
       null,
     );
-    const windowStart = client.relationshipStartedOn ?? earliestPayment;
-    if (!windowStart) continue; // nothing has been paid and no start date: nothing to count
+    const resolved = resolveWindowStart({
+      recorded: client.relationshipStartedOn,
+      firstTimeEntry: client.timeEntries[0]?.date ?? null,
+      firstPayment: earliestPayment,
+    });
+    // No start date, no work and nothing paid: there is nothing to count yet.
+    if (!resolved) continue;
+    const windowStart = resolved.start;
 
     const result = bountyForClient({ invoices, windowStart, bountyPercent: percent, asOf });
     const windowEnd = windowEndFor(windowStart);
@@ -115,7 +129,7 @@ export async function loadBountyReport(
       leadSourceNote: client.leadSourceNote,
       windowStart: windowStart.toISOString().slice(0, 10),
       windowEnd: windowEnd.toISOString().slice(0, 10),
-      windowStartSource: client.relationshipStartedOn ? "recorded" : "first payment",
+      windowStartSource: resolved.source,
       qualifyingRevenue: result.qualifyingRevenue,
       bounty: result.bounty,
       matured: result.matured,

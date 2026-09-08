@@ -38,6 +38,31 @@ export type BountyClientResult = {
   invoicesCounted: number;
 };
 
+export type WindowStartSource = "recorded" | "first time entry" | "first payment";
+
+/**
+ * When a client's twelve months start.
+ *
+ * A date set at intake wins. Otherwise the FIRST TIME ENTRY opens it: the
+ * relationship starts when work first happens, not when the money arrives,
+ * and a client who takes two months to settle their first invoice should not
+ * get a window running two months late.
+ *
+ * First payment is a last resort, for a client billed only for recurring
+ * services and therefore carrying no time entries at all. Which of the three
+ * was used is returned, not inferred, so a report can say so plainly.
+ */
+export function resolveWindowStart(args: {
+  recorded: Date | null;
+  firstTimeEntry: Date | null;
+  firstPayment: Date | null;
+}): { start: Date; source: WindowStartSource } | null {
+  if (args.recorded) return { start: args.recorded, source: "recorded" };
+  if (args.firstTimeEntry) return { start: args.firstTimeEntry, source: "first time entry" };
+  if (args.firstPayment) return { start: args.firstPayment, source: "first payment" };
+  return null;
+}
+
 /** The same day twelve months later, which is when the window closes. */
 export function windowEndFor(start: Date): Date {
   return new Date(Date.UTC(start.getUTCFullYear() + 1, start.getUTCMonth(), start.getUTCDate()));

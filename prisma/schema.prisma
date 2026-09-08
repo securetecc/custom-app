@@ -372,8 +372,9 @@ model Client {
   /// The detail behind the answer -- which campaign, who referred them.
   leadSourceNote        String?
   /// The day the relationship started, which opens the twelve-month bounty
-  /// window. Left null, the window opens at the client's first payment --
-  /// see lib/bounty/calculate.ts, which reports which of the two it used.
+  /// window. Left null, the window opens at the client's FIRST TIME ENTRY --
+  /// work happening is when a relationship starts. See lib/reports/bounty.ts,
+  /// which reports which of the two the figure came from.
   relationshipStartedOn DateTime?      @db.Date
   activeStatus          Boolean        @default(true)
   notes                 String?

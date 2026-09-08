@@ -354,8 +354,8 @@ export default async function CompensationReportPage({
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-muted-foreground">
                             {b.windowStart} → {b.windowEnd}
-                            {b.windowStartSource === "first payment" && (
-                              <span className="ml-1 text-xs">(from first payment)</span>
+                            {b.windowStartSource !== "recorded" && (
+                              <span className="ml-1 text-xs">(from {b.windowStartSource})</span>
                             )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
