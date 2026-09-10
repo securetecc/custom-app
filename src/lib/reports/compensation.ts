@@ -94,6 +94,8 @@ export type CompensationReport = {
   nextBand: { need: number; at: number; ratePercent: number; bonusThen: number } | null;
   /** The top band's floor -- the figure the whole structure is aimed at. */
   ceiling: { at: number; ratePercent: number; progress: number } | null;
+  /** Which vintage of the ladder this month was calculated against. */
+  bandsEffectiveFrom: string | null;
   /** True for a month before the arrangement began: the hours are real, the
    *  money is not, so every payable figure is zero. */
   beforeStart: boolean;
@@ -176,7 +178,10 @@ export async function loadCompensationReport(
       },
       orderBy: [{ date: "asc" }],
     }),
-    tx.bonusBand.findMany({ orderBy: { lowerExclusive: "asc" } }),
+    // Every band, of every vintage. Which set applies is decided below from
+    // the month being reported, not from today -- re-running August after
+    // January's ladder exists must still produce August's figure.
+    tx.bonusBand.findMany({ orderBy: [{ effectiveFrom: "asc" }, { lowerExclusive: "asc" }] }),
     tx.organization.findFirstOrThrow({
       select: {
         bbzRetainerAmount: true,
@@ -189,7 +194,19 @@ export async function loadCompensationReport(
     loadBountyReport(tx, bounds.start, bounds.end),
   ]);
 
-  const bands: BonusBandRow[] = bandRows.map((b) => ({
+  // The latest set that had taken effect by this month. String comparison is
+  // a date comparison for "YYYY-MM".
+  const effectiveFrom = [...new Set(bandRows.map((b) => b.effectiveFrom))]
+    .filter((from) => from <= month)
+    .sort()
+    .pop();
+  const applicable = effectiveFrom
+    ? bandRows.filter((b) => b.effectiveFrom === effectiveFrom)
+    : // A month before the first set has no ladder at all, which is correct:
+      // there was no arrangement to pay against.
+      [];
+
+  const bands: BonusBandRow[] = applicable.map((b) => ({
     lowerExclusive: Number(b.lowerExclusive),
     upperInclusive: b.upperInclusive === null ? null : Number(b.upperInclusive),
     ratePercent: Number(b.ratePercent),
@@ -318,6 +335,7 @@ export async function loadCompensationReport(
     band: bonus.band,
     bonus: bonusAmount,
     beforeStart,
+    bandsEffectiveFrom: effectiveFrom ?? null,
     retainer,
     totalPayment: round2(
       retainer + bonusAmount + commissionAmount + (beforeStart ? 0 : bounty.dueTotal),

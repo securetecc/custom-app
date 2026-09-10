@@ -25,12 +25,21 @@ function check(label: string, actual: unknown, expected: unknown) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}${ok ? "" : `  — expected ${expected}, got ${actual}`}`);
 }
 
-const bandRows = await prisma.bonusBand.findMany({ orderBy: { lowerExclusive: "asc" } });
-const bands: BonusBandRow[] = bandRows.map((b) => ({
-  lowerExclusive: Number(b.lowerExclusive),
-  upperInclusive: b.upperInclusive === null ? null : Number(b.upperInclusive),
-  ratePercent: Number(b.ratePercent),
-}));
+// Bands are dated SETS. Reading them all at once would mix two ladders into
+// one nonsensical staircase, so every set is fetched by its own vintage.
+const bandRows = await prisma.bonusBand.findMany({
+  orderBy: [{ effectiveFrom: "asc" }, { lowerExclusive: "asc" }],
+});
+const setOf = (effectiveFrom: string): BonusBandRow[] =>
+  bandRows
+    .filter((b) => b.effectiveFrom === effectiveFrom)
+    .map((b) => ({
+      lowerExclusive: Number(b.lowerExclusive),
+      upperInclusive: b.upperInclusive === null ? null : Number(b.upperInclusive),
+      ratePercent: Number(b.ratePercent),
+    }));
+
+const bands = setOf("2026-08");
 
 const rateAt = (dollars: number) => bonusFor(toCents(dollars), bands).ratePercent;
 const bonusAt = (dollars: number) => fromCents(bonusFor(toCents(dollars), bands).bonusCents);
@@ -136,6 +145,28 @@ if (!report) {
   console.log("\nCommission — every August entry is attributed to Tony, so it is nil\n");
   check("commission $0.00", report.commission.total.toFixed(2), "0.00");
   check("no commission rows", report.commission.rows.length, 0);
+}
+
+console.log("\nThe re-based January ladder\n");
+{
+  // x1.25, the same factor the rate moved -- so read in HOURS the ladder is
+  // unchanged, which is the whole point of re-basing it.
+  const janBands = setOf("2027-01");
+  check("the January ladder has the same number of rungs", janBands.length, bands.length);
+  const janRate = (dollars: number) => bonusFor(toCents(dollars), janBands).ratePercent;
+  const janBonus = (dollars: number) => fromCents(bonusFor(toCents(dollars), janBands).bonusCents);
+
+  check("the top band opens at $31,250 exactly", janRate(31250), 10);
+  check("and a cent below it is still 7.50%", janRate(31249.99), 7.5);
+  check("$12,500 pays nothing", janRate(12500), 0);
+  check("a cent above it reaches 1.25%", janRate(12500.01), 1.25);
+  check("$40,000 pays $4,000", janBonus(40000), 4000);
+
+  // 143 hours lands on the same rung before and after, which is the test that
+  // proves the re-basing rewards work rather than the price of work.
+  check("143h reaches 2.50% at the old rates", rateAt(14125), 2.5);
+  check("and the same 143h reaches 2.50% at the new ones", janRate(14125 * 1.25), 2.5);
+  check("the bonus rises only because the base did", janBonus(14125 * 1.25), 441.41);
 }
 
 console.log("\nThe January 2027 rate card\n");

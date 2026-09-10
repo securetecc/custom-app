@@ -73,12 +73,15 @@ for (const band of BANDS) {
   if (commit) {
     await prisma.bonusBand.upsert({
       where: {
-        organizationId_lowerExclusive: {
+        organizationId_effectiveFrom_lowerExclusive: {
           organizationId: org.id,
+          // The original ladder, in force from the month the arrangement
+          // began. January's re-based set is seeded separately.
+          effectiveFrom: "2026-08",
           lowerExclusive: band.lowerExclusive,
         },
       },
-      create: { organizationId: org.id, ...band },
+      create: { organizationId: org.id, effectiveFrom: "2026-08", ...band },
       update: { upperInclusive: band.upperInclusive, ratePercent: band.ratePercent },
     });
   }

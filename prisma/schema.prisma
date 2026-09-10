@@ -1020,6 +1020,14 @@ model BonusBand {
   id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// The month this set of bands takes effect, "YYYY-MM".
+  ///
+  /// Bands are dated SETS, not editable rows, because the schedule re-bases
+  /// the thresholds whenever the rate card changes -- and a month that has
+  /// closed must not restate. Editing the numbers in place would silently
+  /// recompute every bonus already paid. A report reads the set with the
+  /// latest effectiveFrom that is not after the month being reported.
+  effectiveFrom  String       @default("2026-08")
   /// The band covers (lowerExclusive, upperInclusive]. The bottom band has a
   /// lowerExclusive of 0; the top band has no ceiling, stored as null.
   lowerExclusive Decimal      @db.Decimal(12, 2)
@@ -1029,7 +1037,7 @@ model BonusBand {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  @@unique([organizationId, lowerExclusive])
+  @@unique([organizationId, effectiveFrom, lowerExclusive])
   @@index([organizationId])
   @@map("bonus_bands")
 }

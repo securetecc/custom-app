@@ -42,11 +42,15 @@ export async function updateCompensationSettings(
 }
 
 /**
- * Replaces the whole escalator in one transaction.
+ * Replaces ONE vintage of the escalator in one transaction.
  *
  * All-or-nothing rather than row by row: a half-applied edit could leave a
  * gap or an overlap between bands, and the report would quietly calculate
  * against it.
+ *
+ * Scoped to a single effectiveFrom, because the ladders are dated sets. A
+ * delete across the whole organization would take the August ladder with it
+ * and restate every bonus already paid.
  */
 export async function replaceBonusBands(input: BonusBandsFormValues): Promise<ActionResult> {
   const parsed = bonusBandsFormSchema.safeParse(input);
@@ -77,9 +81,18 @@ export async function replaceBonusBands(input: BonusBandsFormValues): Promise<Ac
 
   try {
     await withRLS(authUserId, async (tx) => {
-      await tx.bonusBand.deleteMany({ where: { organizationId: appUser.organizationId } });
+      await tx.bonusBand.deleteMany({
+        where: {
+          organizationId: appUser.organizationId,
+          effectiveFrom: parsed.data.effectiveFrom,
+        },
+      });
       await tx.bonusBand.createMany({
-        data: bands.map((b) => ({ organizationId: appUser.organizationId, ...b })),
+        data: bands.map((b) => ({
+          organizationId: appUser.organizationId,
+          effectiveFrom: parsed.data.effectiveFrom,
+          ...b,
+        })),
       });
     });
   } catch {

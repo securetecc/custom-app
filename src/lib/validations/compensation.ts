@@ -15,6 +15,10 @@ export const compensationSettingsSchema = z.object({
 export type CompensationSettingsValues = z.infer<typeof compensationSettingsSchema>;
 
 export const bonusBandsFormSchema = z.object({
+  /// Which vintage of the ladder is being replaced, "YYYY-MM". Bands are
+  /// dated sets so a closed month never restates -- editing must therefore
+  /// name the set it means.
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}$/, "Use a month like 2027-01"),
   bands: z
     .array(
       z.object({

@@ -28,11 +28,22 @@ export function CompensationSettings({
   commissionPercent,
   bountyPercent,
   bands,
+  bandsEffectiveFrom,
+  heading = "The escalator",
+  note = null,
+  showRates = true,
 }: {
   retainerAmount: number;
   commissionPercent: number;
   bountyPercent: number;
   bands: { lowerExclusive: number; upperInclusive: number | null; ratePercent: number }[];
+  /** Which vintage of the ladder this editor is showing, "YYYY-MM". */
+  bandsEffectiveFrom: string;
+  heading?: string;
+  /** Why this vintage exists, when there is more than one. */
+  note?: string | null;
+  /** The retainer and percentages are not dated, so only one card shows them. */
+  showRates?: boolean;
 }) {
   const router = useRouter();
   const [retainer, setRetainer] = useState(String(retainerAmount));
@@ -65,6 +76,7 @@ export function CompensationSettings({
   async function saveBands() {
     setSavingBands(true);
     const result = await replaceBonusBands({
+      effectiveFrom: bandsEffectiveFrom,
       bands: drafts.map((d) => ({
         lowerExclusive: Number(d.lowerExclusive),
         // Blank means "no ceiling", which is what the top band is.
@@ -86,6 +98,7 @@ export function CompensationSettings({
 
   return (
     <div className="space-y-6">
+      {showRates && (
       <Card className="space-y-4 p-6">
         <div>
           <h2 className="font-medium">Retainer and commission</h2>
@@ -136,10 +149,12 @@ export function CompensationSettings({
           {savingSettings ? "Saving…" : "Save"}
         </Button>
       </Card>
+      )}
 
       <Card className="space-y-4 p-6">
         <div>
-          <h2 className="font-medium">The escalator</h2>
+          <h2 className="font-medium">{heading}</h2>
+          {note && <p className="mb-1 text-sm text-accent">{note}</p>}
           <p className="text-sm text-muted-foreground">
             Each band runs from just above its lower figure up to and including its upper one, and
             the rate applies to the whole qualifying base. Leave the last band&apos;s upper figure
