@@ -49,6 +49,8 @@ export function ServiceTypeDialog({
       label: "",
       billingMinimumHours: 0.25,
       rateOverride: undefined,
+      scheduledRate: undefined,
+      scheduledRateFrom: null,
       payoutRate: undefined,
       commissionEligible: false,
       ...defaultValues,
@@ -123,6 +125,33 @@ export function ServiceTypeDialog({
                   placeholder="Uses client's standard rate"
                   {...register("rateOverride", { valueAsNumber: true })}
                 />
+              </div>
+            </div>
+
+            {/* A rate agreed for later. Both together or neither -- a figure
+                with no date never takes effect, and a date with no figure
+                changes nothing. */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="scheduledRate">Next rate ($/hr)</Label>
+                <Input
+                  id="scheduledRate"
+                  type="number"
+                  step="0.01"
+                  placeholder="No change planned"
+                  {...register("scheduledRate", { valueAsNumber: true })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="scheduledRateFrom">From</Label>
+                <Input
+                  id="scheduledRateFrom"
+                  type="date"
+                  {...register("scheduledRateFrom", { setValueAs: (v) => (v === "" ? null : v) })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Takes over by itself. Work dated before it still bills at the current rate.
+                </p>
               </div>
             </div>
 

@@ -166,6 +166,8 @@ export async function loadCompensationReport(
             code: true,
             label: true,
             rateOverride: true,
+            scheduledRate: true,
+            scheduledRateFrom: true,
             payoutRate: true,
             commissionEligible: true,
           },
@@ -213,6 +215,8 @@ export async function loadCompensationReport(
       resolveRate({
         entryRateOverride: toRate(entry.rateOverride),
         serviceTypeRateOverride: toRate(entry.serviceType.rateOverride),
+        serviceTypeScheduledRate: toRate(entry.serviceType.scheduledRate),
+        serviceTypeScheduledRateFrom: entry.serviceType.scheduledRateFrom,
         clientBillingRate: toRate(entry.client.billingRate),
         clientScheduledRate: toRate(entry.client.scheduledRate),
         clientScheduledRateFrom: entry.client.scheduledRateFrom,

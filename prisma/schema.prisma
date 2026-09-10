@@ -444,6 +444,14 @@ model ServiceType {
   billingMinimumHours Decimal      @db.Decimal(5, 2)
   // Overrides the client's standard billingRate when set (e.g. Low Voltage).
   rateOverride        Decimal?     @db.Decimal(10, 2)
+  /// An override already agreed for LATER -- on-site going to $150 on 1 Jan
+  /// 2027, say. It takes over by itself, and which applies is decided by the
+  /// date of the WORK, so a December entry written in January still bills at
+  /// December's rate. Without this a rate card change means either editing
+  /// every record on the morning it starts, or setting it early and
+  /// overcharging for the rest of the year.
+  scheduledRate       Decimal?     @db.Decimal(10, 2)
+  scheduledRateFrom   DateTime?    @db.Date
   /// What SecureTECC pays OUT per hour on this service type -- the
   /// subcontractor's or partner's share of the billed rate. Null means
   /// nothing is paid out and the whole billed rate is SecureTECC's.

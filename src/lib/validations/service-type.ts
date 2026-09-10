@@ -9,6 +9,13 @@ export const serviceTypeFormSchema = z.object({
   label: z.string().min(1, "Label is required"),
   billingMinimumHours: z.number().min(0, "Must be zero or more"),
   rateOverride: z.union([z.number(), z.nan()]).optional(),
+  /// A rate for this type agreed for LATER -- on-site going to $150 on
+  /// 1 Jan 2027. Decided by the date of the work, not today's.
+  scheduledRate: z.union([z.number(), z.nan()]).optional(),
+  scheduledRateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid date")
+    .nullable(),
   /// What SecureTECC pays out per hour on this type -- the subcontractor's or
   /// partner's share. Blank means nothing is paid out. Feeds the bonus.
   payoutRate: z.union([z.number(), z.nan()]).optional(),

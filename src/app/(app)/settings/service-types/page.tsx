@@ -59,6 +59,12 @@ export default async function ServiceTypesPage() {
                 <TableCell>{st.billingMinimumHours.toString()} hr</TableCell>
                 <TableCell>
                   {st.rateOverride ? `$${st.rateOverride.toString()}/hr` : "Client's standard rate"}
+                  {st.scheduledRate && st.scheduledRateFrom && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      → ${st.scheduledRate.toString()}/hr from{" "}
+                      {st.scheduledRateFrom.toISOString().slice(0, 10)}
+                    </span>
+                  )}
                 </TableCell>
                 {/* What SecureTECC pays out per hour, and whether the type
                     earns BBZ commission. Both feed the compensation report --
@@ -78,6 +84,10 @@ export default async function ServiceTypesPage() {
                       label: st.label,
                       billingMinimumHours: Number(st.billingMinimumHours),
                       rateOverride: st.rateOverride ? Number(st.rateOverride) : undefined,
+                      scheduledRate: st.scheduledRate ? Number(st.scheduledRate) : undefined,
+                      scheduledRateFrom: st.scheduledRateFrom
+                        ? st.scheduledRateFrom.toISOString().slice(0, 10)
+                        : null,
                       payoutRate: st.payoutRate ? Number(st.payoutRate) : undefined,
                       commissionEligible: st.commissionEligible,
                     }}

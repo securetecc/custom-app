@@ -81,7 +81,7 @@ export async function loadToBill(tx: TxClient, asOf: Date): Promise<ToBillReport
             scheduledRateFrom: true,
           },
         },
-        serviceType: { select: { code: true, label: true, rateOverride: true } },
+        serviceType: { select: { code: true, label: true, rateOverride: true, scheduledRate: true, scheduledRateFrom: true } },
         performedByUser: { select: { name: true } },
       },
       orderBy: [{ date: "asc" }],
@@ -133,6 +133,8 @@ export async function loadToBill(tx: TxClient, asOf: Date): Promise<ToBillReport
     const rate = resolveRate({
       entryRateOverride: toRate(e.rateOverride),
       serviceTypeRateOverride: toRate(e.serviceType.rateOverride),
+      serviceTypeScheduledRate: toRate(e.serviceType.scheduledRate),
+      serviceTypeScheduledRateFrom: e.serviceType.scheduledRateFrom,
       clientBillingRate: toRate(e.client.billingRate),
       clientScheduledRate: toRate(e.client.scheduledRate),
       clientScheduledRateFrom: e.client.scheduledRateFrom,

@@ -91,13 +91,19 @@ function rateFor(
   entry: {
     rateOverride: unknown;
     date: Date;
-    serviceType: { rateOverride: unknown };
+    serviceType: {
+      rateOverride: unknown;
+      scheduledRate: unknown;
+      scheduledRateFrom: Date | null;
+    };
   },
   client: { billingRate: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null },
 ): number | null {
   return resolveRate({
     entryRateOverride: toRate(entry.rateOverride),
     serviceTypeRateOverride: toRate(entry.serviceType.rateOverride),
+    serviceTypeScheduledRate: toRate(entry.serviceType.scheduledRate),
+    serviceTypeScheduledRateFrom: entry.serviceType.scheduledRateFrom,
     clientBillingRate: toRate(client.billingRate),
     clientScheduledRate: toRate(client.scheduledRate),
     clientScheduledRateFrom: client.scheduledRateFrom,

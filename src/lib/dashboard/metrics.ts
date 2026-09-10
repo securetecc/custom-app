@@ -312,7 +312,7 @@ export async function loadDashboardMetrics(
         date: true,
         durationHours: true,
         rateOverride: true,
-        serviceType: { select: { rateOverride: true } },
+        serviceType: { select: { rateOverride: true, scheduledRate: true, scheduledRateFrom: true } },
         client: {
           select: { billingRate: true, scheduledRate: true, scheduledRateFrom: true },
         },
@@ -364,7 +364,7 @@ export async function loadDashboardMetrics(
         durationHours: true,
         rateOverride: true,
         clientId: true,
-        serviceType: { select: { rateOverride: true } },
+        serviceType: { select: { rateOverride: true, scheduledRate: true, scheduledRateFrom: true } },
         client: {
           select: {
             name: true,
@@ -452,12 +452,14 @@ export async function loadDashboardMetrics(
   const rateFor = (e: {
     date: Date;
     rateOverride: unknown;
-    serviceType: { rateOverride: unknown };
+    serviceType: { rateOverride: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null };
     client: { billingRate: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null };
   }) =>
     resolveRate({
       entryRateOverride: toRate(e.rateOverride),
       serviceTypeRateOverride: toRate(e.serviceType.rateOverride),
+      serviceTypeScheduledRate: toRate(e.serviceType.scheduledRate),
+      serviceTypeScheduledRateFrom: e.serviceType.scheduledRateFrom,
       clientBillingRate: toRate(e.client.billingRate),
       clientScheduledRate: toRate(e.client.scheduledRate),
       clientScheduledRateFrom: e.client.scheduledRateFrom,
@@ -554,7 +556,7 @@ export async function loadDashboardMetrics(
       date: true,
       durationHours: true,
       rateOverride: true,
-      serviceType: { select: { rateOverride: true } },
+      serviceType: { select: { rateOverride: true, scheduledRate: true, scheduledRateFrom: true } },
       client: { select: { billingRate: true, scheduledRate: true, scheduledRateFrom: true } },
     },
   });

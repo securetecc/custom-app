@@ -11,6 +11,13 @@ function normalizeRateOverride(value: number | undefined): number | null {
   return value === undefined || Number.isNaN(value) ? null : value;
 }
 
+/** yyyy-mm-dd -> the UTC midnight a @db.Date column stores. */
+function toDateOnly(value: string | null): Date | null {
+  if (!value) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 export async function createServiceType(input: ServiceTypeFormValues): Promise<ActionResult> {
   const parsed = serviceTypeFormSchema.safeParse(input);
   if (!parsed.success) {
@@ -30,6 +37,8 @@ export async function createServiceType(input: ServiceTypeFormValues): Promise<A
           label: data.label,
           billingMinimumHours: data.billingMinimumHours,
           rateOverride: normalizeRateOverride(data.rateOverride),
+          scheduledRate: normalizeRateOverride(data.scheduledRate),
+          scheduledRateFrom: toDateOnly(data.scheduledRateFrom),
           payoutRate: normalizeRateOverride(data.payoutRate),
           commissionEligible: data.commissionEligible,
         },
@@ -65,6 +74,8 @@ export async function updateServiceType(id: string, input: ServiceTypeFormValues
           label: data.label,
           billingMinimumHours: data.billingMinimumHours,
           rateOverride: normalizeRateOverride(data.rateOverride),
+          scheduledRate: normalizeRateOverride(data.scheduledRate),
+          scheduledRateFrom: toDateOnly(data.scheduledRateFrom),
           payoutRate: normalizeRateOverride(data.payoutRate),
           commissionEligible: data.commissionEligible,
         },

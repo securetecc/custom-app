@@ -15,6 +15,7 @@ import { withRLS } from "../src/lib/db/rls";
 import { bonusFor, toCents, fromCents, type BonusBandRow } from "../src/lib/bonus/calculate";
 import { loadCompensationReport } from "../src/lib/reports/compensation";
 import { bountyForClient, resolveWindowStart } from "../src/lib/bounty/calculate";
+import { resolveRate } from "../src/lib/billing/rates";
 import { qualifiesForBounty } from "../src/lib/bounty/qualify";
 
 let failures = 0;
@@ -135,6 +136,52 @@ if (!report) {
   console.log("\nCommission — every August entry is attributed to Tony, so it is nil\n");
   check("commission $0.00", report.commission.total.toFixed(2), "0.00");
   check("no commission rows", report.commission.rows.length, 0);
+}
+
+console.log("\nThe January 2027 rate card\n");
+{
+  const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
+  const jan = day("2027-01-01");
+  // Remote follows the client's scheduled standard; on-site has its own.
+  const remote = (date: string) =>
+    resolveRate({
+      entryRateOverride: null, serviceTypeRateOverride: null,
+      serviceTypeScheduledRate: null, serviceTypeScheduledRateFrom: null,
+      clientBillingRate: 100, clientScheduledRate: 125, clientScheduledRateFrom: jan,
+      entryDate: day(date),
+    });
+  const onsite = (date: string) =>
+    resolveRate({
+      entryRateOverride: null, serviceTypeRateOverride: null,
+      serviceTypeScheduledRate: 150, serviceTypeScheduledRateFrom: jan,
+      clientBillingRate: 100, clientScheduledRate: 125, clientScheduledRateFrom: jan,
+      entryDate: day(date),
+    });
+
+  check("remote on 31 December still bills 100", remote("2026-12-31"), 100);
+  check("remote on 1 January bills 125", remote("2027-01-01"), 125);
+  check("on-site on 31 December still bills 100", onsite("2026-12-31"), 100);
+  check("on-site on 1 January bills 150, not 125", onsite("2027-01-01"), 150);
+  check("and still 150 in June", onsite("2027-06-01"), 150);
+
+  // Low voltage keeps its own arrangement through the change.
+  const lowVoltage = (date: string) =>
+    resolveRate({
+      entryRateOverride: null, serviceTypeRateOverride: 150,
+      serviceTypeScheduledRate: null, serviceTypeScheduledRateFrom: null,
+      clientBillingRate: 100, clientScheduledRate: 125, clientScheduledRateFrom: jan,
+      entryDate: day(date),
+    });
+  check("low voltage is 150 before the change", lowVoltage("2026-12-31"), 150);
+  check("and 150 after it", lowVoltage("2027-01-01"), 150);
+
+  // A scheduled figure with no date never takes effect.
+  check("a next rate with no date changes nothing", resolveRate({
+    entryRateOverride: null, serviceTypeRateOverride: null,
+    serviceTypeScheduledRate: null, serviceTypeScheduledRateFrom: null,
+    clientBillingRate: 100, clientScheduledRate: 125, clientScheduledRateFrom: null,
+    entryDate: day("2027-06-01"),
+  }), 100);
 }
 
 console.log("\nNew-client bounty\n");
