@@ -62,18 +62,32 @@ export default async function CalendarPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              {result.reason === "not-configured" ? "Not connected" : "Not authorized yet"}
+              {result.reason === "not-configured"
+                ? "Not connected"
+                : result.reason === "api-disabled"
+                  ? "One step left in Google Cloud"
+                  : "Not authorized yet"}
             </CardTitle>
             <CardDescription>{result.message}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              The calendar uses the same service account as Gmail drafts and Drive archiving. It
-              needs one more scope granted in Workspace admin → Security → API controls →
-              Domain-wide delegation, on the existing client ID:
-            </p>
-            <code className="block rounded border bg-muted/40 p-2 text-xs">{CALENDAR_SCOPE}</code>
-            <p>Nothing else needs setting up — the page fills in once the scope is granted.</p>
+            {result.reason === "api-disabled" ? (
+              <p>
+                Everything on the Workspace side is done. The Calendar API just has not been
+                switched on for the Cloud project yet — one toggle, and this page fills itself.
+              </p>
+            ) : (
+              <>
+                <p>
+                  The calendar uses the same service account as Gmail drafts and Drive archiving.
+                  It needs one more scope granted in Workspace admin → Security → API controls →
+                  Domain-wide delegation, on the existing client ID:
+                </p>
+                <code className="block rounded border bg-muted/40 p-2 text-xs">
+                  {CALENDAR_SCOPE}
+                </code>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : byDay.size === 0 ? (

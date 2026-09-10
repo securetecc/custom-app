@@ -32,7 +32,54 @@ export type CalendarEvent = {
 
 export type CalendarResult =
   | { ok: true; events: CalendarEvent[] }
-  | { ok: false; reason: "not-configured" | "not-authorized" | "error"; message: string };
+  | {
+      ok: false;
+      reason: "not-configured" | "api-disabled" | "not-authorized" | "error";
+      message: string;
+    };
+
+/**
+ * Why Google refused, in its own words.
+ *
+ * A 403 has two completely different causes here and they are fixed in two
+ * different consoles: the SCOPE can be missing from domain-wide delegation
+ * (Workspace admin), or the API can simply not be enabled on the Cloud
+ * project (Cloud console). Telling someone to grant a scope they have
+ * already granted sends them back to the wrong screen, which is exactly what
+ * this used to do.
+ */
+async function refusalReason(response: Response): Promise<{
+  reason: "api-disabled" | "not-authorized";
+  message: string;
+}> {
+  let body: {
+    error?: { message?: string; errors?: { reason?: string }[]; status?: string };
+  } = {};
+  try {
+    body = await response.json();
+  } catch {
+    // Fall through to the scope message; a body we cannot read tells us
+    // nothing either way.
+  }
+
+  const codes = (body.error?.errors ?? []).map((e) => e.reason);
+  if (codes.includes("accessNotConfigured") || /has not been used in project/i.test(body.error?.message ?? "")) {
+    return {
+      reason: "api-disabled",
+      message:
+        "The Google Calendar API is not enabled on the Cloud project. Enable it in the Google " +
+        "Cloud console under APIs & Services → Library → Google Calendar API. The domain-wide " +
+        "delegation grant is separate and is already in place.",
+    };
+  }
+
+  return {
+    reason: "not-authorized",
+    message:
+      "Google refused the calendar request. The calendar.readonly scope needs granting to the " +
+      "service account in Workspace admin → Security → API controls → Domain-wide delegation.",
+  };
+}
 
 type GoogleEvent = {
   id?: string;
@@ -77,13 +124,7 @@ export async function listUpcomingEvents(args: {
     signal: AbortSignal.timeout(15_000),
   });
   if (listResponse.status === 403 || listResponse.status === 401) {
-    return {
-      ok: false,
-      reason: "not-authorized",
-      message:
-        "Google refused the calendar request. The scope needs granting to the service " +
-        "account in Workspace admin → domain-wide delegation.",
-    };
+    return { ok: false, ...(await refusalReason(listResponse)) };
   }
   if (!listResponse.ok) {
     return { ok: false, reason: "error", message: `Calendar list failed (${listResponse.status}).` };
