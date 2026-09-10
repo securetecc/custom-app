@@ -19,6 +19,12 @@ export const availabilityFormSchema = z.object({
   userId: z.string().min(1),
   timeZone: z.string().min(1, "Choose a time zone"),
   jobTitle: z.string().trim().max(60).nullable(),
+  /// Wall time in their own zone, or null. Never a working hour.
+  offlineAfter: z
+    .string()
+    .regex(/^\d{1,2}:\d{2}$/, "Use a time like 23:00")
+    .nullable(),
+  availabilityNote: z.string().trim().max(120).nullable(),
   /** The whole week, replaced wholesale -- see the action for why. */
   blocks: z.array(availabilityBlockSchema).max(30, "That is a lot of blocks"),
 });

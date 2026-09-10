@@ -1,12 +1,19 @@
 import { Pencil } from "lucide-react";
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
-import { buildMember, overlapWindows, type TeamMember } from "@/lib/team/availability";
+import {
+  buildMember,
+  overlapWindows,
+  pairOverlaps,
+  windowHours,
+  type TeamMember,
+} from "@/lib/team/availability";
 import {
   MANILA,
   PACIFIC,
   WEEKDAY_SHORT,
   formatTimeInZone,
+  toTimeInputValue,
   hoursBetween,
   zoneAbbreviation,
 } from "@/lib/timezones";
@@ -38,6 +45,8 @@ export default async function TeamPage() {
         email: true,
         jobTitle: true,
         timeZone: true,
+        offlineAfterMinutes: true,
+        availabilityNote: true,
         availability: {
           select: { weekday: true, startMinutes: true, endMinutes: true, label: true },
         },
@@ -59,6 +68,8 @@ export default async function TeamPage() {
           jobTitle: user.jobTitle,
           email: user.email,
           timeZone: user.timeZone,
+          offlineAfterMinutes: user.offlineAfterMinutes,
+          availabilityNote: user.availabilityNote,
         },
         blocks: user.availability,
         viewerZone,
@@ -92,6 +103,8 @@ export default async function TeamPage() {
     now,
   });
   const shared = overlapWindows(withHours);
+  // When all three never coincide, who CAN reach whom is the useful answer.
+  const pairs = pairOverlaps(members);
   const gapNow = hoursBetween(now, PACIFIC, MANILA);
 
   return (
@@ -184,6 +197,31 @@ export default async function TeamPage() {
               ))}
             </ul>
           )}
+
+          {pairs.length > 0 && (
+            <div className="mt-4 border-t pt-4">
+              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+                Who overlaps with whom, this week
+              </p>
+              <ul className="space-y-1.5">
+                {pairs.map(({ a, b, windows }) => (
+                  <li key={`${a.id}-${b.id}`} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                    <span className="font-medium">
+                      {a.name.split(" ")[0]} &amp; {b.name.split(" ")[0]}
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">
+                      {windowHours(windows)}h across {windows.length} day
+                      {windows.length === 1 ? "" : "s"}
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">
+                      · {formatTimeInZone(windows[0].start, viewerZone)} –{" "}
+                      {formatTimeInZone(windows[0].end, viewerZone)} your time
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -227,6 +265,11 @@ export default async function TeamPage() {
                     name={member.name}
                     timeZone={member.timeZone}
                     jobTitle={member.jobTitle}
+                    offlineAfter={(() => {
+                      const mins = staff.find((s) => s.id === member.id)?.offlineAfterMinutes;
+                      return mins == null ? null : toTimeInputValue(mins);
+                    })()}
+                    availabilityNote={member.availabilityNote}
                     blocks={
                       staff.find((s) => s.id === member.id)?.availability.map((b) => ({
                         weekday: b.weekday,
@@ -306,6 +349,26 @@ export default async function TeamPage() {
                     )}
                   </p>
                 </>
+              )}
+
+              {(member.offlineAfter || member.availabilityNote) && (
+                <div className="border-t pt-2 text-xs text-muted-foreground">
+                  {member.offlineAfter && (
+                    <p>
+                      Usually offline after{" "}
+                      <span className="tabular-nums">{member.offlineAfter.own}</span>{" "}
+                      {member.zoneAbbr}
+                      {member.timeZone !== viewerZone && (
+                        <>
+                          {" — "}
+                          <span className="tabular-nums">{member.offlineAfter.viewer}</span> your
+                          time
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {member.availabilityNote && <p>{member.availabilityNote}</p>}
+                </div>
               )}
             </CardContent>
           </Card>

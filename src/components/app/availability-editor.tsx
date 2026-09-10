@@ -42,12 +42,16 @@ export function AvailabilityEditor({
   timeZone,
   jobTitle,
   blocks: initial,
+  offlineAfter: initialOfflineAfter,
+  availabilityNote: initialNote,
   trigger,
 }: {
   userId: string;
   name: string;
   timeZone: string;
   jobTitle: string | null;
+  offlineAfter: string | null;
+  availabilityNote: string | null;
   blocks: { weekday: number; startMinutes: number; endMinutes: number; label: string | null }[];
   trigger: React.ReactNode;
 }) {
@@ -56,6 +60,8 @@ export function AvailabilityEditor({
   const [saving, setSaving] = useState(false);
   const [zone, setZone] = useState(timeZone);
   const [title, setTitle] = useState(jobTitle ?? "");
+  const [offline, setOffline] = useState(initialOfflineAfter ?? "");
+  const [note, setNote] = useState(initialNote ?? "");
   const [blocks, setBlocks] = useState<Block[]>(
     initial.map((b) => ({
       weekday: b.weekday,
@@ -93,6 +99,8 @@ export function AvailabilityEditor({
       userId,
       timeZone: zone,
       jobTitle: title.trim() || null,
+      offlineAfter: offline || null,
+      availabilityNote: note.trim() || null,
       blocks,
     });
     setSaving(false);
@@ -212,6 +220,31 @@ export function AvailabilityEditor({
                 </div>
               );
             })}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="offlineAfter">Usually offline after</Label>
+              <Input
+                id="offlineAfter"
+                type="time"
+                value={offline}
+                onChange={(e) => setOffline(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Not a working hour and never counted as one. It tells someone fifteen hours away
+                whether a message now will wake you.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="availabilityNote">Note</Label>
+              <Input
+                id="availabilityNote"
+                value={note}
+                placeholder="Flexible outside core hours"
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </div>
           </div>
 
           <p className="text-xs text-muted-foreground">

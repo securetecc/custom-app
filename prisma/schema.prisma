@@ -312,6 +312,14 @@ model User {
   /// Free text under their name on the Team page -- "IT Support", "VA",
   /// whatever they want colleagues to see.
   jobTitle             String?
+  /// Roughly when they stop being reachable, as minutes past midnight in
+  /// their own zone. Not a working hour and never counted as one -- it
+  /// answers "is a message now going to wake them", which across a 15-hour
+  /// gap is a question the sender cannot answer in their head.
+  offlineAfterMinutes  Int?
+  /// Anything about their availability that is not a block: "flexible outside
+  /// core hours", "no meetings before 10". Shown under their name.
+  availabilityNote     String?
   receivesTicketEmails Boolean      @default(true)
   /// Told when a task is assigned to them.
   notifyTaskAssigned   Boolean      @default(true)

@@ -46,7 +46,12 @@ export async function saveAvailability(input: AvailabilityFormValues): Promise<A
     await withRLS(authUserId, async (tx) => {
       await tx.user.update({
         where: { id: data.userId },
-        data: { timeZone: data.timeZone, jobTitle: data.jobTitle || null },
+        data: {
+          timeZone: data.timeZone,
+          jobTitle: data.jobTitle || null,
+          offlineAfterMinutes: data.offlineAfter ? parseMinutes(data.offlineAfter) : null,
+          availabilityNote: data.availabilityNote || null,
+        },
       });
       await tx.userAvailability.deleteMany({ where: { userId: data.userId } });
       if (blocks.length > 0) {

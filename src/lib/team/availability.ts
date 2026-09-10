@@ -48,6 +48,9 @@ export type TeamMember = {
   id: string;
   name: string;
   jobTitle: string | null;
+  availabilityNote: string | null;
+  /** When they go offline, in their words and in the viewer's. */
+  offlineAfter: { own: string; viewer: string } | null;
   email: string;
   timeZone: TimeZoneId;
   /** "PDT", "GMT+8" -- what their zone calls itself right now. */
@@ -93,7 +96,15 @@ const isoDate = (p: { year: number; month: number; day: number }) =>
   `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 
 export function buildMember(args: {
-  user: { id: string; name: string; jobTitle: string | null; email: string; timeZone: string };
+  user: {
+    id: string;
+    name: string;
+    jobTitle: string | null;
+    email: string;
+    timeZone: string;
+    offlineAfterMinutes?: number | null;
+    availabilityNote?: string | null;
+  };
   blocks: StoredBlock[];
   /** The zone the person LOOKING at the page is in. */
   viewerZone: TimeZoneId;
@@ -170,10 +181,33 @@ export function buildMember(args: {
     .filter((b) => b.start > now)
     .sort((a, b) => a.start.getTime() - b.start.getTime())[0];
 
+  // Resolved against today so the viewer's side of it is right for the
+  // season -- 11pm Manila is 8am Pacific in summer and 7am in winter.
+  const today = partsInZone(now, zone);
+  const offlineAt =
+    user.offlineAfterMinutes == null
+      ? null
+      : zonedWallTimeToUtc(
+          zone,
+          today.year,
+          today.month,
+          today.day,
+          Math.floor(user.offlineAfterMinutes / 60),
+          user.offlineAfterMinutes % 60,
+        );
+
   return {
     id: user.id,
     name: user.name,
     jobTitle: user.jobTitle,
+    availabilityNote: user.availabilityNote ?? null,
+    offlineAfter:
+      offlineAt && user.offlineAfterMinutes != null
+        ? {
+            own: formatMinutes(user.offlineAfterMinutes),
+            viewer: formatTimeInZone(offlineAt, viewerZone),
+          }
+        : null,
     email: user.email,
     timeZone: zone,
     zoneAbbr: zoneAbbreviation(now, zone),
@@ -194,6 +228,34 @@ export function buildMember(args: {
     days,
     weeklyHours: Math.round((weeklyMinutes / 60) * 100) / 100,
   };
+}
+
+/** Every pair, so "who can I reach live" has an answer when all three cannot. */
+export function pairOverlaps(
+  members: TeamMember[],
+): { a: TeamMember; b: TeamMember; windows: { start: Date; end: Date }[] }[] {
+  const withHours = members.filter((m) => m.weeklyHours > 0);
+  const pairs: { a: TeamMember; b: TeamMember; windows: { start: Date; end: Date }[] }[] = [];
+
+  for (let i = 0; i < withHours.length; i++) {
+    for (let j = i + 1; j < withHours.length; j++) {
+      const windows = overlapWindows([withHours[i], withHours[j]]);
+      if (windows.length > 0) pairs.push({ a: withHours[i], b: withHours[j], windows });
+    }
+  }
+  // Most shared time first: the pair who can actually talk is the useful row.
+  return pairs.sort(
+    (x, y) => totalMinutes(y.windows) - totalMinutes(x.windows),
+  );
+}
+
+function totalMinutes(windows: { start: Date; end: Date }[]): number {
+  return windows.reduce((s, w) => s + (w.end.getTime() - w.start.getTime()) / 60_000, 0);
+}
+
+/** Hours a set of windows adds up to, rounded to a sensible figure. */
+export function windowHours(windows: { start: Date; end: Date }[]): number {
+  return Math.round((totalMinutes(windows) / 60) * 10) / 10;
 }
 
 /**
