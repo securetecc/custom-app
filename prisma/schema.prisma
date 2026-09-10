@@ -305,6 +305,13 @@ model User {
   /// assigned to them) reaches their inbox. Shared-inbox mail is unaffected --
   /// that goes to ticketNotificationEmail, not here. On by default: someone
   /// handed a ticket should hear about it unless they say otherwise.
+  /// Where this person works from, as an IANA zone. Their availability is
+  /// stored in THIS zone's wall-clock time, so "9 to 6" stays true for them
+  /// whatever another country does with its clocks.
+  timeZone             String       @default("America/Los_Angeles")
+  /// Free text under their name on the Team page -- "IT Support", "VA",
+  /// whatever they want colleagues to see.
+  jobTitle             String?
   receivesTicketEmails Boolean      @default(true)
   /// Told when a task is assigned to them.
   notifyTaskAssigned   Boolean      @default(true)
@@ -339,6 +346,7 @@ model User {
   performedTimeEntries       TimeEntry[]           @relation("PerformedByUser")
   assignedTasks              Task[]                @relation("TaskAssignee")
   taskAssignments            TaskAssignee[]
+  availability               UserAvailability[]
   delegatedTasks             Task[]                @relation("TaskCreator")
   loggedReimbursableExpenses ReimbursableExpense[]
   assignedTickets            Ticket[]              @relation("AssignedToUser")
@@ -1029,4 +1037,32 @@ model TaskAssignee {
   @@id([taskId, userId])
   @@index([userId])
   @@map("task_assignees")
+}
+
+/// One block of a person's working week.
+///
+/// Stored as minutes past midnight in the PERSON'S OWN zone, not as an
+/// instant and not in UTC. "Zia works 9 to 6 Manila" is a fact about Zia's
+/// clock; converting it to Pacific is a question asked at read time, and the
+/// answer changes twice a year because Pacific observes daylight saving and
+/// Manila does not. Storing an instant would freeze one side of that.
+///
+/// A day can hold more than one block -- a split shift, or a lunch break
+/// carved out of the middle -- which is why this is rows rather than two
+/// columns on the user.
+model UserAvailability {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 0 = Sunday … 6 = Saturday, in the person's own zone.
+  weekday      Int
+  /// Minutes past midnight. 540 = 9:00, 1080 = 18:00.
+  startMinutes Int
+  endMinutes   Int
+  /// "Core hours", "On call" -- optional, shown beside the block.
+  label        String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@map("user_availability")
 }
