@@ -19,6 +19,7 @@ import {
   zonedWallTimeToUtc,
 } from "../src/lib/timezones";
 import { buildMember, overlapWindows } from "../src/lib/team/availability";
+import { buildWeekGrid } from "../src/lib/team/week-grid";
 
 let failures = 0;
 function check(label: string, got: unknown, want: unknown) {
@@ -175,6 +176,71 @@ console.log("\nA week of availability, resolved across the two zones\n");
   check("it starts at 4:00 PM Pacific", formatTimeInZone(shared[0].start, PACIFIC), "4:00 PM");
   check("and ends at 6:00 PM Pacific", formatTimeInZone(shared[0].end, PACIFIC), "6:00 PM");
   check("which is 7:00 AM in Manila", formatTimeInZone(shared[0].start, MANILA), "7:00 AM");
+}
+
+console.log("\nThe week grid — one clock, blocks split at midnight\n");
+{
+  const manilaNine = [1, 2, 3, 4, 5].map((weekday) => ({
+    weekday, startMinutes: 9 * 60, endMinutes: 18 * 60, label: null,
+  }));
+  const pacificEight = [1, 2, 3, 4, 5].map((weekday) => ({
+    weekday, startMinutes: 8 * 60, endMinutes: 17 * 60, label: null,
+  }));
+
+  const grid = buildWeekGrid({
+    members: [
+      { id: "t", name: "Tony", jobTitle: null, email: "t@x", timeZone: PACIFIC, blocks: pacificEight },
+      { id: "z", name: "Zia", jobTitle: null, email: "z@x", timeZone: MANILA, blocks: manilaNine },
+    ],
+    viewerZone: PACIFIC,
+    otherZone: MANILA,
+    now: new Date("2026-09-10T20:00:00Z"),
+  });
+
+  check("seven day columns", grid.days.length, 7);
+  check("the week starts on a Sunday", grid.days[0].weekday, 0);
+  check("an ordinary day is 1440 minutes", grid.days[3].minutes, 1440);
+
+  const tony = grid.lanes.find((l) => l.memberId === "t")!;
+  const zia = grid.lanes.find((l) => l.memberId === "z")!;
+
+  // Tony is in the viewer's own zone: five blocks, none split.
+  check("Tony has five segments", tony.segments.length, 5);
+  check("none of Tony's are continuations", tony.segments.some((s) => s.continued || s.continues), false);
+  const tonyMon = tony.segments.find((s) => s.dayIndex === 1)!;
+  check("Tony's Monday starts a third of the way down", Math.round(tonyMon.topPct), 33);
+  check("and covers 37.5% of the day", Math.round(tonyMon.heightPct * 10) / 10, 37.5);
+
+  // Zia's blocks cross midnight in Pacific, so each becomes two segments.
+  check("Zia's five shifts become ten segments", zia.segments.length, 10);
+  check("half of them are continuations", zia.segments.filter((s) => s.continued).length, 5);
+  check("and half run past midnight", zia.segments.filter((s) => s.continues).length, 5);
+
+  // Her Monday-in-Manila shows as Sunday evening in Pacific: 6pm to midnight.
+  const sundayEvening = zia.segments.find((s) => s.dayIndex === 0 && s.continues)!;
+  check("the evening piece starts at 75% of Sunday", Math.round(sundayEvening.topPct), 75);
+  check("and runs to the end of the day", Math.round(sundayEvening.topPct + sundayEvening.heightPct), 100);
+  check("labelled with the block's real span", `${sundayEvening.startLabel} – ${sundayEvening.endLabel}`, "6:00 PM – 3:00 AM");
+
+  const mondayMorning = zia.segments.find((s) => s.dayIndex === 1 && s.continued)!;
+  check("the morning piece starts at midnight", mondayMorning.topPct, 0);
+  check("and ends at 3am — 12.5% of the day", Math.round(mondayMorning.heightPct * 10) / 10, 12.5);
+
+  check("both axes are labelled", grid.hours.length, 8);
+  check("midnight Pacific is 3:00 PM in Manila", grid.hours[0].otherLabel, "3:00 PM");
+
+  // The transition week: Pacific loses an hour going onto PST on 1 November
+  // 2026, so that Sunday is 25 hours long and positions must follow it.
+  const transition = buildWeekGrid({
+    members: [{ id: "t", name: "Tony", jobTitle: null, email: "t@x", timeZone: PACIFIC, blocks: pacificEight }],
+    viewerZone: PACIFIC,
+    otherZone: MANILA,
+    now: new Date("2026-11-04T20:00:00Z"),
+  });
+  check("the fall-back Sunday is 25 hours", transition.days[0].minutes, 25 * 60);
+  const afterChange = transition.lanes[0].segments.find((s) => s.dayIndex === 1)!;
+  check("Monday after the change is still 1440 minutes", transition.days[1].minutes, 1440);
+  check("and 8am still sits a third of the way down", Math.round(afterChange.topPct), 33);
 }
 
 console.log(`\n${failures === 0 ? "All checks passed." : `${failures} FAILED.`}`);

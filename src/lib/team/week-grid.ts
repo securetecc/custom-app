@@ -1,0 +1,229 @@
+import { buildMember, type StoredBlock } from "./availability";
+import {
+  formatTimeInZone,
+  partsInZone,
+  zonedWallTimeToUtc,
+  type TimeZoneId,
+} from "@/lib/timezones";
+
+/**
+ * A week of everyone's hours, laid out on ONE clock so they can be compared.
+ *
+ * Two things make this more than arithmetic:
+ *
+ *  - A block crosses midnight when read from another zone. Manila's 9-to-6 is
+ *    6pm to 3am in Pacific, which is two segments in two columns, not one bar
+ *    hanging off the bottom of Monday.
+ *  - A day is not always 24 hours. On a daylight-saving change the viewer's
+ *    day is 23 or 25, so positions are a fraction of that day's REAL length
+ *    rather than of a fixed 1440 minutes. Anything else puts every bar on the
+ *    transition day out by an hour.
+ */
+
+export type GridDay = {
+  /** yyyy-mm-dd in the viewer's zone. */
+  date: string;
+  weekday: number;
+  label: string;
+  start: Date;
+  end: Date;
+  minutes: number;
+  isToday: boolean;
+};
+
+export type GridSegment = {
+  dayIndex: number;
+  /** Percent of the day's height, so a 23- or 25-hour day still lines up. */
+  topPct: number;
+  heightPct: number;
+  /** The block's real start and end, in the viewer's zone. */
+  startLabel: string;
+  endLabel: string;
+  /** True when the bar is the tail of one that began the previous day. */
+  continued: boolean;
+  /** True when it runs past midnight into the next column. */
+  continues: boolean;
+  label: string | null;
+};
+
+export type GridLane = {
+  memberId: string;
+  name: string;
+  /** A CSS custom property from the categorical palette. */
+  colorVar: string;
+  zoneAbbr: string;
+  segments: GridSegment[];
+};
+
+export type WeekGrid = {
+  days: GridDay[];
+  lanes: GridLane[];
+  /** Where "now" falls, for the marker line. Null if outside this week. */
+  now: { dayIndex: number; topPct: number } | null;
+  /** Hour lines, labelled in both the viewer's zone and the other one. */
+  hours: { topPct: number; viewerLabel: string; otherLabel: string }[];
+  viewerZone: TimeZoneId;
+  otherZone: TimeZoneId;
+};
+
+/** The five categorical hues, in the order lanes take them. */
+const LANE_COLORS = ["--viz-1", "--viz-3", "--viz-2", "--viz-5", "--viz-4"];
+
+const DAY_MS = 86_400_000;
+
+export type GridMember = {
+  id: string;
+  name: string;
+  jobTitle: string | null;
+  email: string;
+  timeZone: string;
+  blocks: StoredBlock[];
+};
+
+export function buildWeekGrid(args: {
+  members: GridMember[];
+  viewerZone: TimeZoneId;
+  /** The second axis, shown down the right -- usually the other office. */
+  otherZone: TimeZoneId;
+  now: Date;
+}): WeekGrid {
+  const { members, viewerZone, otherZone, now } = args;
+
+  // The viewer's week, Sunday to Saturday, as real instants. Each day is
+  // measured rather than assumed: midnight to midnight is 23, 24 or 25 hours
+  // depending on the date.
+  const here = partsInZone(now, viewerZone);
+  const sundayNoon = new Date(
+    Date.UTC(here.year, here.month - 1, here.day, 12) - here.weekday * DAY_MS,
+  );
+  const weekStart = {
+    year: sundayNoon.getUTCFullYear(),
+    month: sundayNoon.getUTCMonth() + 1,
+    day: sundayNoon.getUTCDate(),
+  };
+
+  const dayStartFor = (offset: number) => {
+    const noon = new Date(
+      Date.UTC(weekStart.year, weekStart.month - 1, weekStart.day + offset, 12),
+    );
+    return zonedWallTimeToUtc(
+      viewerZone,
+      noon.getUTCFullYear(),
+      noon.getUTCMonth() + 1,
+      noon.getUTCDate(),
+      0,
+      0,
+    );
+  };
+
+  const todayIso = `${here.year}-${String(here.month).padStart(2, "0")}-${String(here.day).padStart(2, "0")}`;
+
+  const days: GridDay[] = [];
+  for (let i = 0; i < 7; i++) {
+    const start = dayStartFor(i);
+    const end = dayStartFor(i + 1);
+    const parts = partsInZone(start, viewerZone);
+    const date = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+    days.push({
+      date,
+      weekday: parts.weekday,
+      label: new Intl.DateTimeFormat("en-US", {
+        timeZone: viewerZone,
+        weekday: "short",
+        day: "numeric",
+      }).format(start),
+      start,
+      end,
+      minutes: (end.getTime() - start.getTime()) / 60_000,
+      isToday: date === todayIso,
+    });
+  }
+
+  const weekStartMs = days[0].start.getTime();
+  const weekEndMs = days[6].end.getTime();
+
+  const lanes: GridLane[] = members.map((member, index) => {
+    // Resolve the member's blocks across the previous, current and next week
+    // in THEIR zone, then clip to the viewer's week. Three weeks because a
+    // Manila Monday can belong to a Pacific Sunday, and a Manila Saturday to
+    // a Pacific Friday -- the edges of the viewer's week are fed by the
+    // member's neighbouring ones.
+    const resolved = [-7, 0, 7].flatMap((offsetDays) =>
+      buildMember({
+        user: member,
+        blocks: member.blocks,
+        viewerZone,
+        now: new Date(now.getTime() + offsetDays * DAY_MS),
+      }).days.flatMap((d) => d.blocks),
+    );
+
+    // The three passes overlap, so the same block arrives more than once.
+    const seen = new Set<string>();
+    const unique = resolved.filter((b) => {
+      const key = `${b.start.getTime()}-${b.end.getTime()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const segments: GridSegment[] = [];
+    for (const block of unique) {
+      if (block.end.getTime() <= weekStartMs || block.start.getTime() >= weekEndMs) continue;
+
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+        const day = days[dayIndex];
+        const from = Math.max(block.start.getTime(), day.start.getTime());
+        const to = Math.min(block.end.getTime(), day.end.getTime());
+        if (to <= from) continue;
+
+        const dayMs = day.end.getTime() - day.start.getTime();
+        segments.push({
+          dayIndex,
+          topPct: ((from - day.start.getTime()) / dayMs) * 100,
+          heightPct: ((to - from) / dayMs) * 100,
+          startLabel: formatTimeInZone(block.start, viewerZone),
+          endLabel: formatTimeInZone(block.end, viewerZone),
+          continued: from > block.start.getTime(),
+          continues: to < block.end.getTime(),
+          label: block.label,
+        });
+      }
+    }
+
+    return {
+      memberId: member.id,
+      name: member.name,
+      colorVar: LANE_COLORS[index % LANE_COLORS.length],
+      zoneAbbr: "",
+      segments,
+    };
+  });
+
+  // Where the current moment sits, for the marker line.
+  const todayIndex = days.findIndex((d) => now >= d.start && now < d.end);
+  const nowMarker =
+    todayIndex === -1
+      ? null
+      : {
+          dayIndex: todayIndex,
+          topPct:
+            ((now.getTime() - days[todayIndex].start.getTime()) /
+              (days[todayIndex].end.getTime() - days[todayIndex].start.getTime())) *
+            100,
+        };
+
+  // Hour lines every three hours, labelled on both axes. Read off a real
+  // instant on an ordinary day, so the second axis is right for the season.
+  const reference = days.find((d) => d.minutes === 1440) ?? days[0];
+  const hours = [];
+  for (let hour = 0; hour < 24; hour += 3) {
+    const instant = new Date(reference.start.getTime() + hour * 3_600_000);
+    hours.push({
+      topPct: (hour / 24) * 100,
+      viewerLabel: formatTimeInZone(instant, viewerZone),
+      otherLabel: formatTimeInZone(instant, otherZone),
+    });
+  }
+
+  return { days, lanes, now: nowMarker, hours, viewerZone, otherZone };
+}

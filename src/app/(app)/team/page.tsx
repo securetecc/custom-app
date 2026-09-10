@@ -11,6 +11,8 @@ import {
   zoneAbbreviation,
 } from "@/lib/timezones";
 import { AvailabilityEditor } from "@/components/app/availability-editor";
+import { TeamWeekGrid } from "@/components/app/team-week-grid";
+import { buildWeekGrid } from "@/lib/team/week-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,6 +74,23 @@ export default async function TeamPage() {
     );
 
   const withHours = members.filter((m) => m.weeklyHours > 0);
+
+  // The same hours as the cards below, drawn on one clock so they can be
+  // compared. The second axis is whichever of the two offices the viewer is
+  // NOT in -- a Pacific viewer wants Manila beside their own scale.
+  const grid = buildWeekGrid({
+    members: staff.map((u) => ({
+      id: u.id,
+      name: u.name,
+      jobTitle: u.jobTitle,
+      email: u.email,
+      timeZone: u.timeZone,
+      blocks: u.availability,
+    })),
+    viewerZone,
+    otherZone: viewerZone === MANILA ? PACIFIC : MANILA,
+    now,
+  });
   const shared = overlapWindows(withHours);
   const gapNow = hoursBetween(now, PACIFIC, MANILA);
 
@@ -96,6 +115,20 @@ export default async function TeamPage() {
             {zoneAbbreviation(now, PACIFIC)} — the gap becomes {gapNow === 15 ? "16" : "15"} when
             that changes. Manila does not observe daylight saving at all.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">This week</CardTitle>
+          <CardDescription>
+            Everyone&apos;s hours on one clock — yours down the left, {viewerZone === MANILA ? "Pacific" : "Manila"}{" "}
+            down the right. The full day is drawn because a {viewerZone === MANILA ? "Pacific" : "Manila"}{" "}
+            shift lands in your evening, and cropping to office hours would hide it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TeamWeekGrid grid={grid} now={now} />
         </CardContent>
       </Card>
 
