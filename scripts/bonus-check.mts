@@ -147,26 +147,32 @@ if (!report) {
   check("no commission rows", report.commission.rows.length, 0);
 }
 
-console.log("\nThe re-based January ladder\n");
+console.log("\nJanuary 2027 keeps the original ladder (Tony's decision B)\n");
 {
-  // x1.25, the same factor the rate moved -- so read in HOURS the ladder is
-  // unchanged, which is the whole point of re-basing it.
-  const janBands = setOf("2027-01");
-  check("the January ladder has the same number of rungs", janBands.length, bands.length);
-  const janRate = (dollars: number) => bonusFor(toCents(dollars), janBands).ratePercent;
-  const janBonus = (dollars: number) => fromCents(bonusFor(toCents(dollars), janBands).bonusCents);
+  // Tony: "The rate increase rewards ALL of us." The ladder is NOT re-based
+  // for the new rate card, so the same hours climb higher on the same dollar
+  // thresholds -- that is the intent, not an oversight. Top band stays at
+  // $25,000, which at $125/hr is 200 hours rather than 250.
+  check("no January ladder exists, so the August one stays in force", setOf("2027-01").length, 0);
 
-  check("the top band opens at $31,250 exactly", janRate(31250), 10);
-  check("and a cent below it is still 7.50%", janRate(31249.99), 7.5);
-  check("$12,500 pays nothing", janRate(12500), 0);
-  check("a cent above it reaches 1.25%", janRate(12500.01), 1.25);
-  check("$40,000 pays $4,000", janBonus(40000), 4000);
+  check("$25,000 still opens the 10% band", rateAt(25000), 10);
+  check("and a cent below it is 7.50%", rateAt(24999.99), 7.5);
 
-  // 143 hours lands on the same rung before and after, which is the test that
-  // proves the re-basing rewards work rather than the price of work.
-  check("143h reaches 2.50% at the old rates", rateAt(14125), 2.5);
-  check("and the same 143h reaches 2.50% at the new ones", janRate(14125 * 1.25), 2.5);
-  check("the bonus rises only because the base did", janBonus(14125 * 1.25), 441.41);
+  // The same 143 hours as August, at the new card. The base rises 25% and,
+  // on an unchanged ladder, crosses two rungs.
+  check("143h at $100 reaches 2.50%", rateAt(14125), 2.5);
+  check("the same 143h at $125 reaches 5.00%", rateAt(14125 * 1.25), 5);
+  check("paying $882.81 rather than $353.13", bonusAt(14125 * 1.25), 882.81);
+
+  // The top band is 200 hours of $125 work.
+  check("200 hours at $125 reaches the top band", rateAt(200 * 125), 10);
+  check("199 hours at $125 does not", rateAt(199 * 125), 7.5);
+
+  // The report itself resolves January against the August vintage.
+  const bbz = await prisma.user.findFirstOrThrow({ where: { isBbzStudio: true } });
+  const jan = await withRLS(bbz.authUserId, (tx) => loadCompensationReport(tx, "2027-01"));
+  check("the January report reads the 2026-08 ladder", jan?.bandsEffectiveFrom, "2026-08");
+  check("and shows the ceiling at $25,000", jan?.ceiling?.at, 25000);
 }
 
 console.log("\nThe January 2027 rate card\n");

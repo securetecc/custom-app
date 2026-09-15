@@ -1,31 +1,45 @@
 /**
- * The January 2027 bonus ladder, re-based for the new rate card.
+ * Re-bases the bonus ladder by a factor, as a NEW dated set.
  *
- * WHY the thresholds move at all: the ladder is meant to reward more work,
- * not a higher price for the same work. From 1 January the standard rate goes
- * $100 -> $125, so an unchanged month of hours produces a qualifying base 25%
- * larger and would climb a rung or two without anybody doing anything. The
- * schedule says the thresholds get re-based whenever the rate card changes,
- * and this is that.
+ * NOT RUN FOR JANUARY 2027. A x1.25 re-base was built and seeded for the
+ * January rate card, then withdrawn: Tony chose to keep the original ladder,
+ * because "the rate increase rewards ALL of us" -- the same hours at $125
+ * are meant to climb higher on the same dollar thresholds. The 2027-01 set
+ * was deleted and January calculates against the 2026-08 ladder.
  *
- * THE BASIS: every threshold is multiplied by 1.25, which is the same factor
- * the rate moved. Read in hours rather than dollars, the ladder is unchanged
- * -- 100 hours reached the first rung before and reaches it after. That is
- * the only re-basing that leaves the effort behind each rung untouched, and
- * it is arithmetic anyone can check rather than a set of numbers picked to
- * feel about right.
+ * Kept as a tool for a future re-base, which is a business decision rather
+ * than an automatic consequence of a rate change. So there is deliberately no
+ * default month and no default factor: both must be named, and the script
+ * refuses to run without them rather than quietly re-applying a ladder that
+ * was considered and rejected.
  *
- * The August set is left exactly as it is. A closed month must not restate.
+ * The basis, when one is wanted: multiplying every threshold by the factor
+ * the rate moved keeps the ladder identical when read in hours.
  *
- *   npx tsx scripts/rebase-bonus-bands.mts
- *   npx tsx scripts/rebase-bonus-bands.mts --commit
+ * Existing sets are never edited. A closed month must not restate.
+ *
+ *   npx tsx scripts/rebase-bonus-bands.mts --from 2028-01 --factor 1.1
+ *   npx tsx scripts/rebase-bonus-bands.mts --from 2028-01 --factor 1.1 --commit
  */
 import "dotenv/config";
 import { prisma } from "../src/lib/db/prisma";
 
+const arg = (name: string) => {
+  const i = process.argv.indexOf(name);
+  return i === -1 ? undefined : process.argv[i + 1];
+};
+
 const commit = process.argv.includes("--commit");
-const FROM_MONTH = "2027-01";
-const FACTOR = 1.25;
+const FROM_MONTH = arg("--from");
+const FACTOR = Number(arg("--factor"));
+
+if (!FROM_MONTH || !/^\d{4}-\d{2}$/.test(FROM_MONTH) || !Number.isFinite(FACTOR) || FACTOR <= 0) {
+  console.log(
+    "Name the month and the factor explicitly, e.g. --from 2028-01 --factor 1.1\n" +
+      "There is no default: January 2027 was deliberately NOT re-based.",
+  );
+  process.exit(1);
+}
 
 const org = await prisma.organization.findFirstOrThrow();
 const current = await prisma.bonusBand.findMany({
