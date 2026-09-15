@@ -142,6 +142,29 @@ export function isGoogleConfigured(): boolean {
   return readGoogleConfig() !== null;
 }
 
+/**
+ * The service account's own credentials, with no impersonation target.
+ *
+ * Google Analytics is not a Workspace API: access is granted by adding the
+ * service account to the GA4 property as a user, so it authenticates as
+ * ITSELF. Requiring GOOGLE_IMPERSONATED_USER here would tie Analytics to a
+ * setting it never uses.
+ */
+function readServiceAccount(): { clientEmail: string; privateKey: string } | null {
+  if (safeMode()) return null;
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
+  const rawKey = process.env.GOOGLE_PRIVATE_KEY;
+  if (!clientEmail || !rawKey) return null;
+  return { clientEmail, privateKey: normalizePrivateKey(rawKey) };
+}
+
+/** A token for the service account acting as itself (no domain-wide delegation). */
+export async function getServiceAccountToken(scope: string): Promise<string> {
+  const account = readServiceAccount();
+  if (!account) throw new GoogleNotConfiguredError();
+  return mintAccessToken({ ...account, scope });
+}
+
 function base64Url(input: Buffer | string): string {
   const buf = typeof input === "string" ? Buffer.from(input, "utf8") : input;
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -156,16 +179,30 @@ function base64Url(input: Buffer | string): string {
 export async function getGoogleAccessToken(scope = GMAIL_SCOPE): Promise<string> {
   const config = readGoogleConfig();
   if (!config) throw new GoogleNotConfiguredError();
+  return mintAccessToken({
+    clientEmail: config.clientEmail,
+    privateKey: config.privateKey,
+    subject: config.impersonate, // the DWD impersonation target
+    scope,
+  });
+}
 
+async function mintAccessToken(args: {
+  clientEmail: string;
+  privateKey: string;
+  /** Omitted when the service account acts as itself. */
+  subject?: string;
+  scope: string;
+}): Promise<string> {
   const { createSign } = await import("node:crypto");
   const now = Math.floor(Date.now() / 1000);
 
   const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = base64Url(
     JSON.stringify({
-      iss: config.clientEmail,
-      sub: config.impersonate, // the DWD impersonation target
-      scope,
+      iss: args.clientEmail,
+      ...(args.subject ? { sub: args.subject } : {}),
+      scope: args.scope,
       aud: TOKEN_URL,
       iat: now,
       exp: now + 3600,
@@ -177,7 +214,7 @@ export async function getGoogleAccessToken(scope = GMAIL_SCOPE): Promise<string>
 
   let signature: string;
   try {
-    signature = base64Url(signer.sign(config.privateKey));
+    signature = base64Url(signer.sign(args.privateKey));
   } catch (err) {
     // OpenSSL reports a malformed key as "error:1E08010C:DECODER
     // routines::unsupported", which says nothing about what to fix. Every
