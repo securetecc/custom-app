@@ -21,8 +21,20 @@ export function recaptchaSiteKey(): string | null {
   return process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.trim() || null;
 }
 
+/**
+ * Enforced only when BOTH keys exist.
+ *
+ * Checking the secret alone was a trap: environment variables are added one
+ * at a time, and a deploy that picked up the secret before the site key would
+ * have had the server demanding a token the page never sends -- rejecting
+ * every client's ticket until the second key arrived. With either key
+ * missing the check stays off and the IP rate limiter is what stands in front
+ * of the form, exactly as before reCAPTCHA existed.
+ */
 export function recaptchaConfigured(): boolean {
-  return Boolean(process.env.RECAPTCHA_SECRET_KEY?.trim());
+  return Boolean(
+    process.env.RECAPTCHA_SECRET_KEY?.trim() && process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.trim(),
+  );
 }
 
 export type RecaptchaResult = { ok: true; score?: number } | { ok: false; error: string };
@@ -31,8 +43,9 @@ export async function verifyRecaptcha(
   token: string | null,
   expectedAction: string,
 ): Promise<RecaptchaResult> {
-  const secret = process.env.RECAPTCHA_SECRET_KEY?.trim();
-  if (!secret) return { ok: true };
+  // Half-configured is treated as not configured -- see recaptchaConfigured.
+  if (!recaptchaConfigured()) return { ok: true };
+  const secret = process.env.RECAPTCHA_SECRET_KEY!.trim();
 
   if (!token) {
     return { ok: false, error: "Couldn't verify that you're human. Reload the page and try again." };
