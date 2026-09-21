@@ -121,7 +121,8 @@ export async function loadReports(tx: TxClient, range: ResolvedRange): Promise<R
       _count: true,
     }),
     tx.serviceType.findMany({ select: { id: true, code: true, label: true } }),
-    tx.client.findMany({ select: { id: true, name: true, activeStatus: true } }),
+    // Internal work is never billed, so it has no place in a revenue report.
+    tx.client.findMany({ where: { isInternal: false }, select: { id: true, name: true, activeStatus: true } }),
     // Deliberately NOT limited to the selected range. "How fast does this
     // client pay" is a property of the relationship, and a one-month window
     // would answer it from one or two invoices -- or none at all.

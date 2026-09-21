@@ -84,6 +84,7 @@ export default async function EditClientPage({
                 ? client.relationshipStartedOn.toISOString().slice(0, 10)
                 : null,
               activeStatus: client.activeStatus,
+              isInternal: client.isInternal,
               notes: client.notes ?? "",
             }}
           />
@@ -121,7 +122,7 @@ export default async function EditClientPage({
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
+                    Recurring · {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
                     {charge.itemType ? ` · ${ADDON_ITEM_TYPE_LABELS[charge.itemType]}` : ""}
                     {charge.quantity !== null && charge.unitPrice !== null
                       ? ` · ${charge.quantity} × ${formatCurrency(Number(charge.unitPrice))}`

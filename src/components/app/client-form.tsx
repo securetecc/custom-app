@@ -60,6 +60,7 @@ export function ClientForm({
       leadSourceNote: null,
       relationshipStartedOn: null,
       activeStatus: true,
+      isInternal: false,
       notes: "",
       ...defaultValues,
     },
@@ -87,6 +88,7 @@ export function ClientForm({
   const serviceArea = watch("serviceArea");
   const leadSource = watch("leadSource");
   const activeStatus = watch("activeStatus");
+  const isInternal = watch("isInternal");
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -314,6 +316,22 @@ export function ClientForm({
               </SelectContent>
             </Select>
           </div>
+          <label className="flex items-start gap-2 text-sm sm:col-span-2">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={isInternal}
+              onChange={(e) => setValue("isInternal", e.target.checked)}
+            />
+            <span>
+              SecureTECC internal work
+              <span className="block text-xs text-muted-foreground">
+                For SecureTECC&apos;s own and shared jobs. Time logged here is always non-billable and
+                the client is left out of invoicing and revenue reports.
+              </span>
+            </span>
+          </label>
+
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea id="notes" rows={4} {...register("notes")} />

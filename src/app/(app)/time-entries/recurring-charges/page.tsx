@@ -108,7 +108,9 @@ export default async function RecurringChargesPage({
               <TableHead>Description</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Frequency</TableHead>
+              <TableHead className="text-right">Qty × Unit</TableHead>
               <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Start</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-20" />
@@ -129,10 +131,20 @@ export default async function RecurringChargesPage({
                   {charge.itemType ? ADDON_ITEM_TYPE_LABELS[charge.itemType] : "—"}
                 </TableCell>
                 <TableCell>
-                  {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
+                  Recurring · {charge.billingFrequency === "Annual" ? "Annual (January)" : "Monthly"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {charge.quantity !== null && charge.unitPrice !== null
+                    ? `${charge.quantity} × ${formatCurrency(Number(charge.unitPrice))}`
+                    : "—"}
                 </TableCell>
                 <TableCell className="text-right">
                   {formatCurrency(Number(charge.amount))}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {charge.startDate
+                    ? new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" }).format(charge.startDate)
+                    : "—"}
                 </TableCell>
                 <TableCell className="max-w-[16rem] text-xs text-muted-foreground">
                   {charge.notes ?? "—"}
@@ -170,7 +182,7 @@ export default async function RecurringChargesPage({
             ))}
             {charges.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={12} className="py-10 text-center text-muted-foreground">
                   No recurring charges yet.
                 </TableCell>
               </TableRow>

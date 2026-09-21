@@ -31,7 +31,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type ClientOption = { id: string; name: string; shortName: string };
+type ClientOption = { id: string; name: string; shortName: string; isInternal?: boolean };
 type ServiceTypeOption = {
   id: string;
   code: string;
@@ -46,6 +46,7 @@ export function TimeEntryDialog({
   clients,
   serviceTypes,
   staff,
+  projects = [],
   trigger,
   open: controlledOpen,
   onOpenChange,
@@ -56,6 +57,8 @@ export function TimeEntryDialog({
   serviceTypes: ServiceTypeOption[];
   /** Everyone the work could be attributed to. Empty hides the field. */
   staff?: { id: string; name: string }[];
+  /** Projects already used, offered as suggestions for the chosen client. */
+  projects?: { clientId: string; project: string }[];
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -84,6 +87,7 @@ export function TimeEntryDialog({
       rateOverride: null,
       travelMinutes: null,
       performedByUserId: null,
+      project: null,
       ...defaultValues,
     },
   });
@@ -110,6 +114,10 @@ export function TimeEntryDialog({
   const billableStatus = watch("billableStatus");
   const performedByUserId = watch("performedByUserId");
   const selectedServiceType = serviceTypes.find((st) => st.id === serviceTypeId);
+  const selectedClient = clients.find((c) => c.id === clientId);
+  const projectSuggestions = [
+    ...new Set(projects.filter((p) => p.clientId === clientId).map((p) => p.project)),
+  ];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -288,6 +296,33 @@ export function TimeEntryDialog({
                 </p>
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="project">Project (optional)</Label>
+              <Input
+                id="project"
+                list="project-suggestions"
+                placeholder="e.g. CMMC Level 1, M365 migration"
+                autoComplete="off"
+                {...register("project", { setValueAs: (v) => (v === "" || v == null ? null : String(v)) })}
+              />
+              <datalist id="project-suggestions">
+                {projectSuggestions.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                Splits one client&apos;s work into separate jobs without inventing extra clients.
+              </p>
+            </div>
+
+            {selectedClient?.isInternal && (
+              <p className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
+                {selectedClient.name} is SecureTECC&apos;s own work, so this entry is saved as
+                non-billable whatever the status above says. Work that should be billed to a client
+                belongs under that client.
+              </p>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>

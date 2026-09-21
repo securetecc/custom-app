@@ -20,6 +20,13 @@ import { resolveRate, toRate } from "@/lib/billing/rates";
  * callback is used elsewhere.
  */
 
+/**
+ * The floor under the monthly target. Tony set $10,000 as the minimum the
+ * business should be producing in billable time; a lower saved goal would
+ * make a thin month look on track.
+ */
+export const MIN_MONTHLY_TARGET = 10_000;
+
 export type RangeKey = "mtd" | "3m" | "6m" | "12m" | "custom";
 
 export const RANGE_LABELS: Record<Exclude<RangeKey, "custom">, string> = {
@@ -162,7 +169,15 @@ export type DashboardMetrics = {
     missingDays: string[];
   };
   goal: {
+    /** The monthly target, never below MIN_MONTHLY_TARGET. */
     target: number;
+    /**
+     * Billable time logged this month, at each entry's rate -- invoiced or
+     * not. The number the target is measured against.
+     */
+    billable: number;
+    billableHours: number;
+    /** Invoices raised this month. Shown beside the goal, never as progress on it. */
     invoiced: number;
     /** Billable, not-yet-invoiced value sitting in time entries. */
     pipeline: number;
@@ -599,10 +614,12 @@ export async function loadDashboardMetrics(
       missingDays: missingWeekdays(recentEntryDates.map((e) => e.date), dayStart),
     },
     goal: {
-      target: monthlyGoal,
+      target: Math.max(MIN_MONTHLY_TARGET, monthlyGoal),
+      billable: Number(monthBillableValue.toFixed(2)),
+      billableHours: Number(monthBillableHours.toFixed(2)),
       invoiced: invoicedThisMonth,
       pipeline: unbilledValue,
-      ratio: monthlyGoal > 0 ? invoicedThisMonth / monthlyGoal : 0,
+      ratio: monthBillableValue / Math.max(MIN_MONTHLY_TARGET, monthlyGoal),
       monthLabel: formatMonthYear(monthStart),
       daysElapsed,
       daysInMonth,

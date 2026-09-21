@@ -4,7 +4,8 @@ import { InvoiceGenerationFlow } from "@/components/app/invoice-generation-flow"
 export default async function NewInvoicePage() {
   const { data: clients } = await requireOrgContext((tx) =>
     tx.client.findMany({
-      where: { activeStatus: true },
+      // SecureTECC's own work is never invoiced.
+      where: { activeStatus: true, isInternal: false },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

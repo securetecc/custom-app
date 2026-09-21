@@ -50,7 +50,7 @@ export async function createTimeEntry(
       // actually driven, so changing the rule later cannot rewrite history.
       const client = await tx.client.findUniqueOrThrow({
         where: { id: data.clientId },
-        select: { serviceArea: true },
+        select: { serviceArea: true, isInternal: true },
       });
       const { hours: durationHours } = billableHours({
         workedHours: data.durationHours,
@@ -68,9 +68,11 @@ export async function createTimeEntry(
           date: new Date(data.date),
           durationHours,
           description: data.description,
-          billableStatus: data.billableStatus,
+          // SecureTECC's own work is never billable, whatever the form said.
+          billableStatus: client.isInternal ? "NonBillable" : data.billableStatus,
           rateOverride: data.rateOverride,
           travelMinutes: data.travelMinutes,
+          project: data.project || null,
           loggedByUserId: appUser.id,
           // Defaults to whoever is logging it. RLS scopes the lookup, so a
           // submitted id from another organisation resolves to nobody and
@@ -108,7 +110,7 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
       });
       const client = await tx.client.findUniqueOrThrow({
         where: { id: data.clientId },
-        select: { serviceArea: true },
+        select: { serviceArea: true, isInternal: true },
       });
       const { hours: durationHours } = billableHours({
         workedHours: data.durationHours,
@@ -129,9 +131,12 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
           date: new Date(data.date),
           durationHours,
           description: data.description,
-          billableStatus: data.billableStatus,
+          billableStatus: client.isInternal ? "NonBillable" : data.billableStatus,
           rateOverride: data.rateOverride,
           travelMinutes: data.travelMinutes,
+          // Absent (not null) means the caller never showed the field, so
+          // leave whatever project the entry already had.
+          ...(data.project === undefined ? {} : { project: data.project || null }),
           performedByUserId: await resolvePerformedBy(tx, data.performedByUserId, appUser.id),
         },
       });

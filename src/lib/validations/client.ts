@@ -65,6 +65,8 @@ export const clientFormSchema = z.object({
   // stays required, which useForm<ClientFormValues> can't reconcile. The
   // form component supplies the default via useForm's defaultValues instead.
   activeStatus: z.boolean(),
+  /// SecureTECC's own work. Entries against it are never billable.
+  isInternal: z.boolean(),
   notes: z.string().optional().or(z.literal("")),
 });
 

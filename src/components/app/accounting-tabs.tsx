@@ -9,6 +9,7 @@ const TABS = [
   { href: "/accounting/aging", label: "Money owed" },
   { href: "/accounting/payments", label: "Paid & unpaid" },
   { href: "/accounting/profitability", label: "Revenue vs cost" },
+  { href: "/accounting/monthly", label: "Monthly position" },
 ];
 
 /**

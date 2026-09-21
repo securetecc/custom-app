@@ -98,7 +98,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <RevenueChart data={metrics.revenue} goal={metrics.goal.target} />
+          {/* No target line: the target is for billable TIME, and drawing it
+              across invoice bars would present one as progress on the other. */}
+          <RevenueChart data={metrics.revenue} />
         </CardContent>
       </Card>
 

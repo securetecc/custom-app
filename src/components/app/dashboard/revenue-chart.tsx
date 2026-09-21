@@ -25,7 +25,7 @@ const SERIES = [
  * little. Layout is a viewBox with preserveAspectRatio="none" disabled, so it
  * scales responsively without distorting text.
  */
-export function RevenueChart({ data, goal }: { data: RevenueBucket[]; goal: number }) {
+export function RevenueChart({ data, goal = 0 }: { data: RevenueBucket[]; goal?: number }) {
   const [hover, setHover] = useState<number | null>(null);
 
   const W = 760;
@@ -57,17 +57,19 @@ export function RevenueChart({ data, goal }: { data: RevenueBucket[]; goal: numb
             {s.label}
           </span>
         ))}
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-0 w-4 border-t-2 border-dashed border-foreground/40" />
-          Goal {usd(goal)}
-        </span>
+        {goal > 0 && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="h-0 w-4 border-t-2 border-dashed border-foreground/40" />
+            Goal {usd(goal)}
+          </span>
+        )}
       </div>
 
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="h-[260px] w-full"
         role="img"
-        aria-label={`Invoiced value by month, stacked by status, against a ${usd(goal)} monthly goal`}
+        aria-label={`Invoiced value by month, stacked by status${goal > 0 ? `, against a ${usd(goal)} monthly goal` : ""}`}
       >
         {ticks.map((t) => (
           <g key={t}>

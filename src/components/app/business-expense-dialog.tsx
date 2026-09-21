@@ -15,6 +15,7 @@ import {
   createBusinessExpense,
   updateBusinessExpense,
 } from "@/app/(app)/settings/expenses/actions";
+import { EXPENSE_CATEGORIES } from "@/lib/billing/expense-categories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,6 +98,7 @@ export function BusinessExpenseDialog({
   }
 
   const frequency = watch("frequency");
+  const category = watch("category");
   const clientId = watch("clientId");
   const activeStatus = watch("activeStatus");
 
@@ -131,11 +133,26 @@ export function BusinessExpenseDialog({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  placeholder="Software, VoIP, PSA…"
-                  {...register("category", { setValueAs: (v) => (v === "" ? null : v) })}
-                />
+                <Select
+                  value={category ?? ""}
+                  onValueChange={(v) => setValue("category", v ? String(v) : null)}
+                >
+                  <SelectTrigger id="category">
+                    <SelectValue>{(value) => (value ? String(value) : "Choose a category")}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                    {/* An older free-text category stays selectable so editing
+                        the expense doesn't silently change it. */}
+                    {category && !(EXPENSE_CATEGORIES as readonly string[]).includes(category) && (
+                      <SelectItem value={category}>{category} (reported as Other)</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -3,37 +3,38 @@ import { ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import type { DashboardMetrics } from "@/lib/dashboard/metrics";
+import { formatHours } from "@/lib/format";
 
 const usd = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
 /**
- * Progress toward the monthly invoicing target.
+ * This month's billable time against the monthly target.
  *
- * A meter, not a pie or a gauge: the job is "one ratio against a limit", and a
- * meter is the form that reads at a glance without needing a legend. The
- * pace marker is what makes it actionable -- 60% of target on the 20th of a
- * 31-day month is behind, and the bar alone can't say that.
+ * The hero figure is billable TIME -- hours logged this month at each
+ * client's rate, invoiced or not -- because that is what the business
+ * actually produced. Invoices raised are a separate fact and are shown
+ * underneath as one, never as progress toward the target: an invoice can
+ * bill last month's work, and a month's work can be invoiced next month.
+ *
+ * A meter, not a gauge: one ratio against a limit. The pace marker is what
+ * makes it actionable -- 60% of target on the 20th of a 31-day month is
+ * behind, and the bar alone can't say that.
  */
 export function GoalMeter({ goal }: { goal: DashboardMetrics["goal"] }) {
-  const pct = goal.target > 0 ? goal.invoiced / goal.target : 0;
+  const pct = goal.target > 0 ? goal.billable / goal.target : 0;
   const filled = Math.min(1, Math.max(0, pct));
   const pacePct = goal.daysInMonth > 0 ? goal.daysElapsed / goal.daysInMonth : 0;
   const expected = goal.target * pacePct;
-  const delta = goal.invoiced - expected;
+  const delta = goal.billable - expected;
   const onTrack = delta >= 0;
-
-  // Where the invoiced bar ends, plus what the unbilled pipeline would add if
-  // it were all invoiced today. Shown as a lighter continuation, never folded
-  // into the headline number -- it is not revenue yet.
-  const pipelineEnd = Math.min(1, (goal.invoiced + goal.pipeline) / (goal.target || 1));
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <CardTitle className="text-base font-medium text-muted-foreground">
-            {goal.monthLabel} invoicing goal
+            {goal.monthLabel} billable time
           </CardTitle>
           <span className="text-xs text-muted-foreground">
             Day {goal.daysElapsed} of {goal.daysInMonth}
@@ -42,11 +43,12 @@ export function GoalMeter({ goal }: { goal: DashboardMetrics["goal"] }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          {/* Hero figure: the one number this card exists to show. */}
           <span className="text-4xl font-semibold tabular-nums tracking-tight">
-            {usd(goal.invoiced)}
+            {usd(goal.billable)}
           </span>
-          <span className="text-sm text-muted-foreground">of {usd(goal.target)}</span>
+          <span className="text-sm text-muted-foreground">
+            of {usd(goal.target)} target · {formatHours(goal.billableHours)} billable
+          </span>
           <span className="ml-auto text-sm font-medium tabular-nums">
             {Math.round(pct * 100)}%
           </span>
@@ -57,22 +59,16 @@ export function GoalMeter({ goal }: { goal: DashboardMetrics["goal"] }) {
             className="relative h-3 w-full overflow-hidden rounded-full"
             style={{ background: "var(--viz-track)" }}
             role="meter"
-            aria-valuenow={Math.round(goal.invoiced)}
+            aria-valuenow={Math.round(goal.billable)}
             aria-valuemin={0}
             aria-valuemax={Math.round(goal.target)}
-            aria-label={`${goal.monthLabel} invoicing: ${usd(goal.invoiced)} of ${usd(goal.target)}`}
+            aria-label={`${goal.monthLabel} billable time: ${usd(goal.billable)} of ${usd(goal.target)}`}
           >
-            {goal.pipeline > 0 && (
-              <div
-                className="absolute inset-y-0 left-0 rounded-full opacity-30"
-                style={{ width: `${pipelineEnd * 100}%`, background: "var(--viz-teal)" }}
-              />
-            )}
             <div
               className="absolute inset-y-0 left-0 rounded-full"
               style={{ width: `${filled * 100}%`, background: "var(--viz-teal)" }}
             />
-            {/* Pace marker: where you'd be if invoicing were spread evenly. */}
+            {/* Pace marker: where you'd be if the work were spread evenly. */}
             {pacePct > 0 && pacePct < 1 && (
               <div
                 className="absolute inset-y-0 w-0.5 bg-foreground/45"
@@ -91,32 +87,23 @@ export function GoalMeter({ goal }: { goal: DashboardMetrics["goal"] }) {
               {usd(Math.abs(delta))} vs {usd(expected)} expected by today
             </span>
             <span className="text-muted-foreground">
-              {usd(Math.max(0, goal.target - goal.invoiced))} to go
+              {usd(Math.max(0, goal.target - goal.billable))} to go
             </span>
           </div>
         </div>
 
-        {/* Straight to this month's invoicing, not the generic Reports page:
-            the question the meter raises is "what is behind this figure",
-            and the answer is the current month's invoices by client. */}
-        <Link
-          href="/reports?range=mtd"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          View invoicing reports
-          <ArrowRight className="ml-1 h-4 w-4" />
-        </Link>
-
-        {goal.pipeline > 0 && (
-          <p className="border-t pt-3 text-xs text-muted-foreground">
-            <span
-              className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle opacity-30"
-              style={{ background: "var(--viz-teal)" }}
-            />
-            {usd(goal.pipeline)} in unbilled billable time isn&apos;t counted above — invoicing it
-            would put the month at {usd(goal.invoiced + goal.pipeline)}.
-          </p>
-        )}
+        {/* Kept visibly apart from the figure above: invoicing is its own
+            number, not progress toward the billable-time target. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-xs text-muted-foreground">
+          <span>
+            Invoiced this month (separate from billable time):{" "}
+            <span className="font-medium tabular-nums text-foreground">{usd(goal.invoiced)}</span>
+          </span>
+          <Link href="/accounting/to-bill" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            What&apos;s waiting to bill
+            <ArrowRight className="ml-1 h-4 w-4" />
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );

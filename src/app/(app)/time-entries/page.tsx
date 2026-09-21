@@ -31,18 +31,20 @@ export default async function TimeEntriesPage({
     start?: string;
     end?: string;
     performedBy?: string;
+    project?: string;
   }>;
 }) {
   const params = await searchParams;
   const clientId = params.client ?? "all";
   const performedBy = params.performedBy ?? "all";
+  const project = params.project?.trim() || null;
   const range: DateRangePreset = isDateRangePreset(params.range) ? params.range : "all";
   const start = params.start ?? "";
   const end = params.end ?? "";
   const dateRange = resolveDateRange(range, start, end);
 
   const {
-    data: [entries, clients, serviceTypes, staff],
+    data: [entries, clients, serviceTypes, staff, projects],
   } = await requireOrgContext((tx) =>
     Promise.all([
       tx.timeEntry.findMany({
@@ -50,6 +52,7 @@ export default async function TimeEntriesPage({
           ...(clientId !== "all" ? { clientId } : {}),
           ...(performedBy !== "all" ? { performedByUserId: performedBy } : {}),
           ...(dateRange ? { date: dateRange } : {}),
+          ...(project ? { project } : {}),
         },
         orderBy: { date: "desc" },
         take: 200,
@@ -63,10 +66,23 @@ export default async function TimeEntriesPage({
       tx.client.findMany({ where: { activeStatus: true }, orderBy: { name: "asc" } }),
       tx.serviceType.findMany({ orderBy: { code: "asc" } }),
       tx.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      // Every project already used, per client -- offered as suggestions so
+      // "CMMC Level 1" is not also typed as "CMMC L1" next week.
+      tx.timeEntry.findMany({
+        where: { project: { not: null } },
+        distinct: ["clientId", "project"],
+        select: { clientId: true, project: true },
+      }),
     ]),
   );
 
-  const clientOptions = clients.map((c) => ({ id: c.id, name: c.name, shortName: c.shortName }));
+  const clientOptions = clients.map((c) => ({
+    id: c.id,
+    name: c.name,
+    shortName: c.shortName,
+    isInternal: c.isInternal,
+  }));
+  const projectOptions = projects.flatMap((p) => (p.project ? [{ clientId: p.clientId, project: p.project }] : []));
   const serviceTypeOptions = serviceTypes.map((st) => ({
     id: st.id,
     code: st.code,
@@ -106,6 +122,7 @@ export default async function TimeEntriesPage({
             clients={clientOptions}
             serviceTypes={serviceTypeOptions}
             staff={staff}
+            projects={projectOptions}
             trigger={
               <Button>
                 <Plus className="mr-1 h-4 w-4" /> Log time
@@ -114,6 +131,22 @@ export default async function TimeEntriesPage({
           />
         </div>
       </div>
+
+      {project && (
+        <p className="text-sm text-muted-foreground">
+          Showing project <span className="font-medium text-foreground">{project}</span> only ·{" "}
+          <Link
+            href={`/time-entries?${new URLSearchParams(
+              Object.entries({ ...params, project: undefined }).filter(
+                (kv): kv is [string, string] => typeof kv[1] === "string",
+              ),
+            )}`}
+            className="underline underline-offset-2"
+          >
+            show all
+          </Link>
+        </p>
+      )}
 
       <TimeEntryFilters
         clientId={clientId}
@@ -150,6 +183,14 @@ export default async function TimeEntriesPage({
                 <TableCell className="font-mono text-xs">{entry.serviceType.code}</TableCell>
                 <TableCell>{entry.durationHours.toString()}</TableCell>
                 <TableCell className="max-w-xs truncate" title={entry.description}>
+                  {entry.project && (
+                    <Link
+                      href={`/time-entries?client=${entry.clientId}&project=${encodeURIComponent(entry.project)}`}
+                      className="mr-1.5"
+                    >
+                      <Badge variant="outline">{entry.project}</Badge>
+                    </Link>
+                  )}
                   {entry.description}
                 </TableCell>
                 <TableCell>{BILLABLE_STATUS_LABELS[entry.billableStatus]}</TableCell>
@@ -178,8 +219,10 @@ export default async function TimeEntriesPage({
                         entry.rateOverride === null ? null : Number(entry.rateOverride),
                       travelMinutes: entry.travelMinutes,
                       performedByUserId: entry.performedByUser.id,
+                      project: entry.project,
                     }}
                     staff={staff}
+                    projects={projectOptions}
                     trigger={
                       <Button variant="ghost" size="icon-sm">
                         <Pencil className="h-4 w-4" />

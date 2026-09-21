@@ -22,6 +22,9 @@ export const timeEntryFormSchema = z.object({
   /// it required would have made those two paths fail validation and refuse
   /// to save, silently, on a field the person filling them never sees.
   performedByUserId: z.string().nullish(),
+  /// Optional project within the client ("CMMC Level 1"). Nullish for the
+  /// same reason as performedByUserId: the voice and AI paths never send it.
+  project: z.string().trim().max(60).nullish(),
 });
 
 export type TimeEntryFormValues = z.infer<typeof timeEntryFormSchema>;
