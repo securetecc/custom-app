@@ -3,6 +3,7 @@ import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import {
   buildMember,
+  describeException,
   overlapWindows,
   pairOverlaps,
   windowHours,
@@ -18,6 +19,7 @@ import {
   zoneAbbreviation,
 } from "@/lib/timezones";
 import { AvailabilityEditor } from "@/components/app/availability-editor";
+import { AvailabilityExceptions } from "@/components/app/availability-exceptions";
 import { TeamWeekGrid } from "@/components/app/team-week-grid";
 import { buildWeekGrid } from "@/lib/team/week-grid";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +38,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default async function TeamPage() {
   const { appUser, authUserId } = await requireOrgContext();
   const now = new Date();
+  // A day of slack either side of "today" covers every zone on the team.
+  const since = new Date(now.getTime() - 2 * 86_400_000).toISOString().slice(0, 10);
 
   const staff = await withRLS(authUserId, (tx) =>
     tx.user.findMany({
@@ -49,6 +53,18 @@ export default async function TeamPage() {
         availabilityNote: true,
         availability: {
           select: { weekday: true, startMinutes: true, endMinutes: true, label: true },
+        },
+        availabilityExceptions: {
+          where: { date: { gte: since } },
+          orderBy: [{ date: "asc" }, { startMinutes: "asc" }],
+          select: {
+            id: true,
+            date: true,
+            kind: true,
+            startMinutes: true,
+            endMinutes: true,
+            note: true,
+          },
         },
       },
       orderBy: { name: "asc" },
@@ -72,6 +88,7 @@ export default async function TeamPage() {
           availabilityNote: user.availabilityNote,
         },
         blocks: user.availability,
+        exceptions: user.availabilityExceptions,
         viewerZone,
         now,
       }),
@@ -97,6 +114,7 @@ export default async function TeamPage() {
       email: u.email,
       timeZone: u.timeZone,
       blocks: u.availability,
+      exceptions: u.availabilityExceptions,
     })),
     viewerZone,
     otherZone: viewerZone === MANILA ? PACIFIC : MANILA,
@@ -112,7 +130,9 @@ export default async function TeamPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
         <p className="text-muted-foreground">
-          Who is working, and when — in their time and in yours.
+          Who is usually working, and when — in their time and in yours. These are general
+          hours, not a live schedule: leave, blocked time and changed days are listed under each
+          person, and anything urgent is still worth a message first.
         </p>
       </div>
 
@@ -233,18 +253,27 @@ export default async function TeamPage() {
                 <div className="min-w-0">
                   <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                     {member.name}
-                    {member.availableNow ? (
-                      <Badge
-                        style={{
-                          background: "color-mix(in oklab, var(--viz-good) 18%, transparent)",
-                          color: "var(--viz-good)",
-                        }}
-                      >
-                        Working now
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Off</Badge>
-                    )}
+                    {(() => {
+                      const todayOwn = new Intl.DateTimeFormat("en-CA", {
+                        timeZone: member.timeZone,
+                      }).format(now);
+                      const changedToday = member.days.find((d) => d.date === todayOwn)?.exceptions ?? [];
+                      if (changedToday.some((e) => e.startsWith("On leave"))) {
+                        return <Badge variant="secondary">On leave today</Badge>;
+                      }
+                      return member.availableNow ? (
+                        <Badge
+                          style={{
+                            background: "color-mix(in oklab, var(--viz-good) 18%, transparent)",
+                            color: "var(--viz-good)",
+                          }}
+                        >
+                          Usually working now
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Usually off now</Badge>
+                      );
+                    })()}
                   </CardTitle>
                   <CardDescription>
                     {member.jobTitle ? `${member.jobTitle} · ` : ""}
@@ -280,7 +309,7 @@ export default async function TeamPage() {
                     }
                     trigger={
                       <Button variant="ghost" size="sm">
-                        <Pencil className="mr-1 h-3.5 w-3.5" /> Hours
+                        <Pencil className="mr-1 h-3.5 w-3.5" /> Usual hours
                       </Button>
                     }
                   />
@@ -370,6 +399,36 @@ export default async function TeamPage() {
                   {member.availabilityNote && <p>{member.availabilityNote}</p>}
                 </div>
               )}
+
+              {(() => {
+                const user = staff.find((s) => s.id === member.id);
+                const todayOwn = new Intl.DateTimeFormat("en-CA", { timeZone: member.timeZone }).format(now);
+                const dayLabel = new Intl.DateTimeFormat("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  timeZone: "UTC",
+                });
+                const items = (user?.availabilityExceptions ?? [])
+                  .filter((e) => e.date >= todayOwn)
+                  .slice(0, 10)
+                  .map((e) => ({
+                    id: e.id,
+                    date: e.date,
+                    dateLabel: dayLabel.format(new Date(`${e.date}T12:00:00Z`)),
+                    description: describeException(e),
+                  }));
+                return (
+                  <AvailabilityExceptions
+                    userId={member.id}
+                    name={member.name}
+                    zoneAbbr={member.zoneAbbr}
+                    today={todayOwn}
+                    items={items}
+                    canEdit={appUser.role === "admin" || appUser.id === member.id}
+                  />
+                );
+              })()}
             </CardContent>
           </Card>
         ))}

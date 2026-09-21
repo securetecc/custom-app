@@ -350,14 +350,15 @@ model User {
 
   emailSignatures            EmailSignature[]
   recordedPayments           Payment[]
-  loggedTimeEntries          TimeEntry[]           @relation("LoggedByUser")
-  performedTimeEntries       TimeEntry[]           @relation("PerformedByUser")
-  assignedTasks              Task[]                @relation("TaskAssignee")
+  loggedTimeEntries          TimeEntry[]             @relation("LoggedByUser")
+  performedTimeEntries       TimeEntry[]             @relation("PerformedByUser")
+  assignedTasks              Task[]                  @relation("TaskAssignee")
   taskAssignments            TaskAssignee[]
   availability               UserAvailability[]
-  delegatedTasks             Task[]                @relation("TaskCreator")
+  availabilityExceptions     AvailabilityException[]
+  delegatedTasks             Task[]                  @relation("TaskCreator")
   loggedReimbursableExpenses ReimbursableExpense[]
-  assignedTickets            Ticket[]              @relation("AssignedToUser")
+  assignedTickets            Ticket[]                @relation("AssignedToUser")
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -412,6 +413,10 @@ model Client {
   /// which reports which of the two the figure came from.
   relationshipStartedOn DateTime?      @db.Date
   activeStatus          Boolean        @default(true)
+  /// SecureTECC's own work -- internal or shared jobs that are logged so the
+  /// time is visible but must never be billed. Entries against an internal
+  /// client are forced NonBillable and the client is left out of billing.
+  isInternal            Boolean        @default(false)
   notes                 String?
   createdAt             DateTime       @default(now())
   // Per-client invoice counter, incremented atomically inside the same
@@ -492,6 +497,9 @@ model TimeEntry {
   /// durationHours so the invoice can show the work and the travel honestly,
   /// and so changing the travel rule never rewrites recorded work.
   travelMinutes     Int?
+  /// Optional project within the client ("CMMC Level 1", "M365 migration"),
+  /// so work for one client can be split without inventing extra clients.
+  project           String?
   // Null while unbilled; set once included on a generated invoice.
   invoiceId         String?
   invoice           Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -1089,4 +1097,39 @@ model UserAvailability {
 
   @@index([userId])
   @@map("user_availability")
+}
+
+/// What kind of change to someone's usual week one date carries.
+enum AvailabilityExceptionKind {
+  /// Whole day off.
+  Leave
+  /// Not available -- the whole day, or a time range when one is given.
+  Unavailable
+  /// Working, but different hours from usual that day.
+  DifferentHours
+  /// Working, but this time range is taken by another task.
+  Blocked
+}
+
+/// A one-off change to a person's usual hours on one date.
+///
+/// The weekly hours are general availability, not a live schedule. These rows
+/// are how "on leave Friday" or "blocked 2-4pm for the migration" gets onto
+/// the Team page without editing the week everyone else reads as normal.
+model AvailabilityException {
+  id              String                    @id @default(uuid())
+  userId          String
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The date in the PERSON'S own zone, "YYYY-MM-DD".
+  date            String
+  kind            AvailabilityExceptionKind
+  /// Minutes past midnight in the person's zone; null for a whole day.
+  startMinutes    Int?
+  endMinutes      Int?
+  note            String?
+  createdByUserId String?
+  createdAt       DateTime                  @default(now())
+
+  @@index([userId, date])
+  @@map("availability_exceptions")
 }

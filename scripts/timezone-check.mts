@@ -18,7 +18,7 @@ import {
   zoneAbbreviation,
   zonedWallTimeToUtc,
 } from "../src/lib/timezones";
-import { buildMember, overlapWindows } from "../src/lib/team/availability";
+import { applyExceptions, buildMember, overlapWindows } from "../src/lib/team/availability";
 import { buildWeekGrid } from "../src/lib/team/week-grid";
 
 let failures = 0;
@@ -241,6 +241,35 @@ console.log("\nThe week grid — one clock, blocks split at midnight\n");
   const afterChange = transition.lanes[0].segments.find((s) => s.dayIndex === 1)!;
   check("Monday after the change is still 1440 minutes", transition.days[1].minutes, 1440);
   check("and 8am still sits a third of the way down", Math.round(afterChange.topPct), 33);
+}
+
+// --- one-off exceptions -------------------------------------------------------
+{
+  const day = [{ weekday: 1, startMinutes: 13 * 60, endMinutes: 21 * 60, label: null }];
+  const mk = (kind: "Leave" | "Unavailable" | "DifferentHours" | "Blocked", s: number | null, e: number | null) => ({
+    date: "2026-09-21", kind, startMinutes: s, endMinutes: e, note: null,
+  });
+  check("leave clears the day", applyExceptions(1, day, [mk("Leave", null, null)]).length, 0);
+  check("whole-day unavailable clears the day", applyExceptions(1, day, [mk("Unavailable", null, null)]).length, 0);
+  const blocked = applyExceptions(1, day, [mk("Blocked", 15 * 60, 17 * 60)]);
+  check("a blocked 3-5pm splits 1-9pm in two", blocked.map((b) => `${b.startMinutes}-${b.endMinutes}`).join(","), "780-900,1020-1260");
+  const trimmed = applyExceptions(1, day, [mk("Unavailable", 12 * 60, 14 * 60)]);
+  check("unavailable 12-2pm trims the start", trimmed.map((b) => `${b.startMinutes}-${b.endMinutes}`).join(","), "840-1260");
+  const changed = applyExceptions(1, day, [mk("DifferentHours", 9 * 60, 12 * 60)]);
+  check("different hours replace the day", changed.map((b) => `${b.startMinutes}-${b.endMinutes}`).join(","), "540-720");
+  const overnight = applyExceptions(1, [{ weekday: 1, startMinutes: 22 * 60, endMinutes: 6 * 60, label: null }], [mk("Blocked", 23 * 60, 1 * 60)]);
+  check("a block across midnight is cut on one line", overnight.map((b) => `${b.startMinutes}-${b.endMinutes}`).join(","), "1320-1380");
+  check("an exception outside the hours changes nothing", applyExceptions(1, day, [mk("Blocked", 8 * 60, 9 * 60)]).length, 1);
+
+  // Through buildMember: leave on the viewer's Monday removes it from the week total.
+  const user = { id: "z", name: "Zia", jobTitle: null, email: "z@x", timeZone: MANILA };
+  const at = new Date("2026-09-21T02:00:00Z"); // Monday 10am Manila
+  const week = [1, 2].map((weekday) => ({ weekday, startMinutes: 13 * 60, endMinutes: 21 * 60, label: null }));
+  const usual = buildMember({ user, blocks: week, viewerZone: PACIFIC, now: at });
+  const onLeave = buildMember({ user, blocks: week, exceptions: [mk("Leave", null, null)], viewerZone: PACIFIC, now: at });
+  check("usual week is 16 hours", usual.weeklyHours, 16);
+  check("a Monday on leave leaves 8", onLeave.weeklyHours, 8);
+  check("and the day says why", onLeave.days[1].exceptions[0], "On leave");
 }
 
 console.log(`\n${failures === 0 ? "All checks passed." : `${failures} FAILED.`}`);

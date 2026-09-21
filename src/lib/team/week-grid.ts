@@ -1,4 +1,4 @@
-import { buildMember, type StoredBlock } from "./availability";
+import { buildMember, type StoredBlock, type StoredException } from "./availability";
 import {
   formatTimeInZone,
   partsInZone,
@@ -78,6 +78,7 @@ export type GridMember = {
   email: string;
   timeZone: string;
   blocks: StoredBlock[];
+  exceptions?: StoredException[];
 };
 
 export function buildWeekGrid(args: {
@@ -152,6 +153,7 @@ export function buildWeekGrid(args: {
       buildMember({
         user: member,
         blocks: member.blocks,
+        exceptions: member.exceptions,
         viewerZone,
         now: new Date(now.getTime() + offsetDays * DAY_MS),
       }).days.flatMap((d) => d.blocks),

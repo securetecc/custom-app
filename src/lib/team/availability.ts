@@ -25,6 +25,88 @@ export type StoredBlock = {
   label: string | null;
 };
 
+/** A one-off change on one date, as stored. See AvailabilityException. */
+export type StoredException = {
+  id?: string;
+  /** "YYYY-MM-DD" in the person's own zone. */
+  date: string;
+  kind: "Leave" | "Unavailable" | "DifferentHours" | "Blocked";
+  startMinutes: number | null;
+  endMinutes: number | null;
+  note: string | null;
+};
+
+/** How an exception reads on the page: "On leave", "Blocked 2:00 PM – 4:00 PM". */
+export function describeException(e: StoredException): string {
+  const range =
+    e.startMinutes != null && e.endMinutes != null
+      ? `${formatMinutes(e.startMinutes)} – ${formatMinutes(e.endMinutes)}`
+      : null;
+  const base =
+    e.kind === "Leave"
+      ? "On leave"
+      : e.kind === "Unavailable"
+        ? range
+          ? `Unavailable ${range}`
+          : "Unavailable all day"
+        : e.kind === "DifferentHours"
+          ? `Working ${range ?? "different hours"}`
+          : `Blocked ${range ?? ""}`.trim();
+  return e.note ? `${base} — ${e.note}` : base;
+}
+
+/**
+ * The usual blocks for one date, with that date's exceptions applied.
+ *
+ * Order matters: changed hours REPLACE the day, a whole-day absence then
+ * clears it, and partial unavailability or blocked time is cut out of
+ * whatever is left. Works in wall-clock minutes in the person's own zone, so
+ * nothing here depends on either side's daylight saving.
+ */
+export function applyExceptions(
+  weekday: number,
+  usual: StoredBlock[],
+  exceptions: StoredException[],
+): StoredBlock[] {
+  let day = usual;
+
+  const replaced = exceptions.filter(
+    (e) => e.kind === "DifferentHours" && e.startMinutes != null && e.endMinutes != null,
+  );
+  if (replaced.length > 0) {
+    day = replaced.map((e) => ({
+      weekday,
+      startMinutes: e.startMinutes!,
+      endMinutes: e.endMinutes!,
+      label: e.note || "Changed hours",
+    }));
+  }
+
+  if (exceptions.some((e) => e.kind === "Leave" || (e.kind === "Unavailable" && e.startMinutes == null))) {
+    return [];
+  }
+
+  for (const e of exceptions) {
+    if (e.kind !== "Unavailable" && e.kind !== "Blocked") continue;
+    if (e.startMinutes == null || e.endMinutes == null) continue;
+    const cutStart = e.startMinutes;
+    const cutEnd = e.endMinutes <= e.startMinutes ? e.endMinutes + 1440 : e.endMinutes;
+
+    day = day.flatMap((b) => {
+      // An overnight block runs past 1440 here, so the cut compares on one line.
+      const start = b.startMinutes;
+      const end = b.endMinutes <= b.startMinutes ? b.endMinutes + 1440 : b.endMinutes;
+      if (cutEnd <= start || cutStart >= end) return [b];
+      const pieces: StoredBlock[] = [];
+      if (cutStart > start) pieces.push({ ...b, startMinutes: start, endMinutes: cutStart % 1440 });
+      if (cutEnd < end && cutEnd < 1440) pieces.push({ ...b, startMinutes: cutEnd, endMinutes: end % 1440 });
+      return pieces;
+    });
+  }
+
+  return day;
+}
+
 export type ResolvedBlock = {
   /** As it reads on the person's own clock: "9:00 AM – 6:00 PM". */
   ownHours: string;
@@ -42,6 +124,8 @@ export type TeamDay = {
   weekday: number;
   date: string;
   blocks: ResolvedBlock[];
+  /** This date's one-off changes, described for display. */
+  exceptions: string[];
 };
 
 export type TeamMember = {
@@ -106,11 +190,14 @@ export function buildMember(args: {
     availabilityNote?: string | null;
   };
   blocks: StoredBlock[];
+  /** One-off changes by date. Omitted means the usual week applies. */
+  exceptions?: StoredException[];
   /** The zone the person LOOKING at the page is in. */
   viewerZone: TimeZoneId;
   now: Date;
 }): TeamMember {
   const { user, blocks, viewerZone, now } = args;
+  const exceptions = args.exceptions ?? [];
   const zone = user.timeZone;
 
   // Their week, in their own zone -- Monday is whichever Monday it is where
@@ -123,8 +210,12 @@ export function buildMember(args: {
 
   for (let weekday = 0; weekday < 7; weekday++) {
     const date = dayFromWeekStart(weekStart, weekday);
-    const dayBlocks = blocks
-      .filter((b) => b.weekday === weekday)
+    const dayExceptions = exceptions.filter((e) => e.date === isoDate(date));
+    const dayBlocks = applyExceptions(
+      weekday,
+      blocks.filter((b) => b.weekday === weekday),
+      dayExceptions,
+    )
       .sort((a, b) => a.startMinutes - b.startMinutes)
       .map((b) => {
         const start = zonedWallTimeToUtc(
@@ -172,7 +263,12 @@ export function buildMember(args: {
         };
       });
 
-    days.push({ weekday, date: isoDate(date), blocks: dayBlocks });
+    days.push({
+      weekday,
+      date: isoDate(date),
+      blocks: dayBlocks,
+      exceptions: dayExceptions.map(describeException),
+    });
   }
 
   const allBlocks = days.flatMap((d) => d.blocks);
