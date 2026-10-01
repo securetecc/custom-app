@@ -116,8 +116,8 @@ export function TeamMonthOverview({
 
       <p className="text-xs text-muted-foreground">
         Hours are what each person has for SecureTECC that day, on your clock. Hatched means on
-        leave or unavailable; an amber dot means part of the day is blocked. Other commitments are
-        not counted.
+        leave or unavailable; an amber dot means part of the day is blocked. Time marked Other is not
+        counted.
       </p>
     </div>
   );

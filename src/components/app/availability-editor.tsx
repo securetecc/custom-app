@@ -214,19 +214,19 @@ export function AvailabilityEditor({
                           <SelectTrigger className="h-8 w-44" aria-label={`${label} type`}>
                             <SelectValue>
                               {(value) =>
-                                value === "Commitment" ? "Other commitment" : "SecureTECC work"
+                                value === "Commitment" ? "Other" : "SecureTECC work"
                               }
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Work">SecureTECC work</SelectItem>
-                            <SelectItem value="Commitment">Other commitment</SelectItem>
+                            <SelectItem value="Commitment">Other — not SecureTECC</SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
                           value={row.label ?? ""}
                           onChange={(e) => update(row.index, { label: e.target.value || null })}
-                          placeholder={row.kind === "Commitment" ? "BBZ Studio, Prodesign…" : "Label (optional)"}
+                          placeholder={row.kind === "Commitment" ? "BBZ/Other…" : "Label (optional)"}
                           className="h-8 w-40"
                           aria-label={`${label} label`}
                         />

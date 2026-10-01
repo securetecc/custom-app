@@ -73,7 +73,7 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                 "repeating-linear-gradient(45deg, var(--muted-foreground) 0 2px, transparent 2px 6px)",
             }}
           />
-          Other commitment
+          Other — not SecureTECC time
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm border" style={BLOCKED_SWATCH} />
@@ -208,14 +208,14 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                               key={i}
                               title={`${lane.name}: ${segment.startLabel} – ${segment.endLabel}${
                                 segment.label ? ` (${segment.label})` : ""
-                              }${segment.kind === "Commitment" ? " — other commitment" : ""}`}
+                              }${segment.kind === "Commitment" ? " — Other" : ""}`}
                               tabIndex={0}
                               onMouseEnter={() =>
                                 setDetail({
                                   name: lane.name,
                                   what:
                                     segment.kind === "Commitment"
-                                      ? "Other commitment"
+                                      ? "Other"
                                       : "SecureTECC hours",
                                   viewerTime: `${segment.startLabel} – ${segment.endLabel}`,
                                   ownTime: `${segment.ownStartLabel} – ${segment.ownEndLabel}`,
@@ -227,7 +227,7 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                                   name: lane.name,
                                   what:
                                     segment.kind === "Commitment"
-                                      ? "Other commitment"
+                                      ? "Other"
                                       : "SecureTECC hours",
                                   viewerTime: `${segment.startLabel} – ${segment.endLabel}`,
                                   ownTime: `${segment.ownStartLabel} – ${segment.ownEndLabel}`,

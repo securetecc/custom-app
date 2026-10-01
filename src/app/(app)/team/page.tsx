@@ -403,9 +403,7 @@ export default async function TeamPage({
                               <span key={i} className={block.kind === "Commitment" ? "text-muted-foreground" : ""}>
                                 <span className="tabular-nums">{block.ownHours}</span>
                                 {block.kind === "Commitment" && (
-                                  <span className="ml-2 text-xs">
-                                    Other commitment{block.label ? ` · ${block.label}` : ""}
-                                  </span>
+                                  <span className="ml-2 text-xs">{block.label ?? "Other"}</span>
                                 )}
                                 {block.kind === "Work" && block.label && (
                                   <span className="ml-2 text-xs text-muted-foreground">
