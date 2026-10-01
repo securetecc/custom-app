@@ -50,6 +50,7 @@ export function AvailabilityEditor({
   blocks: initial,
   offlineAfter: initialOfflineAfter,
   availabilityNote: initialNote,
+  estimatedWeeklyHours: initialEstimate,
   trigger,
 }: {
   userId: string;
@@ -58,6 +59,7 @@ export function AvailabilityEditor({
   jobTitle: string | null;
   offlineAfter: string | null;
   availabilityNote: string | null;
+  estimatedWeeklyHours: number | null;
   blocks: {
     weekday: number;
     startMinutes: number;
@@ -74,6 +76,7 @@ export function AvailabilityEditor({
   const [title, setTitle] = useState(jobTitle ?? "");
   const [offline, setOffline] = useState(initialOfflineAfter ?? "");
   const [note, setNote] = useState(initialNote ?? "");
+  const [estimate, setEstimate] = useState(initialEstimate == null ? "" : String(initialEstimate));
   const [blocks, setBlocks] = useState<Block[]>(
     initial.map((b) => ({
       weekday: b.weekday,
@@ -114,6 +117,7 @@ export function AvailabilityEditor({
       jobTitle: title.trim() || null,
       offlineAfter: offline || null,
       availabilityNote: note.trim() || null,
+      estimatedWeeklyHours: estimate.trim() === "" ? null : Number(estimate),
       blocks,
     });
     setSaving(false);
@@ -275,6 +279,22 @@ export function AvailabilityEditor({
                 placeholder="Flexible outside core hours"
                 onChange={(e) => setNote(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="estimatedWeeklyHours">Typical SecureTECC hours a week</Label>
+              <Input
+                id="estimatedWeeklyHours"
+                type="number"
+                min="0"
+                max="80"
+                value={estimate}
+                placeholder="—"
+                onChange={(e) => setEstimate(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                For work that happens around the blocks rather than inside them. Shown beside the
+                booked total; it never changes the calendar.
+              </p>
             </div>
           </div>
 

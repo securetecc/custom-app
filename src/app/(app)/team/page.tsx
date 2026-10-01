@@ -67,6 +67,7 @@ export default async function TeamPage({
         timeZone: true,
         offlineAfterMinutes: true,
         availabilityNote: true,
+        estimatedWeeklyHours: true,
         availability: {
           select: { weekday: true, startMinutes: true, endMinutes: true, label: true, kind: true },
         },
@@ -357,6 +358,9 @@ export default async function TeamPage({
                       return mins == null ? null : toTimeInputValue(mins);
                     })()}
                     availabilityNote={member.availabilityNote}
+                    estimatedWeeklyHours={
+                      staff.find((s) => s.id === member.id)?.estimatedWeeklyHours ?? null
+                    }
                     blocks={
                       staff.find((s) => s.id === member.id)?.availability.map((b) => ({
                         weekday: b.weekday,
@@ -426,7 +430,15 @@ export default async function TeamPage({
                   </ul>
 
                   <p className="border-t pt-2 text-xs text-muted-foreground">
-                    {member.weeklyHours}h a week for SecureTECC
+                    {(() => {
+                      const estimate = staff.find((s) => s.id === member.id)?.estimatedWeeklyHours;
+                      // The booked blocks and what the week really looks like
+                      // are two different facts; showing only the first makes
+                      // someone who fits work around other clients look idle.
+                      return estimate != null
+                        ? `${member.weeklyHours}h booked · about ${estimate}h a week for SecureTECC`
+                        : `${member.weeklyHours}h a week for SecureTECC`;
+                    })()}
                     {!member.availableNow && member.nextStart && (
                       <>
                         {" · next on "}

@@ -320,6 +320,11 @@ model User {
   /// Anything about their availability that is not a block: "flexible outside
   /// core hours", "no meetings before 10". Shown under their name.
   availabilityNote     String?
+  /// Roughly how many hours a week this person actually gives SecureTECC,
+  /// when the fixed blocks do not tell the whole story -- work squeezed in
+  /// around other clients is real, and a week showing one booked hour would
+  /// otherwise read as one hour of capacity.
+  estimatedWeeklyHours Int?
   receivesTicketEmails Boolean      @default(true)
   /// Told when a task is assigned to them.
   notifyTaskAssigned   Boolean      @default(true)

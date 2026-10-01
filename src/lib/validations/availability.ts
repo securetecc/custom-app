@@ -28,6 +28,8 @@ export const availabilityFormSchema = z.object({
     .regex(/^\d{1,2}:\d{2}$/, "Use a time like 23:00")
     .nullable(),
   availabilityNote: z.string().trim().max(120).nullable(),
+  /// A typical week's SecureTECC hours when the blocks understate it.
+  estimatedWeeklyHours: z.number().int().min(0).max(80).nullable(),
   /** The whole week, replaced wholesale -- see the action for why. */
   blocks: z.array(availabilityBlockSchema).max(30, "That is a lot of blocks"),
 });

@@ -59,6 +59,7 @@ export async function saveAvailability(input: AvailabilityFormValues): Promise<A
           jobTitle: data.jobTitle || null,
           offlineAfterMinutes: data.offlineAfter ? parseMinutes(data.offlineAfter) : null,
           availabilityNote: data.availabilityNote || null,
+          estimatedWeeklyHours: data.estimatedWeeklyHours,
         },
       });
       await tx.userAvailability.deleteMany({ where: { userId: data.userId } });
