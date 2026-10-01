@@ -10,9 +10,27 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  * scale to read. Hours are the viewer's day, so a Manila evening that lands
  * on the previous Pacific date is counted on the date it actually falls on.
  */
-export function TeamMonthOverview({ months }: { months: MonthOverview[] }) {
+export function TeamMonthOverview({
+  months,
+  viewerAbbr,
+  otherAbbr,
+}: {
+  months: MonthOverview[];
+  /** The viewer's zone, named -- the days below are ITS days. */
+  viewerAbbr: string;
+  otherAbbr: string;
+}) {
   return (
     <div className="space-y-6">
+      {/* Which clock the columns follow. Without this the view looks wrong
+          whenever someone's shift lands on a different date here than it does
+          where they are -- a 9am Manila hour is the previous evening in
+          Pacific, so it is counted on the previous day. */}
+      <p className="text-xs text-muted-foreground">
+        Days follow your clock ({viewerAbbr}). An {otherAbbr} shift can fall on the day before or
+        after here — a 9:00 AM {otherAbbr} hour is the previous evening in {viewerAbbr}, so it
+        counts on that day.
+      </p>
       {months.map((month) => (
         <div key={month.label} className="space-y-2">
           <h3 className="text-sm font-semibold tracking-tight">{month.label}</h3>
@@ -98,8 +116,8 @@ export function TeamMonthOverview({ months }: { months: MonthOverview[] }) {
 
       <p className="text-xs text-muted-foreground">
         Hours are what each person has for SecureTECC that day, on your clock. Hatched means on
-        leave or unavailable; an amber dot means part of the day is blocked. Other work (BBZ,
-        Prodesign) is not counted.
+        leave or unavailable; an amber dot means part of the day is blocked. Other commitments are
+        not counted.
       </p>
     </div>
   );

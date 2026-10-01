@@ -212,7 +212,11 @@ export default async function TeamPage({
         </CardHeader>
         <CardContent>
           {view === "months" ? (
-            <TeamMonthOverview months={monthsView} />
+            <TeamMonthOverview
+              months={monthsView}
+              viewerAbbr={zoneAbbreviation(now, viewerZone)}
+              otherAbbr={zoneAbbreviation(now, otherZone)}
+            />
           ) : (
             <TeamWeekGrid grid={grid} now={now} />
           )}
@@ -396,7 +400,7 @@ export default async function TeamPage({
                                 <span className="tabular-nums">{block.ownHours}</span>
                                 {block.kind === "Commitment" && (
                                   <span className="ml-2 text-xs">
-                                    {block.label ?? "Other commitment"} — not SecureTECC
+                                    Other commitment{block.label ? ` · ${block.label}` : ""}
                                   </span>
                                 )}
                                 {block.kind === "Work" && block.label && (
