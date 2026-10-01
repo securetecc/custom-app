@@ -433,8 +433,13 @@ export default async function TeamPage({
                       // The booked blocks and what the week really looks like
                       // are two different facts; showing only the first makes
                       // someone who fits work around other clients look idle.
+                      // With an estimate set, the booked figure is dropped
+                      // rather than shown beside it: for someone whose
+                      // SecureTECC work happens inside blocks labelled for
+                      // other work, the booked number measures the calendar,
+                      // not the week, and reads as near-zero capacity.
                       return estimate != null
-                        ? `${member.weeklyHours}h booked · about ${estimate}h a week for SecureTECC`
+                        ? `About ${estimate}h a week for SecureTECC`
                         : `${member.weeklyHours}h a week for SecureTECC`;
                     })()}
                     {!member.availableNow && member.nextStart && (
