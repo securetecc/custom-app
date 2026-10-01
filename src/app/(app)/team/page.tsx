@@ -52,7 +52,7 @@ export default async function TeamPage() {
         offlineAfterMinutes: true,
         availabilityNote: true,
         availability: {
-          select: { weekday: true, startMinutes: true, endMinutes: true, label: true },
+          select: { weekday: true, startMinutes: true, endMinutes: true, label: true, kind: true },
         },
         availabilityExceptions: {
           where: { date: { gte: since } },
@@ -305,6 +305,7 @@ export default async function TeamPage() {
                         startMinutes: b.startMinutes,
                         endMinutes: b.endMinutes,
                         label: b.label,
+                        kind: b.kind,
                       })) ?? []
                     }
                     trigger={
@@ -318,7 +319,7 @@ export default async function TeamPage() {
             </CardHeader>
 
             <CardContent className="space-y-3">
-              {member.weeklyHours === 0 ? (
+              {member.days.every((d) => d.blocks.length === 0) ? (
                 <p className="text-sm text-muted-foreground">
                   No hours set yet.
                   {appUser.role === "admin" || appUser.id === member.id
@@ -337,9 +338,14 @@ export default async function TeamPage() {
                           </span>
                           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                             {day.blocks.map((block, i) => (
-                              <span key={i}>
+                              <span key={i} className={block.kind === "Commitment" ? "text-muted-foreground" : ""}>
                                 <span className="tabular-nums">{block.ownHours}</span>
-                                {block.label && (
+                                {block.kind === "Commitment" && (
+                                  <span className="ml-2 text-xs">
+                                    {block.label ?? "Other commitment"} — not SecureTECC
+                                  </span>
+                                )}
+                                {block.kind === "Work" && block.label && (
                                   <span className="ml-2 text-xs text-muted-foreground">
                                     {block.label}
                                   </span>
@@ -362,7 +368,7 @@ export default async function TeamPage() {
                   </ul>
 
                   <p className="border-t pt-2 text-xs text-muted-foreground">
-                    {member.weeklyHours}h a week
+                    {member.weeklyHours}h a week for SecureTECC
                     {!member.availableNow && member.nextStart && (
                       <>
                         {" · next on "}

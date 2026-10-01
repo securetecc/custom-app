@@ -41,7 +41,13 @@ export async function saveAvailability(input: AvailabilityFormValues): Promise<A
     const start = parseMinutes(b.start);
     const end = parseMinutes(b.end);
     if (start === null || end === null) throw new Error("bad time");
-    return { weekday: b.weekday, startMinutes: start, endMinutes: end, label: b.label || null };
+    return {
+      weekday: b.weekday,
+      startMinutes: start,
+      endMinutes: end,
+      label: b.label || null,
+      kind: b.kind,
+    };
   });
 
   try {

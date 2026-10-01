@@ -44,6 +44,8 @@ export type GridSegment = {
   /** True when it runs past midnight into the next column. */
   continues: boolean;
   label: string | null;
+  /** Work is SecureTECC's; Commitment is time claimed by other work. */
+  kind: "Work" | "Commitment";
 };
 
 /**
@@ -208,6 +210,7 @@ export function buildWeekGrid(args: {
           continued: from > block.start.getTime(),
           continues: to < block.end.getTime(),
           label: block.label,
+          kind: block.kind,
         });
       }
     }

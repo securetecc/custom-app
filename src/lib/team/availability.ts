@@ -18,11 +18,15 @@ import {
  * arithmetic.
  */
 
+export type AvailabilityKind = "Work" | "Commitment";
+
 export type StoredBlock = {
   weekday: number;
   startMinutes: number;
   endMinutes: number;
   label: string | null;
+  /** Omitted means Work -- the default, and what every older row is. */
+  kind?: AvailabilityKind;
 };
 
 /** A one-off change on one date, as stored. See AvailabilityException. */
@@ -108,6 +112,8 @@ export function applyExceptions(
 }
 
 export type ResolvedBlock = {
+  /** Work is ours; a Commitment is someone else's claim on the same hours. */
+  kind: AvailabilityKind;
   /** As it reads on the person's own clock: "9:00 AM – 6:00 PM". */
   ownHours: string;
   /** The same block on the viewer's clock, which may land on another day. */
@@ -239,7 +245,11 @@ export function buildMember(args: {
           b.endMinutes % 60,
         );
 
-        weeklyMinutes += (end.getTime() - start.getTime()) / 60_000;
+        // Only our own hours count toward the week; a BBZ or Prodesign block
+        // is drawn, but it is not time SecureTECC has.
+        if ((b.kind ?? "Work") === "Work") {
+          weeklyMinutes += (end.getTime() - start.getTime()) / 60_000;
+        }
 
         // The viewer's calendar day for the start, compared with the
         // person's, so a block that lands "yesterday evening" says so.
@@ -257,6 +267,7 @@ export function buildMember(args: {
               : viewerIso < ownIso
                 ? "starts the day before"
                 : "starts the next day",
+          kind: b.kind ?? "Work",
           label: b.label,
           start,
           end,
@@ -271,7 +282,7 @@ export function buildMember(args: {
     });
   }
 
-  const allBlocks = days.flatMap((d) => d.blocks);
+  const allBlocks = days.flatMap((d) => d.blocks).filter((b) => b.kind === "Work");
   const availableNow = allBlocks.some((b) => now >= b.start && now < b.end);
   const upcoming = allBlocks
     .filter((b) => b.start > now)
@@ -362,14 +373,18 @@ export function windowHours(windows: { start: Date; end: Date }[]): number {
  * side changes its clocks and the other does not.
  */
 export function overlapWindows(members: TeamMember[]): { start: Date; end: Date }[] {
-  const withHours = members.filter((m) => m.days.some((d) => d.blocks.length > 0));
+  // Work blocks only: two people both busy elsewhere at 9pm are not "both
+  // available at 9pm", and a window nobody can meet in is worse than none.
+  const workBlocks = (m: TeamMember) =>
+    m.days.flatMap((d) => d.blocks.filter((b) => b.kind === "Work").map((b) => ({ start: b.start, end: b.end })));
+  const withHours = members.filter((m) => workBlocks(m).length > 0);
   if (withHours.length < 2) return [];
 
   const [first, ...rest] = withHours;
-  let windows = first.days.flatMap((d) => d.blocks.map((b) => ({ start: b.start, end: b.end })));
+  let windows = workBlocks(first);
 
   for (const member of rest) {
-    const theirs = member.days.flatMap((d) => d.blocks.map((b) => ({ start: b.start, end: b.end })));
+    const theirs = workBlocks(member);
     const next: { start: Date; end: Date }[] = [];
     for (const a of windows) {
       for (const b of theirs) {

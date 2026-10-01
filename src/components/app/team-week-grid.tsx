@@ -49,11 +49,22 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm bg-foreground/35" />
-          Usual working hours
+          SecureTECC hours
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="h-3 w-3 rounded-sm border border-foreground/30"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(45deg, var(--muted-foreground) 0 2px, transparent 2px 6px)",
+            }}
+          />
+          Other work (BBZ, Prodesign) — not SecureTECC
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm border" style={BLOCKED_SWATCH} />
-          Blocked — another commitment
+          Blocked one-off
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm border" style={AWAY_SWATCH} />
@@ -138,12 +149,23 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                               key={i}
                               title={`${lane.name}: ${segment.startLabel} – ${segment.endLabel}${
                                 segment.label ? ` (${segment.label})` : ""
+                              }${segment.kind === "Commitment" ? " — other commitment, not SecureTECC" : ""}`}
+                              className={`absolute inset-x-0 overflow-hidden px-1 text-[10px] leading-tight ${
+                                segment.kind === "Commitment" ? "text-muted-foreground" : "text-white"
                               }`}
-                              className="absolute inset-x-0 overflow-hidden px-1 text-[10px] leading-tight text-white"
                               style={{
                                 top: `${segment.topPct}%`,
                                 height: `${segment.heightPct}%`,
-                                background: `var(${lane.colorVar})`,
+                                // A commitment is drawn in the person's colour
+                                // but hatched and faded: they are reliably
+                                // busy, and it is not time we have.
+                                ...(segment.kind === "Commitment"
+                                  ? {
+                                      backgroundImage: `repeating-linear-gradient(45deg, var(${lane.colorVar}) 0 2px, transparent 2px 6px)`,
+                                      border: `1px solid color-mix(in oklab, var(${lane.colorVar}) 45%, transparent)`,
+                                      opacity: 0.75,
+                                    }
+                                  : { background: `var(${lane.colorVar})` }),
                                 // Square off the edge a block runs through, so
                                 // a shift crossing midnight reads as one thing
                                 // continuing rather than two that both ended.

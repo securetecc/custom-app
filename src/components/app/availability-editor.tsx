@@ -26,7 +26,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-type Block = { weekday: number; start: string; end: string; label: string | null };
+type Block = {
+  weekday: number;
+  start: string;
+  end: string;
+  label: string | null;
+  kind: "Work" | "Commitment";
+};
 
 /**
  * Someone's working week, edited in their own clock.
@@ -52,7 +58,13 @@ export function AvailabilityEditor({
   jobTitle: string | null;
   offlineAfter: string | null;
   availabilityNote: string | null;
-  blocks: { weekday: number; startMinutes: number; endMinutes: number; label: string | null }[];
+  blocks: {
+    weekday: number;
+    startMinutes: number;
+    endMinutes: number;
+    label: string | null;
+    kind?: "Work" | "Commitment";
+  }[];
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -68,11 +80,12 @@ export function AvailabilityEditor({
       start: toTimeInputValue(b.startMinutes),
       end: toTimeInputValue(b.endMinutes),
       label: b.label,
+      kind: b.kind ?? "Work",
     })),
   );
 
   function addBlock(weekday: number) {
-    setBlocks((b) => [...b, { weekday, start: "09:00", end: "17:00", label: null }]);
+    setBlocks((b) => [...b, { weekday, start: "09:00", end: "17:00", label: null, kind: "Work" }]);
   }
 
   function update(index: number, patch: Partial<Block>) {
@@ -188,10 +201,28 @@ export function AvailabilityEditor({
                           className="h-8 w-[7.5rem]"
                           aria-label={`${label} end`}
                         />
+                        <Select
+                          value={row.kind}
+                          onValueChange={(v) =>
+                            update(row.index, { kind: (v as Block["kind"]) ?? "Work" })
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-44" aria-label={`${label} type`}>
+                            <SelectValue>
+                              {(value) =>
+                                value === "Commitment" ? "Other commitment" : "SecureTECC work"
+                              }
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Work">SecureTECC work</SelectItem>
+                            <SelectItem value="Commitment">Other commitment</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Input
                           value={row.label ?? ""}
                           onChange={(e) => update(row.index, { label: e.target.value || null })}
-                          placeholder="Label (optional)"
+                          placeholder={row.kind === "Commitment" ? "BBZ Studio, Prodesign…" : "Label (optional)"}
                           className="h-8 w-40"
                           aria-label={`${label} label`}
                         />

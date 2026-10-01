@@ -1082,10 +1082,24 @@ model TaskAssignee {
 /// A day can hold more than one block -- a split shift, or a lunch break
 /// carved out of the middle -- which is why this is rows rather than two
 /// columns on the user.
+/// What a block of someone's week IS.
+///
+/// A person can be reliably busy without being available to SecureTECC --
+/// Ian has BBZ Studio hours, Zia has Prodesign. Recording those as plain
+/// availability would have counted them as SecureTECC time and invented
+/// overlap windows nobody can actually meet in; leaving them out entirely
+/// would show empty space where the person is in fact unreachable.
+enum AvailabilityKind {
+  /// Available for SecureTECC work.
+  Work
+  /// Committed elsewhere -- shown on the calendar, never counted as ours.
+  Commitment
+}
+
 model UserAvailability {
-  id           String   @id @default(uuid())
+  id           String           @id @default(uuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// 0 = Sunday … 6 = Saturday, in the person's own zone.
   weekday      Int
   /// Minutes past midnight. 540 = 9:00, 1080 = 18:00.
@@ -1093,7 +1107,8 @@ model UserAvailability {
   endMinutes   Int
   /// "Core hours", "On call" -- optional, shown beside the block.
   label        String?
-  createdAt    DateTime @default(now())
+  kind         AvailabilityKind @default(Work)
+  createdAt    DateTime         @default(now())
 
   @@index([userId])
   @@map("user_availability")
