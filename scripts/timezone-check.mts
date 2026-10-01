@@ -20,6 +20,7 @@ import {
 } from "../src/lib/timezones";
 import { applyExceptions, buildMember, overlapWindows } from "../src/lib/team/availability";
 import { buildWeekGrid } from "../src/lib/team/week-grid";
+import { buildMonthOverview } from "../src/lib/team/month-overview";
 
 let failures = 0;
 function check(label: string, got: unknown, want: unknown) {
@@ -296,6 +297,36 @@ console.log("\nThe week grid — one clock, blocks split at midnight\n");
   // The hours themselves are cut around the exceptions.
   const tuesdayHours = lane.segments.filter((s) => s.startLabel.includes("PM") || s.startLabel.includes("AM")).length;
   check("hours still drawn for the untouched days", tuesdayHours > 0, true);
+}
+
+// --- two-month overview --------------------------------------------------------
+{
+  const member = {
+    id: "i", name: "Ian", jobTitle: null, email: "i@x", timeZone: MANILA,
+    // 5-9pm Manila Mon/Wed = 2-6am Pacific the same day.
+    blocks: [1, 3].map((weekday) => ({ weekday, startMinutes: 17 * 60, endMinutes: 21 * 60, label: null })),
+    exceptions: [{ date: "2026-10-12", kind: "Leave" as const, startMinutes: null, endMinutes: null, note: null }],
+  };
+  const months = buildMonthOverview({
+    members: [member], viewerZone: PACIFIC, otherZone: MANILA,
+    now: new Date("2026-10-06T19:00:00Z"), anchor: new Date("2026-10-06T19:00:00Z"), months: 2,
+  });
+  check("two months are returned", months.length, 2);
+  check("the first is October", months[0].label, "October 2026");
+  check("the second is November", months[1].label, "November 2026");
+  check("every row is a full week", months[0].weeks.every((w) => w.length === 7), true);
+
+  const days = months.flatMap((m) => m.weeks.flat());
+  const oct7 = days.find((d) => d.date === "2026-10-07")!;
+  check("a 4-hour Manila evening lands on the Pacific Wednesday", oct7.members[0]?.hours, 4);
+  const oct12 = days.find((d) => d.date === "2026-10-12")!;
+  check("leave shows as away, with no hours", `${oct12.members[0]?.away} ${oct12.members[0]?.hours}`, "true 0");
+  const oct13 = days.find((d) => d.date === "2026-10-13")!;
+  check("a day with nothing on it stays empty", oct13.members.length, 0);
+  // No day is counted twice where the months meet.
+  const seen = new Set(days.filter((d) => d.inMonth).map((d) => d.date));
+  check("no in-month date appears twice", seen.size, days.filter((d) => d.inMonth).length);
+  check("November is included in full", days.filter((d) => d.inMonth && d.date.startsWith("2026-11")).length, 30);
 }
 
 console.log(`\n${failures === 0 ? "All checks passed." : `${failures} FAILED.`}`);

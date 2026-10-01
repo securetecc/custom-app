@@ -1,5 +1,17 @@
+"use client";
+
+import { useState } from "react";
 import { zoneAbbreviation } from "@/lib/timezones";
 import type { WeekGrid } from "@/lib/team/week-grid";
+
+/** What the panel under the grid says about whatever is being hovered. */
+type Detail = {
+  name: string;
+  what: string;
+  viewerTime: string;
+  ownTime: string | null;
+  note: string | null;
+};
 
 /**
  * Everyone's week on one clock.
@@ -14,6 +26,7 @@ import type { WeekGrid } from "@/lib/team/week-grid";
  * entire team.
  */
 export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
+  const [detail, setDetail] = useState<Detail | null>(null);
   const lanes = grid.lanes.filter((l) => l.segments.length > 0 || l.marks.length > 0);
   const viewerAbbr = zoneAbbreviation(now, grid.viewerZone);
   const otherAbbr = zoneAbbreviation(now, grid.otherZone);
@@ -49,7 +62,7 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm bg-foreground/35" />
-          SecureTECC hours
+          SecureTECC hours — time we can book
         </span>
         <span className="flex items-center gap-1.5">
           <span
@@ -64,17 +77,42 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm border" style={BLOCKED_SWATCH} />
-          Blocked one-off
+          Blocked one-off — working, but that time is taken
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm border" style={AWAY_SWATCH} />
-          On leave or unavailable
+          On leave or unavailable — not working at all
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-0 w-4 border-t-2" style={{ borderColor: "var(--viz-teal)" }} />
           Now
         </span>
         <span>Empty space is outside someone&apos;s usual hours.</span>
+      </div>
+
+      {/* Hover detail, pinned here rather than floating over the grid: the
+          grid scrolls sideways, and a popover inside a scroll container gets
+          clipped exactly when it is most needed, at the edges. */}
+      <div
+        className="min-h-[2.75rem] rounded-md border px-3 py-2 text-xs"
+        style={{ borderColor: "var(--viz-grid)", background: "var(--viz-track)" }}
+        aria-live="polite"
+      >
+        {detail ? (
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-medium">{detail.name}</span>
+            <span>{detail.what}</span>
+            <span className="tabular-nums">{detail.viewerTime} your time</span>
+            {detail.ownTime && (
+              <span className="tabular-nums text-muted-foreground">{detail.ownTime} theirs</span>
+            )}
+            {detail.note && <span className="text-muted-foreground">· {detail.note}</span>}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">
+            Point at any block to see who it is for, what it is, and the time on both clocks.
+          </span>
+        )}
       </div>
 
       {/* The grid scrolls sideways rather than squeezing seven columns onto a
@@ -134,6 +172,27 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                               title={`${lane.name}: ${mark.label}${
                                 mark.wholeDay ? "" : ` (${mark.startLabel} – ${mark.endLabel})`
                               }`}
+                              tabIndex={0}
+                              onMouseEnter={() =>
+                                setDetail({
+                                  name: lane.name,
+                                  what: mark.kind === "blocked" ? "Blocked — another commitment" : "On leave or unavailable",
+                                  viewerTime: mark.wholeDay ? "All day" : `${mark.startLabel} – ${mark.endLabel}`,
+                                  ownTime: mark.wholeDay ? null : `${mark.ownStartLabel} – ${mark.ownEndLabel}`,
+                                  note: mark.label,
+                                })
+                              }
+                              onFocus={() =>
+                                setDetail({
+                                  name: lane.name,
+                                  what: mark.kind === "blocked" ? "Blocked — another commitment" : "On leave or unavailable",
+                                  viewerTime: mark.wholeDay ? "All day" : `${mark.startLabel} – ${mark.endLabel}`,
+                                  ownTime: mark.wholeDay ? null : `${mark.ownStartLabel} – ${mark.ownEndLabel}`,
+                                  note: mark.label,
+                                })
+                              }
+                              onMouseLeave={() => setDetail(null)}
+                              onBlur={() => setDetail(null)}
                               className="absolute inset-x-0 overflow-hidden rounded-[3px] border"
                               style={{
                                 top: `${mark.topPct}%`,
@@ -150,6 +209,34 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                               title={`${lane.name}: ${segment.startLabel} – ${segment.endLabel}${
                                 segment.label ? ` (${segment.label})` : ""
                               }${segment.kind === "Commitment" ? " — other commitment, not SecureTECC" : ""}`}
+                              tabIndex={0}
+                              onMouseEnter={() =>
+                                setDetail({
+                                  name: lane.name,
+                                  what:
+                                    segment.kind === "Commitment"
+                                      ? `${segment.label ?? "Other work"} — not SecureTECC`
+                                      : "SecureTECC hours",
+                                  viewerTime: `${segment.startLabel} – ${segment.endLabel}`,
+                                  ownTime: `${segment.ownStartLabel} – ${segment.ownEndLabel}`,
+                                  note:
+                                    segment.kind === "Work" ? segment.label : null,
+                                })
+                              }
+                              onFocus={() =>
+                                setDetail({
+                                  name: lane.name,
+                                  what:
+                                    segment.kind === "Commitment"
+                                      ? `${segment.label ?? "Other work"} — not SecureTECC`
+                                      : "SecureTECC hours",
+                                  viewerTime: `${segment.startLabel} – ${segment.endLabel}`,
+                                  ownTime: `${segment.ownStartLabel} – ${segment.ownEndLabel}`,
+                                  note: segment.kind === "Work" ? segment.label : null,
+                                })
+                              }
+                              onMouseLeave={() => setDetail(null)}
+                              onBlur={() => setDetail(null)}
                               className={`absolute inset-x-0 overflow-hidden px-1 text-[10px] leading-tight ${
                                 segment.kind === "Commitment" ? "text-muted-foreground" : "text-white"
                               }`}

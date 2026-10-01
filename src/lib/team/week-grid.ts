@@ -39,6 +39,9 @@ export type GridSegment = {
   /** The block's real start and end, in the viewer's zone. */
   startLabel: string;
   endLabel: string;
+  /** The same block on the owner's own clock. */
+  ownStartLabel: string;
+  ownEndLabel: string;
   /** True when the bar is the tail of one that began the previous day. */
   continued: boolean;
   /** True when it runs past midnight into the next column. */
@@ -64,12 +67,16 @@ export type GridMark = {
   label: string;
   startLabel: string;
   endLabel: string;
+  ownStartLabel: string;
+  ownEndLabel: string;
   wholeDay: boolean;
 };
 
 export type GridLane = {
   memberId: string;
   name: string;
+  /** The person's own zone, for showing their own clock on hover. */
+  timeZone: string;
   /** A CSS custom property from the categorical palette. */
   colorVar: string;
   zoneAbbr: string;
@@ -109,13 +116,19 @@ export function buildWeekGrid(args: {
   /** The second axis, shown down the right -- usually the other office. */
   otherZone: TimeZoneId;
   now: Date;
+  /** Any instant inside the week to draw. Defaults to `now`. */
+  anchor?: Date;
 }): WeekGrid {
   const { members, viewerZone, otherZone, now } = args;
+  // The week being LOOKED at, which is only the current one by default --
+  // the marker still tracks the real "now", so a past or future week simply
+  // has no line on it.
+  const anchor = args.anchor ?? now;
 
   // The viewer's week, Sunday to Saturday, as real instants. Each day is
   // measured rather than assumed: midnight to midnight is 23, 24 or 25 hours
   // depending on the date.
-  const here = partsInZone(now, viewerZone);
+  const here = partsInZone(anchor, viewerZone);
   const sundayNoon = new Date(
     Date.UTC(here.year, here.month - 1, here.day, 12) - here.weekday * DAY_MS,
   );
@@ -139,7 +152,8 @@ export function buildWeekGrid(args: {
     );
   };
 
-  const todayIso = `${here.year}-${String(here.month).padStart(2, "0")}-${String(here.day).padStart(2, "0")}`;
+  const today = partsInZone(now, viewerZone);
+  const todayIso = `${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`;
 
   const days: GridDay[] = [];
   for (let i = 0; i < 7; i++) {
@@ -177,7 +191,7 @@ export function buildWeekGrid(args: {
         blocks: member.blocks,
         exceptions: member.exceptions,
         viewerZone,
-        now: new Date(now.getTime() + offsetDays * DAY_MS),
+        now: new Date(anchor.getTime() + offsetDays * DAY_MS),
       }).days.flatMap((d) => d.blocks),
     );
 
@@ -207,6 +221,8 @@ export function buildWeekGrid(args: {
           heightPct: ((to - from) / dayMs) * 100,
           startLabel: formatTimeInZone(block.start, viewerZone),
           endLabel: formatTimeInZone(block.end, viewerZone),
+          ownStartLabel: formatTimeInZone(block.start, member.timeZone as TimeZoneId),
+          ownEndLabel: formatTimeInZone(block.end, member.timeZone as TimeZoneId),
           continued: from > block.start.getTime(),
           continues: to < block.end.getTime(),
           label: block.label,
@@ -264,6 +280,8 @@ export function buildWeekGrid(args: {
           label: describeException(exception),
           startLabel: formatTimeInZone(new Date(start), viewerZone),
           endLabel: formatTimeInZone(new Date(end), viewerZone),
+          ownStartLabel: formatTimeInZone(new Date(start), member.timeZone as TimeZoneId),
+          ownEndLabel: formatTimeInZone(new Date(end), member.timeZone as TimeZoneId),
           wholeDay,
         });
       }
@@ -272,6 +290,7 @@ export function buildWeekGrid(args: {
     return {
       memberId: member.id,
       name: member.name,
+      timeZone: member.timeZone,
       colorVar: LANE_COLORS[index % LANE_COLORS.length],
       zoneAbbr: "",
       segments,

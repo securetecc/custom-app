@@ -20,7 +20,11 @@ import {
 } from "@/lib/timezones";
 import { AvailabilityEditor } from "@/components/app/availability-editor";
 import { AvailabilityExceptions } from "@/components/app/availability-exceptions";
+import { Suspense } from "react";
 import { TeamWeekGrid } from "@/components/app/team-week-grid";
+import { TeamMonthOverview } from "@/components/app/team-month-overview";
+import { TeamCalendarControls } from "@/components/app/team-calendar-controls";
+import { buildMonthOverview } from "@/lib/team/month-overview";
 import { buildWeekGrid } from "@/lib/team/week-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,9 +39,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
  * runtime's tz database, never against a stored offset -- an offset written
  * down in September is wrong from November.
  */
-export default async function TeamPage() {
+export default async function TeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string; at?: string; who?: string }>;
+}) {
   const { appUser, authUserId } = await requireOrgContext();
+  const sp = await searchParams;
+  const view = sp.view === "months" ? "months" : "week";
+  const who = sp.who ?? "all";
   const now = new Date();
+  // The period being looked at. Unparseable or absent means the one we are in,
+  // so a hand-edited URL shows this week rather than erroring.
+  const at = /^\d{4}-\d{2}-\d{2}$/.test(sp.at ?? "")
+    ? new Date(`${sp.at}T12:00:00Z`)
+    : now;
   // A day of slack either side of "today" covers every zone on the team.
   const since = new Date(now.getTime() - 2 * 86_400_000).toISOString().slice(0, 10);
 
@@ -106,20 +122,36 @@ export default async function TeamPage() {
   // The same hours as the cards below, drawn on one clock so they can be
   // compared. The second axis is whichever of the two offices the viewer is
   // NOT in -- a Pacific viewer wants Manila beside their own scale.
-  const grid = buildWeekGrid({
-    members: staff.map((u) => ({
-      id: u.id,
-      name: u.name,
-      jobTitle: u.jobTitle,
-      email: u.email,
-      timeZone: u.timeZone,
-      blocks: u.availability,
-      exceptions: u.availabilityExceptions,
-    })),
-    viewerZone,
-    otherZone: viewerZone === MANILA ? PACIFIC : MANILA,
-    now,
-  });
+  const shown = who === "all" ? staff : staff.filter((u) => u.id === who);
+  const gridMembers = shown.map((u) => ({
+    id: u.id,
+    name: u.name,
+    jobTitle: u.jobTitle,
+    email: u.email,
+    timeZone: u.timeZone,
+    blocks: u.availability,
+    exceptions: u.availabilityExceptions,
+  }));
+  const otherZone = viewerZone === MANILA ? PACIFIC : MANILA;
+
+  const grid = buildWeekGrid({ members: gridMembers, viewerZone, otherZone, now, anchor: at });
+  const monthsView =
+    view === "months"
+      ? buildMonthOverview({ members: gridMembers, viewerZone, otherZone, now, anchor: at, months: 2 })
+      : [];
+
+  // What the arrows move by, and what the label says, depend on the view.
+  const dayMs = 86_400_000;
+  const shiftWeek = (by: number) => new Date(at.getTime() + by * 7 * dayMs).toISOString().slice(0, 10);
+  const shiftMonth = (by: number) => {
+    const p = new Date(at);
+    return new Date(Date.UTC(p.getUTCFullYear(), p.getUTCMonth() + by, 1, 12)).toISOString().slice(0, 10);
+  };
+  const dayLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: viewerZone });
+  const rangeLabel =
+    view === "months"
+      ? `${monthsView[0]?.label ?? ""} – ${monthsView[1]?.label ?? ""}`
+      : `${dayLabel.format(grid.days[0].start)} – ${dayLabel.format(grid.days[6].start)}`;
   const shared = overlapWindows(withHours);
   // When all three never coincide, who CAN reach whom is the useful answer.
   const pairs = pairOverlaps(members);
@@ -153,15 +185,37 @@ export default async function TeamPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">This week</CardTitle>
-          <CardDescription>
-            Everyone&apos;s hours on one clock — yours down the left, {viewerZone === MANILA ? "Pacific" : "Manila"}{" "}
-            down the right. The full day is drawn because a {viewerZone === MANILA ? "Pacific" : "Manila"}{" "}
-            shift lands in your evening, and cropping to office hours would hide it.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">
+                {view === "months" ? "Two months" : "The week"}
+              </CardTitle>
+              <CardDescription>
+                {view === "months"
+                  ? "Which days have cover, and which have none. Switch to Week for the hour-by-hour view."
+                  : `Everyone's hours on one clock — yours down the left, ${viewerZone === MANILA ? "Pacific" : "Manila"} down the right. The full day is drawn because a ${viewerZone === MANILA ? "Pacific" : "Manila"} shift lands in your evening, and cropping to office hours would hide it.`}
+              </CardDescription>
+            </div>
+          </div>
+          <div className="pt-3">
+            <Suspense fallback={null}>
+              <TeamCalendarControls
+                view={view}
+                rangeLabel={rangeLabel}
+                previous={view === "months" ? shiftMonth(-1) : shiftWeek(-1)}
+                next={view === "months" ? shiftMonth(1) : shiftWeek(1)}
+                people={staff.map((u) => ({ id: u.id, name: u.name }))}
+                who={who}
+              />
+            </Suspense>
+          </div>
         </CardHeader>
         <CardContent>
-          <TeamWeekGrid grid={grid} now={now} />
+          {view === "months" ? (
+            <TeamMonthOverview months={monthsView} />
+          ) : (
+            <TeamWeekGrid grid={grid} now={now} />
+          )}
         </CardContent>
       </Card>
 
