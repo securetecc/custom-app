@@ -114,9 +114,14 @@ export default async function MonthlyPositionPage({
                 <span>Payments received this month</span>
                 <span className="tabular-nums">{usd(p.reference.paymentsReceived)}</span>
               </p>
+              <p className="flex justify-between gap-3">
+                <span>SecureTECC internal work (non-billable)</span>
+                <span className="tabular-nums">{formatHours(p.reference.internalHours)}</span>
+              </p>
               <p className="mt-1">
                 An invoice can bill an earlier month&apos;s work, so adding it in would count that
-                work twice.
+                work twice. Internal work is tracked in hours only — it is never billed and never
+                counts as revenue.
               </p>
             </div>
           </CardContent>

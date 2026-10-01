@@ -29,7 +29,12 @@ export type MonthlyPosition = {
     retainerCount: number;
     gross: number;
   };
-  reference: { invoiced: number; paymentsReceived: number };
+  reference: {
+    invoiced: number;
+    paymentsReceived: number;
+    /** Hours on SecureTECC's own work. Tracked, never revenue. */
+    internalHours: number;
+  };
   costs: {
     byCategory: { category: ExpenseCategory; amount: number; items: { name: string; amount: number }[] }[];
     /** What delivering the recurring services costs (the `cost` on each charge). */
@@ -70,7 +75,7 @@ export async function loadMonthlyPosition(tx: TxClient, monthParam?: string): Pr
   const dayStart = new Date(`${month}-01T00:00:00Z`);
   const dayEnd = new Date(Date.UTC(dayStart.getUTCFullYear(), dayStart.getUTCMonth() + 1, 1));
 
-  const [entries, charges, retainerClients, expenses, invoiced, payments] = await Promise.all([
+  const [entries, charges, retainerClients, expenses, invoiced, payments, internal] = await Promise.all([
     tx.timeEntry.findMany({
       where: {
         billableStatus: "Billable",
@@ -105,6 +110,12 @@ export async function loadMonthlyPosition(tx: TxClient, monthParam?: string): Pr
     tx.payment.aggregate({
       where: { receivedAt: { gte: dayStart, lt: dayEnd } },
       _sum: { amount: true },
+    }),
+    // Internal work is deliberately counted in HOURS only: it earns nothing,
+    // and giving it a value would invite it into a revenue figure later.
+    tx.timeEntry.aggregate({
+      where: { client: { isInternal: true }, date: { gte: dayStart, lt: dayEnd } },
+      _sum: { durationHours: true },
     }),
   ]);
 
@@ -179,6 +190,7 @@ export async function loadMonthlyPosition(tx: TxClient, monthParam?: string): Pr
     reference: {
       invoiced: round(Number(invoiced._sum.totalAmount ?? 0)),
       paymentsReceived: round(Number(payments._sum.amount ?? 0)),
+      internalHours: round(Number(internal._sum.durationHours ?? 0)),
     },
     costs: { byCategory: categories, recurringDelivery: round(recurringDelivery), total: round(costTotal) },
     net: round(gross - costTotal),

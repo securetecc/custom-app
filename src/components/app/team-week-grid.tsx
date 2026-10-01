@@ -14,7 +14,7 @@ import type { WeekGrid } from "@/lib/team/week-grid";
  * entire team.
  */
 export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
-  const lanes = grid.lanes.filter((l) => l.segments.length > 0);
+  const lanes = grid.lanes.filter((l) => l.segments.length > 0 || l.marks.length > 0);
   const viewerAbbr = zoneAbbreviation(now, grid.viewerZone);
   const otherAbbr = zoneAbbreviation(now, grid.otherZone);
 
@@ -42,6 +42,28 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
         <span className="ml-auto text-xs text-muted-foreground">
             Left axis {viewerAbbr} · right axis {otherAbbr}
         </span>
+      </div>
+
+      {/* What the shapes mean. Without it a hatched bar is just a bar, and
+          "off" and "busy with something else" read the same. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-3 w-3 rounded-sm bg-foreground/35" />
+          Usual working hours
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-3 w-3 rounded-sm border" style={BLOCKED_SWATCH} />
+          Blocked — another commitment
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-3 w-3 rounded-sm border" style={AWAY_SWATCH} />
+          On leave or unavailable
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-0 w-4 border-t-2" style={{ borderColor: "var(--viz-teal)" }} />
+          Now
+        </span>
+        <span>Empty space is outside someone&apos;s usual hours.</span>
       </div>
 
       {/* The grid scrolls sideways rather than squeezing seven columns onto a
@@ -90,6 +112,25 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                   <div className="absolute inset-0 flex gap-[2px] p-[2px]">
                     {lanes.map((lane) => (
                       <div key={lane.memberId} className="relative min-w-0 flex-1">
+                        {/* Leave, unavailable and blocked time, drawn UNDER
+                            the hours: the hours are already cut around them,
+                            so they fill the space the bar used to occupy. */}
+                        {lane.marks
+                          .filter((m) => m.dayIndex === dayIndex)
+                          .map((mark, i) => (
+                            <div
+                              key={`m${i}`}
+                              title={`${lane.name}: ${mark.label}${
+                                mark.wholeDay ? "" : ` (${mark.startLabel} – ${mark.endLabel})`
+                              }`}
+                              className="absolute inset-x-0 overflow-hidden rounded-[3px] border"
+                              style={{
+                                top: `${mark.topPct}%`,
+                                height: `${mark.heightPct}%`,
+                                ...(mark.kind === "blocked" ? BLOCKED_SWATCH : AWAY_SWATCH),
+                              }}
+                            />
+                          ))}
                         {lane.segments
                           .filter((s) => s.dayIndex === dayIndex)
                           .map((segment, i) => (
@@ -148,6 +189,23 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
     </div>
   );
 }
+
+/* Hatching rather than a flat colour: these are absences and commitments,
+   not working hours, and a solid block of colour would read as a shift. */
+const BLOCKED_SWATCH = {
+  backgroundImage:
+    "repeating-linear-gradient(45deg, var(--viz-warn) 0 2px, transparent 2px 5px)",
+  borderColor: "color-mix(in oklab, var(--viz-warn) 55%, transparent)",
+  opacity: 0.85,
+} as const;
+
+const AWAY_SWATCH = {
+  backgroundImage:
+    "repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 5px)",
+  borderColor: "var(--viz-grid)",
+  color: "var(--muted-foreground)",
+  opacity: 0.8,
+} as const;
 
 /** The hour scale, in the viewer's zone on the left and the other on the right. */
 function TimeAxis({ grid, side }: { grid: WeekGrid; side: "left" | "right" }) {

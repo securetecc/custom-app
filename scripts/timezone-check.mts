@@ -272,5 +272,31 @@ console.log("\nThe week grid — one clock, blocks split at midnight\n");
   check("and the day says why", onLeave.days[1].exceptions[0], "On leave");
 }
 
+// --- exceptions on the week grid ----------------------------------------------
+{
+  const monday = new Date("2026-09-21T19:00:00Z"); // Monday noon Pacific
+  const member = {
+    id: "i", name: "Ian", jobTitle: null, email: "i@x", timeZone: MANILA,
+    blocks: [1, 2, 3].map((weekday) => ({ weekday, startMinutes: 6 * 60, endMinutes: 15 * 60, label: "Core hours" })),
+    exceptions: [
+      { date: "2026-09-22", kind: "Leave" as const, startMinutes: null, endMinutes: null, note: "Family" },
+      { date: "2026-09-23", kind: "Blocked" as const, startMinutes: 8 * 60, endMinutes: 10 * 60, note: "Sergent cutover" },
+    ],
+  };
+  const grid = buildWeekGrid({ members: [member], viewerZone: PACIFIC, otherZone: MANILA, now: monday });
+  const lane = grid.lanes[0];
+  const away = lane.marks.filter((m) => m.kind === "away");
+  const blocked = lane.marks.filter((m) => m.kind === "blocked");
+  check("a whole day of leave is drawn", away.length > 0, true);
+  check("leave is labelled", away[0].label, "On leave — Family");
+  check("a Manila day of leave spans two Pacific columns", new Set(away.map((m) => m.dayIndex)).size, 2);
+  check("blocked time is drawn separately", blocked.length, 1);
+  check("and names the commitment", blocked[0].label, "Blocked 8:00 AM – 10:00 AM — Sergent cutover");
+  check("blocked time is not a whole day", blocked[0].wholeDay, false);
+  // The hours themselves are cut around the exceptions.
+  const tuesdayHours = lane.segments.filter((s) => s.startLabel.includes("PM") || s.startLabel.includes("AM")).length;
+  check("hours still drawn for the untouched days", tuesdayHours > 0, true);
+}
+
 console.log(`\n${failures === 0 ? "All checks passed." : `${failures} FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

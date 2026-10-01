@@ -1,4 +1,4 @@
-import { buildMember, type StoredBlock, type StoredException } from "./availability";
+import { buildMember, describeException, type StoredBlock, type StoredException } from "./availability";
 import {
   formatTimeInZone,
   partsInZone,
@@ -46,6 +46,25 @@ export type GridSegment = {
   label: string | null;
 };
 
+/**
+ * A one-off change drawn on the grid: leave, an unavailable stretch, or time
+ * blocked for something else.
+ *
+ * Drawn rather than merely subtracted, because "Ian is off on Thursday" and
+ * "Ian never works Thursdays" look identical once the bar is simply gone --
+ * and they mean completely different things to whoever is planning the week.
+ */
+export type GridMark = {
+  dayIndex: number;
+  topPct: number;
+  heightPct: number;
+  kind: "away" | "blocked";
+  label: string;
+  startLabel: string;
+  endLabel: string;
+  wholeDay: boolean;
+};
+
 export type GridLane = {
   memberId: string;
   name: string;
@@ -53,6 +72,7 @@ export type GridLane = {
   colorVar: string;
   zoneAbbr: string;
   segments: GridSegment[];
+  marks: GridMark[];
 };
 
 export type WeekGrid = {
@@ -192,12 +212,67 @@ export function buildWeekGrid(args: {
       }
     }
 
+    // The exceptions themselves, laid on the same clock as the hours. Times
+    // are wall-clock in the MEMBER's zone, so they resolve there and are then
+    // clipped into the viewer's days exactly as the blocks are.
+    const marks: GridMark[] = [];
+    for (const exception of member.exceptions ?? []) {
+      // Changed hours already show as ordinary work bars.
+      if (exception.kind === "DifferentHours") continue;
+      const [y, mo, d] = exception.date.split("-").map(Number);
+      if (!y || !mo || !d) continue;
+
+      const wholeDay = exception.startMinutes == null || exception.endMinutes == null;
+      const from = wholeDay
+        ? zonedWallTimeToUtc(member.timeZone as TimeZoneId, y, mo, d, 0, 0)
+        : zonedWallTimeToUtc(
+            member.timeZone as TimeZoneId,
+            y,
+            mo,
+            d,
+            Math.floor(exception.startMinutes! / 60),
+            exception.startMinutes! % 60,
+          );
+      const endsNextDay =
+        !wholeDay && exception.endMinutes! <= exception.startMinutes!;
+      const to = wholeDay
+        ? zonedWallTimeToUtc(member.timeZone as TimeZoneId, y, mo, d + 1, 0, 0)
+        : zonedWallTimeToUtc(
+            member.timeZone as TimeZoneId,
+            y,
+            mo,
+            endsNextDay ? d + 1 : d,
+            Math.floor(exception.endMinutes! / 60),
+            exception.endMinutes! % 60,
+          );
+      if (to.getTime() <= weekStartMs || from.getTime() >= weekEndMs) continue;
+
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+        const day = days[dayIndex];
+        const start = Math.max(from.getTime(), day.start.getTime());
+        const end = Math.min(to.getTime(), day.end.getTime());
+        if (end <= start) continue;
+        const dayMs = day.end.getTime() - day.start.getTime();
+        marks.push({
+          dayIndex,
+          topPct: ((start - day.start.getTime()) / dayMs) * 100,
+          heightPct: ((end - start) / dayMs) * 100,
+          kind: exception.kind === "Blocked" ? "blocked" : "away",
+          label: describeException(exception),
+          startLabel: formatTimeInZone(new Date(start), viewerZone),
+          endLabel: formatTimeInZone(new Date(end), viewerZone),
+          wholeDay,
+        });
+      }
+    }
+
     return {
       memberId: member.id,
       name: member.name,
       colorVar: LANE_COLORS[index % LANE_COLORS.length],
       zoneAbbr: "",
       segments,
+      marks,
     };
   });
 
