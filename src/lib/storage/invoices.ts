@@ -55,29 +55,36 @@ export function invoicePdfFileName(invoiceNumber: string, clientName: string): s
 }
 
 /**
- * Short-lived signed URL -- the bucket is private, so there is no public URL.
+ * The Content-Disposition header that makes the browser save the PDF under
+ * `fileName`.
  *
- * `fileName` turns the link into a download with a readable name; omit it to
- * get a plain inline URL.
+ * Set here rather than through Supabase's signed-URL `download` option: that
+ * option encodes the name twice (URLSearchParams, then encodeURI over the
+ * whole URL) and the storage server decodes it once, so "&" arrived as "%26"
+ * and "," as "%2C" in the saved filename.
+ *
+ * `filename*` (RFC 6266 / 5987) carries the exact name, accents included;
+ * the plain `filename` is an ASCII fallback for anything that ignores it.
  */
-export async function getInvoicePdfSignedUrl(
-  path: string,
-  expiresInSeconds = 60,
-  fileName?: string,
-): Promise<string> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(path, expiresInSeconds, fileName ? { download: fileName } : undefined);
-  if (error || !data) throw new Error(`Could not sign invoice PDF URL: ${error?.message}`);
-  return data.signedUrl;
+export function attachmentContentDisposition(fileName: string): string {
+  const fallback = fileName
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_");
+  const encoded = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
 /**
  * Downloads a stored invoice PDF as a Buffer.
  *
- * Needed to attach the real PDF to the Gmail draft -- the bucket is private,
- * so a Gmail draft can't just link to it, and a signed URL would expire.
+ * Used to attach the real PDF to the Gmail draft -- the bucket is private,
+ * so a Gmail draft can't just link to it, and a signed URL would expire --
+ * and to serve "Download PDF" with a filename we control.
  */
 export async function downloadInvoicePdf(path: string): Promise<Buffer> {
   const supabase = createAdminClient();
