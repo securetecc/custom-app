@@ -401,6 +401,17 @@ export function monthlySummaryEmail(
   };
 }
 
+/**
+ * The subject-line prefix carrying a task's priority.
+ *
+ * On every task email, not just the urgent ones, for the same reason the
+ * ticket subjects carry urgency: a mailbox is triaged by scanning subject
+ * lines, and a missing prefix reads as "not urgent" rather than "unlabelled".
+ */
+export function taskPriorityPrefix(priority: string): string {
+  return `[${priority}] `;
+}
+
 const PRIORITY_COLORS: Record<string, string> = {
   Low: "rgba(255,255,255,0.62)",
   Medium: "#06E1DC",
@@ -443,7 +454,7 @@ export function taskAssignedEmail(
   }
 
   return {
-    subject: `New task: ${task.title}`,
+    subject: `${taskPriorityPrefix(task.priority)}New task: ${task.title}`,
     html: shell(
       branding,
       `<h1 style="margin:0 0 12px;font-size:20px;">Hi ${escapeHtml(task.assigneeName.split(" ")[0])},</h1>
@@ -473,11 +484,11 @@ export function taskAssignedEmail(
  */
 export function taskForReviewEmail(
   branding: Branding,
-  task: { title: string; assigneeName: string },
+  task: { title: string; assigneeName: string; priority: string },
   taskUrl: string,
 ): { subject: string; html: string } {
   return {
-    subject: `Ready for review: ${task.title}`,
+    subject: `${taskPriorityPrefix(task.priority)}Ready for review: ${task.title}`,
     html: shell(
       branding,
       `<h1 style="margin:0 0 12px;font-size:20px;">Ready for your review</h1>
@@ -498,11 +509,11 @@ export function taskForReviewEmail(
  */
 export function taskCompletedEmail(
   branding: Branding,
-  task: { title: string; assigneeName: string; completedOn: string | null },
+  task: { title: string; assigneeName: string; completedOn: string | null; priority: string },
   taskUrl: string,
 ): { subject: string; html: string } {
   return {
-    subject: `Completed: ${task.title}`,
+    subject: `${taskPriorityPrefix(task.priority)}Completed: ${task.title}`,
     html: shell(
       branding,
       `<h1 style="margin:0 0 12px;font-size:20px;">Task completed</h1>

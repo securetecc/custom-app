@@ -364,7 +364,7 @@ export async function notifyTaskForReview(taskId: string): Promise<SendResult> {
   const org = task.organization as OrgRow;
   const email = taskForReviewEmail(
     brandingOf(org),
-    { title: task.title, assigneeName: task.assignedToUser.name },
+    { title: task.title, assigneeName: task.assignedToUser.name, priority: task.priority },
     appUrl("/tasks"),
   );
 
@@ -404,6 +404,7 @@ export async function notifyTaskCompleted(taskId: string): Promise<SendResult> {
     {
       title: task.title,
       assigneeName: task.assignedToUser.name,
+      priority: task.priority,
       // completedAt is a real timestamp, not a date-only column, so it is
       // read in Pacific -- formatTaskDate's UTC reading would show the next
       // day for anything finished after 5pm.
