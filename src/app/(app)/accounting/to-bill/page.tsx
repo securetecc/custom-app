@@ -80,7 +80,14 @@ export default async function ToBillPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{c.cadence}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.hours.toFixed(2)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{usd(c.timeValue)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {usd(c.timeValue)}
+                    {c.retainerMonths > 0 && (
+                      <span className="block text-xs text-muted-foreground">
+                        {c.retainerMonths} retainer month{c.retainerMonths === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
                     {c.expenseValue > 0 ? usd(c.expenseValue) : "—"}
                   </TableCell>
@@ -133,7 +140,7 @@ export default async function ToBillPage() {
               </TableHeader>
               <TableBody>
                 {report!.entries.map((e) => (
-                  <TableRow key={e.id} data-unrated={e.rate === null || undefined}>
+                  <TableRow key={e.id} data-unrated={(e.rate === null && !e.retainer) || undefined}>
                     <TableCell className="whitespace-nowrap">{e.date}</TableCell>
                     <TableCell>{e.clientName}</TableCell>
                     <TableCell className="whitespace-nowrap">
@@ -146,7 +153,9 @@ export default async function ToBillPage() {
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{e.hours.toFixed(2)}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {e.rate === null ? (
+                      {e.retainer ? (
+                        <span className="text-muted-foreground">retainer</span>
+                      ) : e.rate === null ? (
                         <span className="text-[var(--viz-warn)]">no rate</span>
                       ) : (
                         usd(e.rate)

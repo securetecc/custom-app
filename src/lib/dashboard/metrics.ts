@@ -7,6 +7,7 @@ import {
 } from "@/lib/cron/pacific";
 import type { TxClient } from "@/lib/db/rls";
 import { resolveRate, toRate } from "@/lib/billing/rates";
+import { isRetainer, loadRetainerBacklog, retainerMonthKey } from "@/lib/billing/retainer";
 
 /**
  * Dashboard aggregates.
@@ -329,7 +330,7 @@ export async function loadDashboardMetrics(
         rateOverride: true,
         serviceType: { select: { rateOverride: true, scheduledRate: true, scheduledRateFrom: true } },
         client: {
-          select: { billingRate: true, scheduledRate: true, scheduledRateFrom: true },
+          select: { billingType: true, billingRate: true, scheduledRate: true, scheduledRateFrom: true },
         },
       },
     }),
@@ -383,6 +384,7 @@ export async function loadDashboardMetrics(
         client: {
           select: {
             name: true,
+            billingType: true,
             billingRate: true,
             billingCadence: true,
             scheduledRate: true,
@@ -468,18 +470,28 @@ export async function loadDashboardMetrics(
     date: Date;
     rateOverride: unknown;
     serviceType: { rateOverride: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null };
-    client: { billingRate: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null };
+    client: { billingType: string; billingRate: unknown; scheduledRate: unknown; scheduledRateFrom: Date | null };
   }) =>
-    resolveRate({
-      entryRateOverride: toRate(e.rateOverride),
-      serviceTypeRateOverride: toRate(e.serviceType.rateOverride),
-      serviceTypeScheduledRate: toRate(e.serviceType.scheduledRate),
-      serviceTypeScheduledRateFrom: e.serviceType.scheduledRateFrom,
-      clientBillingRate: toRate(e.client.billingRate),
-      clientScheduledRate: toRate(e.client.scheduledRate),
-      clientScheduledRateFrom: e.client.scheduledRateFrom,
-      entryDate: e.date,
-    }) ?? 0;
+    // A Retainer client's billingRate is the monthly fee, not an hourly rate.
+    // Their hours are worth nothing on their own -- the month is what gets
+    // billed, and is added separately below. Same rule as generateInvoice.
+    isRetainer(e.client)
+      ? 0
+      : resolveRate({
+          entryRateOverride: toRate(e.rateOverride),
+          serviceTypeRateOverride: toRate(e.serviceType.rateOverride),
+          serviceTypeScheduledRate: toRate(e.serviceType.scheduledRate),
+          serviceTypeScheduledRateFrom: e.serviceType.scheduledRateFrom,
+          clientBillingRate: toRate(e.client.billingRate),
+          clientScheduledRate: toRate(e.client.scheduledRate),
+          clientScheduledRateFrom: e.client.scheduledRateFrom,
+          entryDate: e.date,
+        }) ?? 0;
+
+  // Retainer months worked and not yet billed, at the monthly fee -- what the
+  // invoice generator would actually charge for the retainer clients below.
+  const retainerBacklog = await loadRetainerBacklog(tx, unbilledDetail);
+  const thisMonthKey = retainerMonthKey(monthStart);
 
   // --- unbilled pipeline -----------------------------------------------------
   let unbilledHours = 0;
@@ -489,6 +501,7 @@ export async function loadDashboardMetrics(
     unbilledHours += h;
     unbilledValue += h * rateFor(e);
   }
+  for (const r of retainerBacklog.values()) unbilledValue += r.rate * r.months.length;
 
   const billable = num(rangeHours.find((r) => r.billableStatus === "Billable")?._sum.durationHours);
   const nonBillable = rangeHours
@@ -563,6 +576,12 @@ export async function loadDashboardMetrics(
     unbilledByClient.set(e.clientId, row);
   }
 
+  for (const [clientId, r] of retainerBacklog) {
+    const row = unbilledByClient.get(clientId);
+    if (row) row.value += r.rate * r.months.length;
+    if (r.months.includes(thisMonthKey)) monthUnbilledValue += r.rate;
+  }
+
   // Billable hours logged this month, invoiced or not -- the month's output,
   // as distinct from what is still waiting to be billed.
   const monthEntries = await tx.timeEntry.findMany({
@@ -571,15 +590,23 @@ export async function loadDashboardMetrics(
       date: true,
       durationHours: true,
       rateOverride: true,
+      clientId: true,
       serviceType: { select: { rateOverride: true, scheduledRate: true, scheduledRateFrom: true } },
-      client: { select: { billingRate: true, scheduledRate: true, scheduledRateFrom: true } },
+      client: {
+        select: { billingType: true, billingRate: true, scheduledRate: true, scheduledRateFrom: true },
+      },
     },
   });
+  // A retainer client with work this month is worth one month's fee, billed
+  // or not -- counted once per client, never per hour.
+  const retainerFees = new Map<string, number>();
   for (const e of monthEntries) {
     const hours = num(e.durationHours);
     monthBillableHours += hours;
     monthBillableValue += hours * rateFor(e);
+    if (isRetainer(e.client)) retainerFees.set(e.clientId, toRate(e.client.billingRate) ?? 0);
   }
+  for (const fee of retainerFees.values()) monthBillableValue += fee;
 
   const CADENCE_DAYS: Record<string, number> = { Monthly: 31, Quarterly: 93 };
   const needsBilling = [...unbilledByClient]

@@ -1,5 +1,6 @@
 import type { TxClient } from "@/lib/db/rls";
 import { resolveRate, toRate } from "@/lib/billing/rates";
+import { isRetainer, loadRetainerBacklog } from "@/lib/billing/retainer";
 
 /**
  * Work that has been done and not yet invoiced.
@@ -22,6 +23,8 @@ export type ToBillEntry = {
   hours: number;
   rate: number | null;
   amount: number | null;
+  /** Hours on a retainer: shown, never priced -- the month is what's billed. */
+  retainer: boolean;
   description: string;
   ageDays: number;
 };
@@ -41,6 +44,8 @@ export type ToBillClient = {
   name: string;
   cadence: string;
   hours: number;
+  /** Retainer months with work and no invoice yet; 0 for Hourly clients. */
+  retainerMonths: number;
   timeValue: number;
   expenseValue: number;
   total: number;
@@ -75,6 +80,7 @@ export async function loadToBill(tx: TxClient, asOf: Date): Promise<ToBillReport
           select: {
             id: true,
             name: true,
+            billingType: true,
             billingRate: true,
             billingCadence: true,
             scheduledRate: true,
@@ -117,6 +123,7 @@ export async function loadToBill(tx: TxClient, asOf: Date): Promise<ToBillReport
         name,
         cadence,
         hours: 0,
+        retainerMonths: 0,
         timeValue: 0,
         expenseValue: 0,
         total: 0,
@@ -130,17 +137,23 @@ export async function loadToBill(tx: TxClient, asOf: Date): Promise<ToBillReport
 
   const entryRows: ToBillEntry[] = entries.map((e) => {
     const hours = Number(e.durationHours);
-    const rate = resolveRate({
-      entryRateOverride: toRate(e.rateOverride),
-      serviceTypeRateOverride: toRate(e.serviceType.rateOverride),
-      serviceTypeScheduledRate: toRate(e.serviceType.scheduledRate),
-      serviceTypeScheduledRateFrom: e.serviceType.scheduledRateFrom,
-      clientBillingRate: toRate(e.client.billingRate),
-      clientScheduledRate: toRate(e.client.scheduledRate),
-      clientScheduledRateFrom: e.client.scheduledRateFrom,
-      entryDate: e.date,
-    });
-    if (rate === null) unratedCount++;
+    // A Retainer client's billingRate is the monthly fee, not an hourly rate,
+    // and generateInvoice never prices their entries -- so neither does this,
+    // and a retainer entry is never "unrated".
+    const retainer = isRetainer(e.client);
+    const rate = retainer
+      ? null
+      : resolveRate({
+          entryRateOverride: toRate(e.rateOverride),
+          serviceTypeRateOverride: toRate(e.serviceType.rateOverride),
+          serviceTypeScheduledRate: toRate(e.serviceType.scheduledRate),
+          serviceTypeScheduledRateFrom: e.serviceType.scheduledRateFrom,
+          clientBillingRate: toRate(e.client.billingRate),
+          clientScheduledRate: toRate(e.client.scheduledRate),
+          clientScheduledRateFrom: e.client.scheduledRateFrom,
+          entryDate: e.date,
+        });
+    if (rate === null && !retainer) unratedCount++;
     const amount = rate === null ? null : round2(hours * rate);
     const ageDays = days(e.date);
 
@@ -159,10 +172,24 @@ export async function loadToBill(tx: TxClient, asOf: Date): Promise<ToBillReport
       hours,
       rate,
       amount,
+      retainer,
       description: e.description,
       ageDays,
     };
   });
+
+  // What the retainer clients' work would actually be invoiced at: one
+  // month's fee per month worked and not yet billed.
+  const retainerBacklog = await loadRetainerBacklog(
+    tx,
+    entries.map((e) => ({ clientId: e.client.id, date: e.date, client: e.client })),
+  );
+  for (const [clientId, r] of retainerBacklog) {
+    const row = byClient.get(clientId);
+    if (!row) continue;
+    row.retainerMonths = r.months.length;
+    row.timeValue += r.rate * r.months.length;
+  }
 
   const expenseRows: ToBillExpense[] = expenses.map((x) => {
     const amount = Number(x.amount);

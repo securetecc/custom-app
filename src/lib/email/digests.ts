@@ -104,12 +104,21 @@ export async function sendMonthlySummaries(): Promise<Result[]> {
           where: { date: { gte: periodStart, lte: periodEnd } },
           include: { serviceType: true },
         },
+        // Whether the month's retainer fee is on a live invoice yet.
+        retainerPeriods: {
+          where: { periodStart, invoice: { voidedAt: null } },
+          select: { id: true },
+        },
       },
     });
 
     const rows = clients
       .map((client) => {
         const clientRate = client.billingRate ? Number(client.billingRate) : null;
+        // A Retainer client's billingRate is the monthly fee, not an hourly
+        // rate: their hours are worth nothing on their own, and the month is
+        // billed once, as generateInvoice does.
+        const retainer = client.billingType === "Retainer";
         let billableHours = 0;
         let nonBillableHours = 0;
         let invoicedAmount = 0;
@@ -122,6 +131,7 @@ export async function sendMonthlySummaries(): Promise<Result[]> {
             continue;
           }
           billableHours += hours;
+          if (retainer) continue;
 
           const rate =
             (entry.serviceType.rateOverride ? Number(entry.serviceType.rateOverride) : null) ??
@@ -130,6 +140,11 @@ export async function sendMonthlySummaries(): Promise<Result[]> {
           const amount = hours * rate;
           if (entry.invoiceId) invoicedAmount += amount;
           else uninvoicedAmount += amount;
+        }
+
+        if (retainer && billableHours > 0) {
+          if (client.retainerPeriods.length > 0) invoicedAmount += clientRate ?? 0;
+          else uninvoicedAmount += clientRate ?? 0;
         }
 
         return {

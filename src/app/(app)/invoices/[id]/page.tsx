@@ -63,6 +63,9 @@ export default async function InvoiceDetailPage({
   const isAdmin = appUser.role === "admin";
   const voided = Boolean(invoice.voidedAt);
   const clientRate = invoice.client.billingRate ? Number(invoice.client.billingRate) : null;
+  // A Retainer client's billingRate is the monthly fee, not an hourly rate:
+  // their entries were billed as hours only, so they show no rate or amount.
+  const retainer = invoice.client.billingType === "Retainer";
   const addressLine = formatAddressLine(invoice.client.address1, invoice.client.address2);
 
   // The invoice's own status columns are a cache of these rows; the rows are
@@ -248,10 +251,11 @@ export default async function InvoiceDetailPage({
             </TableHeader>
             <TableBody>
               {invoice.timeEntries.map((entry) => {
-                const rate =
-                  (entry.serviceType.rateOverride
-                    ? Number(entry.serviceType.rateOverride)
-                    : null) ?? clientRate;
+                const rate = retainer
+                  ? null
+                  : ((entry.serviceType.rateOverride
+                      ? Number(entry.serviceType.rateOverride)
+                      : null) ?? clientRate);
                 const hours = Number(entry.durationHours);
                 return (
                   <TableRow key={entry.id}>
