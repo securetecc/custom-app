@@ -18,7 +18,14 @@ import {
  * arithmetic.
  */
 
-export type AvailabilityKind = "Work" | "Commitment";
+export type AvailabilityKind = "Work" | "Commitment" | "OnRequest";
+
+/** What each state is called wherever it is shown. */
+export const AVAILABILITY_KIND_LABELS: Record<AvailabilityKind, string> = {
+  Work: "Open",
+  Commitment: "Booked",
+  OnRequest: "On request",
+};
 
 export type StoredBlock = {
   weekday: number;

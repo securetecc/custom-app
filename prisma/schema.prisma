@@ -1099,6 +1099,10 @@ enum AvailabilityKind {
   Work
   /// Committed elsewhere -- shown on the calendar, never counted as ours.
   Commitment
+  /// Possible, but it has to be asked for: a contractor's weekend, an
+  /// evening someone will cover if the work needs it. Shown on the calendar
+  /// and never counted as time we can simply book.
+  OnRequest
 }
 
 model UserAvailability {

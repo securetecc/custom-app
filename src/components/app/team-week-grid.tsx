@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { zoneAbbreviation } from "@/lib/timezones";
 import type { WeekGrid } from "@/lib/team/week-grid";
+import { AVAILABILITY_KIND_LABELS } from "@/lib/team/availability";
 
 /** What the panel under the grid says about whatever is being hovered. */
 type Detail = {
@@ -61,8 +62,8 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
           "off" and "busy with something else" read the same. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span aria-hidden className="h-3 w-3 rounded-sm bg-foreground/35" />
-          SecureTECC hours — time we can book
+          <span aria-hidden className="h-3 w-3 rounded-sm bg-foreground/55" />
+          Open — time we can book
         </span>
         <span className="flex items-center gap-1.5">
           <span
@@ -73,7 +74,15 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                 "repeating-linear-gradient(45deg, var(--muted-foreground) 0 2px, transparent 2px 6px)",
             }}
           />
-          Other — not SecureTECC time
+          Booked — other work
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="h-3 w-3 rounded-sm border border-dashed"
+            style={{ borderColor: "var(--viz-1)", background: "color-mix(in oklab, var(--viz-1) 14%, transparent)" }}
+          />
+          On request — ask first
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-3 w-3 rounded-sm border" style={BLOCKED_SWATCH} />
@@ -208,15 +217,13 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                               key={i}
                               title={`${lane.name}: ${segment.startLabel} – ${segment.endLabel}${
                                 segment.label ? ` (${segment.label})` : ""
-                              }${segment.kind === "Commitment" ? " — Other" : ""}`}
+                              } — ${AVAILABILITY_KIND_LABELS[segment.kind]}`}
                               tabIndex={0}
                               onMouseEnter={() =>
                                 setDetail({
                                   name: lane.name,
                                   what:
-                                    segment.kind === "Commitment"
-                                      ? "Other"
-                                      : "SecureTECC hours",
+                                    AVAILABILITY_KIND_LABELS[segment.kind],
                                   viewerTime: `${segment.startLabel} – ${segment.endLabel}`,
                                   ownTime: `${segment.ownStartLabel} – ${segment.ownEndLabel}`,
                                   note: segment.label,
@@ -226,9 +233,7 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                                 setDetail({
                                   name: lane.name,
                                   what:
-                                    segment.kind === "Commitment"
-                                      ? "Other"
-                                      : "SecureTECC hours",
+                                    AVAILABILITY_KIND_LABELS[segment.kind],
                                   viewerTime: `${segment.startLabel} – ${segment.endLabel}`,
                                   ownTime: `${segment.ownStartLabel} – ${segment.ownEndLabel}`,
                                   note: segment.label,
@@ -237,7 +242,7 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                               onMouseLeave={() => setDetail(null)}
                               onBlur={() => setDetail(null)}
                               className={`absolute inset-x-0 overflow-hidden px-1 text-[10px] leading-tight ${
-                                segment.kind === "Commitment" ? "text-muted-foreground" : "text-white"
+                                segment.kind === "Work" ? "text-white" : "text-muted-foreground"
                               }`}
                               style={{
                                 top: `${segment.topPct}%`,
@@ -251,7 +256,14 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                                       border: `1px solid color-mix(in oklab, var(${lane.colorVar}) 45%, transparent)`,
                                       opacity: 0.75,
                                     }
-                                  : { background: `var(${lane.colorVar})` }),
+                                  : segment.kind === "OnRequest"
+                                    ? {
+                                        // Dashed and barely filled: time that
+                                        // exists, but only once it is asked for.
+                                        background: `color-mix(in oklab, var(${lane.colorVar}) 16%, transparent)`,
+                                        border: `1.5px dashed var(${lane.colorVar})`,
+                                      }
+                                    : { background: `var(${lane.colorVar})` }),
                                 // Square off the edge a block runs through, so
                                 // a shift crossing midnight reads as one thing
                                 // continuing rather than two that both ended.
@@ -261,9 +273,14 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
                                 borderBottomRightRadius: segment.continues ? 0 : 3,
                               }}
                             >
-                              {!segment.continued && segment.heightPct > 6 && (
-                                <span className="block truncate pt-[1px]">
-                                  {segment.startLabel.replace(":00", "")}
+                              {!segment.continued && segment.heightPct > 4 && (
+                                <span className="block truncate pt-[1px] font-medium">
+                                  {AVAILABILITY_KIND_LABELS[segment.kind]}
+                                </span>
+                              )}
+                              {!segment.continued && segment.heightPct > 9 && (
+                                <span className="block truncate opacity-90">
+                                  {compactRange(segment.startLabel, segment.endLabel)}
                                 </span>
                               )}
                             </div>
@@ -296,6 +313,21 @@ export function TeamWeekGrid({ grid, now }: { grid: WeekGrid; now: Date }) {
       </div>
     </div>
   );
+}
+
+/**
+ * "1:00 AM" + "11:00 AM" -> "1–11 AM".
+ *
+ * A person's lane is a seventh of a day column wide, so the full range does
+ * not fit and truncates mid-word. Dropping the o'clock minutes, and the
+ * first meridiem when both ends share it, is what makes it readable.
+ */
+function compactRange(start: string, end: string): string {
+  const trim = (t: string) => t.replace(":00", "");
+  const meridiem = (t: string) => (t.endsWith("PM") ? "PM" : "AM");
+  const a = trim(start);
+  const b = trim(end);
+  return meridiem(a) === meridiem(b) ? `${a.replace(/ (AM|PM)$/, "")}–${b}` : `${a}–${b}`;
 }
 
 /* Hatching rather than a flat colour: these are absences and commitments,

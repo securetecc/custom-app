@@ -31,7 +31,7 @@ type Block = {
   start: string;
   end: string;
   label: string | null;
-  kind: "Work" | "Commitment";
+  kind: "Work" | "Commitment" | "OnRequest";
 };
 
 /**
@@ -65,7 +65,7 @@ export function AvailabilityEditor({
     startMinutes: number;
     endMinutes: number;
     label: string | null;
-    kind?: "Work" | "Commitment";
+    kind?: "Work" | "Commitment" | "OnRequest";
   }[];
   trigger: React.ReactNode;
 }) {
@@ -214,13 +214,18 @@ export function AvailabilityEditor({
                           <SelectTrigger className="h-8 w-44" aria-label={`${label} type`}>
                             <SelectValue>
                               {(value) =>
-                                value === "Commitment" ? "Other" : "SecureTECC work"
+                                value === "Commitment"
+                                  ? "Booked — other work"
+                                  : value === "OnRequest"
+                                    ? "On request"
+                                    : "Open — SecureTECC"
                               }
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Work">SecureTECC work</SelectItem>
-                            <SelectItem value="Commitment">Other — not SecureTECC</SelectItem>
+                            <SelectItem value="Work">Open — SecureTECC</SelectItem>
+                            <SelectItem value="Commitment">Booked — other work</SelectItem>
+                            <SelectItem value="OnRequest">On request</SelectItem>
                           </SelectContent>
                         </Select>
                         <Input

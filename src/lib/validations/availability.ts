@@ -11,7 +11,7 @@ export const availabilityBlockSchema = z
     label: z.string().trim().max(40).nullable(),
     /// Work is time available to SecureTECC; Commitment is other work shown
     /// on the calendar but never counted as ours.
-    kind: z.enum(["Work", "Commitment"]),
+    kind: z.enum(["Work", "Commitment", "OnRequest"]),
   })
   .refine((v) => v.start !== v.end, {
     message: "A block needs a start and an end that differ",

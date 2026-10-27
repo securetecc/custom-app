@@ -1,4 +1,10 @@
-import { buildMember, describeException, type StoredBlock, type StoredException } from "./availability";
+import {
+  buildMember,
+  describeException,
+  type AvailabilityKind,
+  type StoredBlock,
+  type StoredException,
+} from "./availability";
 import {
   formatTimeInZone,
   partsInZone,
@@ -47,8 +53,8 @@ export type GridSegment = {
   /** True when it runs past midnight into the next column. */
   continues: boolean;
   label: string | null;
-  /** Work is SecureTECC's; Commitment is time claimed by other work. */
-  kind: "Work" | "Commitment";
+  /** Open is ours to book; Booked is someone else's; On request must be asked for. */
+  kind: AvailabilityKind;
 };
 
 /**

@@ -2,6 +2,7 @@ import { Pencil } from "lucide-react";
 import { requireOrgContext } from "@/lib/auth";
 import { withRLS } from "@/lib/db/rls";
 import {
+  AVAILABILITY_KIND_LABELS,
   buildMember,
   describeException,
   overlapWindows,
@@ -163,9 +164,11 @@ export default async function TeamPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
         <p className="text-muted-foreground">
-          Who is usually working, and when — in their time and in yours. These are general
-          hours, not a live schedule: leave, blocked time and changed days are listed under each
-          person, and anything urgent is still worth a message first.
+          Who is usually working, and when — in their time and in yours. Each block is one of
+          three things: <strong>Open</strong> is time we can book, <strong>Booked</strong> is
+          taken by other work, and <strong>On request</strong> is time someone will give if it is
+          asked for. These are general hours rather than a live schedule, so leave and one-off
+          changes are listed under each person.
         </p>
       </div>
 
@@ -402,8 +405,11 @@ export default async function TeamPage({
                             {day.blocks.map((block, i) => (
                               <span key={i} className={block.kind === "Commitment" ? "text-muted-foreground" : ""}>
                                 <span className="tabular-nums">{block.ownHours}</span>
-                                {block.kind === "Commitment" && (
-                                  <span className="ml-2 text-xs">{block.label ?? "Other"}</span>
+                                {block.kind !== "Work" && (
+                                  <span className="ml-2 text-xs">
+                                    {AVAILABILITY_KIND_LABELS[block.kind]}
+                                    {block.label ? ` · ${block.label}` : ""}
+                                  </span>
                                 )}
                                 {block.kind === "Work" && block.label && (
                                   <span className="ml-2 text-xs text-muted-foreground">
