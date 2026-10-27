@@ -32,7 +32,11 @@ export default async function TasksPage() {
           createdByUser: { select: { name: true } },
         },
       }),
-      tx.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      tx.user.findMany({
+        where: { usesPlatform: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
     ]),
   );
 

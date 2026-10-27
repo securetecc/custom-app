@@ -143,7 +143,9 @@ export async function sendMonthlySummaries(): Promise<Result[]> {
       .filter((r) => r.billableHours > 0 || r.nonBillableHours > 0);
 
     const email = monthlySummaryEmail(brandingOf(org), monthLabel, rows);
-    const staff = await prisma.user.findMany({ where: { organizationId: org.id } });
+    const staff = await prisma.user.findMany({
+      where: { organizationId: org.id, usesPlatform: true },
+    });
 
     for (const user of staff) {
       const sent = await sendEmail({

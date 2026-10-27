@@ -65,7 +65,11 @@ export default async function TimeEntriesPage({
       }),
       tx.client.findMany({ where: { activeStatus: true }, orderBy: { name: "asc" } }),
       tx.serviceType.findMany({ orderBy: { code: "asc" } }),
-      tx.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      tx.user.findMany({
+        where: { usesPlatform: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
       // Every project already used, per client -- offered as suggestions so
       // "CMMC Level 1" is not also typed as "CMMC L1" next week.
       tx.timeEntry.findMany({

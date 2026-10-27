@@ -37,7 +37,11 @@ export default async function TicketDetailPage({
         attachments: { orderBy: { uploadedAt: "asc" } },
       },
     }),
-    await tx.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    await tx.user.findMany({
+      where: { usesPlatform: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   if (!ticket) notFound();

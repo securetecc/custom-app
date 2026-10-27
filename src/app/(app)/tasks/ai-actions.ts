@@ -32,7 +32,11 @@ export async function parseTaskVoiceNote(rawInput: string): Promise<TaskParseRes
   }
 
   const staff = await withRLS(authUserId, (tx) =>
-    tx.user.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    tx.user.findMany({
+      where: { usesPlatform: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   );
 
   let parsed;

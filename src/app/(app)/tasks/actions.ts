@@ -61,7 +61,7 @@ export async function createTask(input: TaskFormValues): Promise<ActionResult> {
       // Every assignee must be a real colleague in this org. RLS scopes the
       // lookup, so an id from another organisation simply isn't found.
       const found = await tx.user.findMany({
-        where: { id: { in: assigneeIds } },
+        where: { id: { in: assigneeIds }, usesPlatform: true },
         select: { id: true },
       });
       if (found.length !== assigneeIds.length) {

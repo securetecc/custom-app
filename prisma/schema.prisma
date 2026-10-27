@@ -325,6 +325,14 @@ model User {
   /// around other clients is real, and a week showing one booked hour would
   /// otherwise read as one hour of capacity.
   estimatedWeeklyHours Int?
+  /// Whether this person actually works IN the platform.
+  ///
+  /// Someone can belong on the team calendar without having been invited --
+  /// a contractor whose hours everyone needs to see, but who has no login,
+  /// no mailbox we can write to, and no business appearing in a list of
+  /// people to hand a ticket to. False keeps them on the Team page and out
+  /// of every assignee, performed-by and notification list.
+  usesPlatform         Boolean      @default(true)
   receivesTicketEmails Boolean      @default(true)
   /// Told when a task is assigned to them.
   notifyTaskAssigned   Boolean      @default(true)
