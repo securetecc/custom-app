@@ -22,9 +22,16 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// What someone can reach in the platform.
+///
+/// contractor is the narrow one: somebody who records their hours and sees
+/// nothing else -- not the client list, not an invoice, not another person's
+/// work. It exists because "technician" is a colleague with the run of the
+/// place, and an outside pair of hands is not that.
 enum UserRole {
   admin
   technician
+  contractor
 }
 
 /// Task urgency. Named rather than numbered so the value reads the same in the

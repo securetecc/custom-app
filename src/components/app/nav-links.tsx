@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { navItemsFor } from "@/components/app/nav-items";
+import { navItemsFor, type Role } from "@/components/app/nav-items";
 
 /**
  * The nav list itself, rendered identically in the sidebar and the mobile
@@ -16,7 +16,7 @@ export function NavLinks({
   role,
   onNavigate,
 }: {
-  role: "admin" | "technician";
+  role: Role;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();

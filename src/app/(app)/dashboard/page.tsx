@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { requireOrgContext } from "@/lib/auth";
+import { requireAppUser, requireOrgContext } from "@/lib/auth";
+import { ContractorDashboardPage } from "@/app/(app)/dashboard/contractor";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadDashboardMetrics, resolveRange } from "@/lib/dashboard/metrics";
 import { GoalMeter } from "@/components/app/dashboard/goal-meter";
@@ -21,6 +22,11 @@ type SearchParams = Promise<{ range?: string; from?: string; to?: string }>;
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const range = resolveRange(sp.range, sp.from, sp.to);
+
+  // A contractor gets their own figures instead: the ordinary dashboard is a
+  // money screen, and none of it is theirs to read.
+  const me = await requireAppUser();
+  if (me.role === "contractor") return <ContractorDashboardPage />;
 
   // One transaction for the whole page: requireOrgContext's callback runs the
   // dashboard's queries alongside the app-user lookup rather than opening a

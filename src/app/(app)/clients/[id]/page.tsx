@@ -23,8 +23,13 @@ export default async function EditClientPage({
     data: [client, pricingRows],
   } = await requireOrgContext((tx, appUser) =>
     Promise.all([
-      tx.client.findUnique({
-        where: { id },
+      tx.client.findFirst({
+        where: {
+          id,
+          ...(appUser.role === "contractor"
+            ? { timeEntries: { some: { performedByUserId: appUser.id } } }
+            : {}),
+        },
         include: {
           // Ordered in code, not SQL: the ranking is by what the service IS
           // (site fee, then RMM, then email security), which no column sorts

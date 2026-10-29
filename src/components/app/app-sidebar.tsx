@@ -3,8 +3,9 @@
 import Image from "next/image";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 import { NavLinks } from "@/components/app/nav-links";
+import type { Role } from "@/components/app/nav-items";
 
-export function AppSidebar({ role }: { role: "admin" | "technician" }) {
+export function AppSidebar({ role }: { role: Role }) {
   return (
     // sticky + h-screen pins the sidebar to the viewport instead of letting
     // it grow with the nav list. Without it the aside is as tall as its

@@ -39,9 +39,13 @@ export default async function InvoicesPage({
   const search = (q ?? "").trim();
   const outstanding = active === "Current";
 
-  const { data: invoices } = await requireOrgContext((tx) =>
+  const { data: invoices } = await requireOrgContext((tx, appUser) =>
     tx.invoice.findMany({
       where: {
+        // A contractor sees the invoices their own work was billed on.
+        ...(appUser.role === "contractor"
+          ? { timeEntries: { some: { performedByUserId: appUser.id } } }
+          : {}),
         ...(outstanding
           ? {
               // Not Draft: a draft is not owed yet, it is not even an invoice.

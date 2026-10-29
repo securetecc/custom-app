@@ -482,6 +482,45 @@ export function taskAssignedEmail(
  * happens to open the page -- which turns a delegation tool into something
  * you have to remember to poll.
  */
+/**
+ * The invitation a new member of staff receives.
+ *
+ * Carries a set-your-password link rather than a password: a password in an
+ * inbox stays there, readable by anyone who later reaches that mailbox, and
+ * it means whoever created the account knows the credential too. The link is
+ * single-use and expires, so the password only ever exists in the head of
+ * the person it belongs to.
+ *
+ * Deliberately impersonal, the way an account notice from any service reads:
+ * naming whoever clicked Add dates the message and says nothing the reader
+ * needs. What they need is the address they sign in with and the link.
+ */
+export function staffInviteEmail(
+  branding: Branding,
+  invite: {
+    name: string;
+    email: string;
+    /** "administrator" or "technician", lower case, as it reads mid-sentence. */
+    roleLabel: string;
+  },
+  setPasswordUrl: string,
+  signInUrl: string,
+): { subject: string; html: string } {
+  return {
+    subject: `Your ${branding.organizationName} account is ready`,
+    html: shell(
+      branding,
+      `<h1 style="margin:0 0 12px;font-size:20px;">Your account is ready</h1>
+       <p style="margin:0 0 4px;">An account has been created for you on the ${escapeHtml(branding.organizationName)} platform, where the team runs tickets, time and invoicing. You have ${escapeHtml(invite.roleLabel)} access.</p>
+       ${panel("Sign in with", invite.email)}
+       <p style="margin:0 0 4px;">Set a password to finish. The link below can be used once and expires in 24 hours.</p>
+       ${button(setPasswordUrl, "Set your password", branding.accentColor)}
+       <p style="margin:18px 0 4px;font-size:13px;color:#8FA3B5;">After that, sign in any time at <a href="${escapeHtml(signInUrl)}" style="color:#06E1DC;">${escapeHtml(signInUrl.replace(/^https?:\/\//, ""))}</a>.</p>
+       <p style="margin:12px 0 0;font-size:13px;color:#8FA3B5;">If the link has expired, choose <strong>Forgot your password?</strong> on the sign-in page. If you were not expecting this email, you can ignore it.</p>`,
+    ),
+  };
+}
+
 export function taskForReviewEmail(
   branding: Branding,
   task: { title: string; assigneeName: string; priority: string },

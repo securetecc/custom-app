@@ -45,12 +45,17 @@ export default async function TimeEntriesPage({
 
   const {
     data: [entries, clients, serviceTypes, staff, projects],
-  } = await requireOrgContext((tx) =>
+  } = await requireOrgContext((tx, appUser) =>
     Promise.all([
       tx.timeEntry.findMany({
         where: {
+          // A contractor's own hours, whoever the filter asks for.
+          ...(appUser.role === "contractor"
+            ? { performedByUserId: appUser.id }
+            : performedBy !== "all"
+              ? { performedByUserId: performedBy }
+              : {}),
           ...(clientId !== "all" ? { clientId } : {}),
-          ...(performedBy !== "all" ? { performedByUserId: performedBy } : {}),
           ...(dateRange ? { date: dateRange } : {}),
           ...(project ? { project } : {}),
         },

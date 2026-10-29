@@ -24,6 +24,8 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   adminOnly: boolean;
+  /** Reachable by a contractor, who sees only their own time. */
+  contractor?: boolean;
   /** Placeholder page -- says so before the click rather than after it. */
   soon?: boolean;
 };
@@ -41,25 +43,30 @@ export type NavItem = {
  * twice in a session.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false },
-  { href: "/today", label: "Today", icon: Sunrise, adminOnly: false },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: false, contractor: true },
+  { href: "/today", label: "Today", icon: Sunrise, adminOnly: false, contractor: true },
   { href: "/tickets", label: "Tickets", icon: LifeBuoy, adminOnly: false },
-  { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false },
-  { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false },
-  { href: "/team", label: "Team", icon: UsersRound, adminOnly: false },
-  { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false },
+  { href: "/time-entries", label: "Time Entries", icon: Clock, adminOnly: false, contractor: true },
+  { href: "/tasks", label: "Tasks", icon: ListChecks, adminOnly: false, contractor: true },
+  { href: "/team", label: "Team", icon: UsersRound, adminOnly: false, contractor: true },
+  { href: "/invoices", label: "Invoices", icon: FileText, adminOnly: false, contractor: true },
   { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, adminOnly: true },
   { href: "/accounting", label: "Accounting", icon: Landmark, adminOnly: true },
   { href: "/analytics", label: "Analytics", icon: ChartLine, adminOnly: true },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true },
   { href: "/documentation", label: "Docs", icon: BookLock, adminOnly: true, soon: true },
-  { href: "/clients", label: "Clients", icon: Users, adminOnly: false },
+  { href: "/clients", label: "Clients", icon: Users, adminOnly: false, contractor: true },
   { href: "/reviews", label: "Reviews", icon: Star, adminOnly: true, soon: true },
   { href: "/signature", label: "Signature", icon: PenLine, adminOnly: false },
   { href: "/subscriptions", label: "Subscriptions", icon: CreditCard, adminOnly: true, soon: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
-export function navItemsFor(role: "admin" | "technician"): NavItem[] {
+export type Role = "admin" | "technician" | "contractor";
+
+export function navItemsFor(role: Role): NavItem[] {
+  // A contractor gets an allowlist, not a subtraction: anything added to the
+  // platform later is hidden from them until somebody decides otherwise.
+  if (role === "contractor") return NAV_ITEMS.filter((item) => item.contractor);
   return NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin");
 }

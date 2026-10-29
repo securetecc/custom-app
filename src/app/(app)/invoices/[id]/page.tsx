@@ -34,9 +34,14 @@ export default async function InvoiceDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { appUser, authUserId, data: invoice } = await requireOrgContext((tx) =>
-    tx.invoice.findUnique({
-      where: { id },
+  const { appUser, authUserId, data: invoice } = await requireOrgContext((tx, me) =>
+    tx.invoice.findFirst({
+      where: {
+        id,
+        ...(me.role === "contractor"
+          ? { timeEntries: { some: { performedByUserId: me.id } } }
+          : {}),
+      },
       include: {
         client: true,
         organization: { select: { emailDomainVerified: true } },

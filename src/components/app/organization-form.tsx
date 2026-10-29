@@ -44,6 +44,7 @@ import {
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin — full access",
   technician: "Technician — day-to-day work",
+  contractor: "Contractor — their own work only",
 };
 
 export function OrganizationForm({ defaultValues }: { defaultValues: OrganizationFormValues }) {
@@ -390,7 +391,8 @@ export function StaffSection({
         <div>
           <h2 className="font-medium">Staff</h2>
           <p className="text-sm text-muted-foreground">
-            Admins manage settings and invoices; technicians do day-to-day work.
+            Admins manage settings and invoices; technicians do day-to-day work; contractors see
+            only their own time, tasks and the clients they have worked on.
           </p>
         </div>
         <NewStaffDialog />
@@ -497,7 +499,7 @@ function StaffRoleSelect({ userId, role }: { userId: string; role: string }) {
     const previous = value;
     setValue(next);
     setPending(true);
-    const result = await updateStaffRole(userId, next as "admin" | "technician");
+    const result = await updateStaffRole(userId, next as "admin" | "technician" | "contractor");
     setPending(false);
     if (!result.ok) {
       setValue(previous);
@@ -548,7 +550,7 @@ function NewStaffDialog() {
       toast.error(result.error);
       return;
     }
-    toast.success("Staff member added");
+    toast.success("Invitation sent");
     reset();
     setOpen(false);
   }
@@ -561,8 +563,8 @@ function NewStaffDialog() {
           <DialogHeader>
             <DialogTitle>Add staff member</DialogTitle>
             <DialogDescription>
-              Creates their login and profile. Share the initial password with them directly and
-              have them change it.
+              Creates their login and emails them an invitation with a link to choose their own
+              password. Nothing needs passing on by hand.
             </DialogDescription>
           </DialogHeader>
 
@@ -579,7 +581,7 @@ function NewStaffDialog() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="staffRole">Role</Label>
-              <Select value={role} onValueChange={(v) => setValue("role", (v ?? "technician") as "admin" | "technician")}>
+              <Select value={role} onValueChange={(v) => setValue("role", (v ?? "technician") as "admin" | "technician" | "contractor")}>
                 <SelectTrigger id="staffRole">
                   <SelectValue>{(v) => ROLE_LABELS[v as string]}</SelectValue>
                 </SelectTrigger>
@@ -593,10 +595,15 @@ function NewStaffDialog() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="staffPassword">Initial password</Label>
-              <Input id="staffPassword" type="password" {...register("password")} />
-              {errors.password && (
+              <Label htmlFor="staffPassword">Initial password (optional)</Label>
+              <Input id="staffPassword" type="password" autoComplete="new-password" {...register("password")} />
+              {errors.password ? (
                 <p className="text-xs text-destructive">{errors.password.message}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Leave this empty unless you have a reason to set one: the invitation carries a
+                  single-use link, so the password only ever exists where it should.
+                </p>
               )}
             </div>
           </div>

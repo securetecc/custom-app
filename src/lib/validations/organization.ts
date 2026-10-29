@@ -42,7 +42,7 @@ export type OrganizationFormValues = z.infer<typeof organizationFormSchema>;
 export const staffFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Enter a valid email"),
-  role: z.enum(["admin", "technician"]),
+  role: z.enum(["admin", "technician", "contractor"]),
   // Only used when creating; ignored on edit.
   password: z.string().min(10, "Use at least 10 characters").or(z.literal("")),
 });

@@ -69,6 +69,20 @@ export async function requireAppUser() {
   return appUser;
 }
 
+/**
+ * Everything except the contractor tier.
+ *
+ * Hiding a link is not access control: a contractor who types /invoices or
+ * keeps an old bookmark would otherwise land on a page full of other
+ * people's work. Every page outside their allowlist calls this, so the
+ * answer is the same whether they arrive by menu, by URL or by history.
+ */
+export async function requireStaff() {
+  const appUser = await requireAppUser();
+  if (appUser.role === "contractor") redirect("/time-entries");
+  return appUser;
+}
+
 export async function requireAdmin() {
   const appUser = await requireAppUser();
   if (appUser.role !== "admin") redirect("/dashboard?error=admin-only");
@@ -130,6 +144,19 @@ export async function requireOrgContext<T>(fn?: (tx: TxClient, appUser: AppUser)
 // The role check happens AFTER the lookup rather than in a separate pass,
 // which is also why it can share the callback's transaction: by the time the
 // callback runs we already know the caller is an admin.
+export async function requireStaffContext(): Promise<{
+  authUserId: string;
+  appUser: AppUser;
+}>;
+export async function requireStaffContext<T>(
+  fn: (tx: TxClient, appUser: AppUser) => Promise<T>,
+): Promise<{ authUserId: string; appUser: AppUser; data: T }>;
+export async function requireStaffContext<T>(fn?: (tx: TxClient, appUser: AppUser) => Promise<T>) {
+  const result = await (fn ? requireOrgContext(fn) : requireOrgContext());
+  if (result.appUser.role === "contractor") redirect("/time-entries");
+  return result;
+}
+
 export async function requireAdminContext(): Promise<{
   authUserId: string;
   appUser: AppUser;

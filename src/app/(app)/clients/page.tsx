@@ -30,9 +30,15 @@ export default async function ClientsPage({
     : "All";
   const showInactive = sp.status === "all";
 
-  const { data: clients } = await requireOrgContext((tx) =>
+  const { data: clients } = await requireOrgContext((tx, appUser) =>
     tx.client.findMany({
       where: {
+        // A contractor sees the clients they have logged time against, and
+        // no others: the list is otherwise a directory of the whole book of
+        // business, rates included.
+        ...(appUser.role === "contractor"
+          ? { timeEntries: { some: { performedByUserId: appUser.id } } }
+          : {}),
         ...(showInactive ? {} : { activeStatus: true }),
         ...(cadence === "All" ? {} : { billingCadence: cadence }),
         ...(search

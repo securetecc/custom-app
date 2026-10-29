@@ -5,6 +5,7 @@ import { requireAdmin, requireAdminContext, requireOrgContext } from "@/lib/auth
 import { withRLS } from "@/lib/db/rls";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { prisma } from "@/lib/db/prisma";
+import { sendStaffInvite } from "@/lib/email/invite";
 import {
   organizationFormSchema,
   staffFormSchema,
@@ -108,16 +109,16 @@ export async function createStaffUser(input: StaffFormValues): Promise<ActionRes
   }
   const data = parsed.data;
 
-  if (data.password.length === 0) {
-    return { ok: false, error: "Set an initial password for the new user." };
-  }
-
   const appUser = await requireAdmin();
+
+  // No password typed means the invitation carries a set-your-password link
+  // instead, and the account is created with one nobody has ever seen.
+  const password = data.password.length > 0 ? data.password : randomPassword();
 
   const supabase = createAdminClient();
   const { data: created, error } = await supabase.auth.admin.createUser({
     email: data.email,
-    password: data.password,
+    password,
     email_confirm: true,
   });
 
@@ -156,13 +157,47 @@ export async function createStaffUser(input: StaffFormValues): Promise<ActionRes
     return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
   }
 
+  const invite = await sendStaffInvite({
+    email: data.email,
+    name: data.name,
+    role: data.role,
+    organizationId: appUser.organizationId,
+  });
+
   revalidatePath("/settings/organization");
-  return { ok: true };
+  // The account exists either way; a mail that did not go out is worth
+  // saying out loud rather than leaving someone waiting for it.
+  return invite.ok
+    ? { ok: true }
+    : { ok: false, error: `Account created, but the invitation email wasn't sent: ${invite.error}` };
+}
+
+/** A password for an account whose owner will set their own within the hour. */
+function randomPassword(): string {
+  return `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "").slice(0, 32);
+}
+
+/** Sends the invitation again, for a link that expired before it was used. */
+export async function resendStaffInvite(userId: string): Promise<ActionResult> {
+  const appUser = await requireAdmin();
+  const user = await prisma.user.findFirst({
+    where: { id: userId, organizationId: appUser.organizationId },
+    select: { email: true, name: true, role: true },
+  });
+  if (!user) return { ok: false, error: "That person isn't in your organization." };
+
+  const invite = await sendStaffInvite({
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    organizationId: appUser.organizationId,
+  });
+  return invite.ok ? { ok: true } : { ok: false, error: invite.error };
 }
 
 export async function updateStaffRole(
   userId: string,
-  role: "admin" | "technician",
+  role: "admin" | "technician" | "contractor",
 ): Promise<ActionResult> {
   const { authUserId, appUser } = await requireAdminContext();
 

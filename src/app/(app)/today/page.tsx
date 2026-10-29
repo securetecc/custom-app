@@ -60,7 +60,12 @@ export default async function TodayPage() {
 
   // Fetched outside the transaction: it is a network call to Google, and a
   // slow or unauthorized calendar must not hold a database connection open.
-  const calendar = await listUpcomingEvents({ timeMin: dayStart, timeMax: dayEnd });
+  // Neither the shared calendar nor the ticket queue is a contractor's to
+  // read, so neither is fetched for them and neither card is drawn.
+  const isContractor = appUser.role === "contractor";
+  const calendar = isContractor
+    ? null
+    : await listUpcomingEvents({ timeMin: dayStart, timeMax: dayEnd });
 
   const greeting = buildGreeting({
     firstName: appUser.name.split(" ")[0],
@@ -91,6 +96,7 @@ export default async function TodayPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {calendar && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -130,6 +136,7 @@ export default async function TodayPage() {
             )}
           </CardContent>
         </Card>
+        )}
 
         <Card>
           <CardHeader className="pb-3">
@@ -197,6 +204,7 @@ export default async function TodayPage() {
           </CardContent>
         </Card>
 
+        {!isContractor && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -227,6 +235,7 @@ export default async function TodayPage() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
     </div>
   );

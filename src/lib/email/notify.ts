@@ -2,6 +2,7 @@ import { PACIFIC_TZ } from "@/lib/cron/pacific";
 import { ticketInboxOf } from "@/lib/email/routing";
 import { prisma } from "@/lib/db/prisma";
 import { sendEmail, type SendResult } from "@/lib/email/client";
+import { emailAppUrl } from "@/lib/email/app-url";
 import {
   ticketAssignedEmail,
   ticketConfirmationEmail,
@@ -64,14 +65,7 @@ function brandingOf(org: OrgRow): Branding {
  * doesn't resolve. A working deployment URL beats a dead link while the real
  * domain is still being attached.
  */
-function appUrl(path: string): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-  if (configured) return `${configured}${path}`;
-
-  const vercelHost =
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL ?? "";
-  return vercelHost ? `https://${vercelHost}${path}` : path;
-}
+const appUrl = emailAppUrl;
 
 /**
  * Public ticket portal (ticket.securetecc.com) -- a different host from

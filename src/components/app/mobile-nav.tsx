@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { NavLinks } from "@/components/app/nav-links";
+import type { Role } from "@/components/app/nav-items";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 
 /**
@@ -19,7 +20,7 @@ import { ThemeToggle } from "@/components/app/theme-toggle";
  * behaviours (Escape, click-away, close on navigate, no scrolling behind it)
  * and nothing else.
  */
-export function MobileNav({ role }: { role: "admin" | "technician" }) {
+export function MobileNav({ role }: { role: Role }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const panelRef = useRef<HTMLDivElement>(null);
