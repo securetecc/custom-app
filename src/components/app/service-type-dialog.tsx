@@ -52,6 +52,7 @@ export function ServiceTypeDialog({
       scheduledRate: undefined,
       scheduledRateFrom: null,
       payoutRate: undefined,
+      payoutPercent: undefined,
       commissionEligible: false,
       ...defaultValues,
     },
@@ -170,6 +171,26 @@ export function ServiceTypeDialog({
                   partner&apos;s share. Only the remainder counts toward the performance bonus.
                 </p>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="payoutPercent">Payout share (% of billed)</Label>
+                <Input
+                  id="payoutPercent"
+                  type="number"
+                  step="0.01"
+                  placeholder="Nothing paid out"
+                  {...register("payoutPercent", { valueAsNumber: true })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use this instead when the share is a cut of what the client pays. It follows
+                  the rate, so a change to the rate needs no edit here.
+                </p>
+                {errors.payoutPercent && (
+                  <p className="text-xs text-destructive">{errors.payoutPercent.message}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Commission</Label>
                 <label className="flex cursor-pointer items-start gap-2 rounded-md border p-3">

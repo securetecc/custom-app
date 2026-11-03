@@ -260,6 +260,9 @@ export default async function CompensationReportPage({
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">
                           {t.payoutRate === null ? "—" : usd(t.payoutRate)}
+                          {t.payoutPercent !== null && (
+                            <span className="ml-1 text-xs">({t.payoutPercent}%)</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {usd(t.qualifyingRate)}

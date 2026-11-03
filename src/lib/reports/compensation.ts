@@ -5,6 +5,7 @@ import {
   bonusFor,
   nextRung,
   fromCents,
+  payoutPerHour,
   qualifyingCents,
   roundHalfUpCents,
   toCents,
@@ -54,6 +55,9 @@ export type ServiceTypeCompRow = {
   hours: number;
   billedRate: number;
   payoutRate: number | null;
+  /** Set when the share is a cut of the billed rate; payoutRate is then
+   *  what that cut came to at this row's rate. */
+  payoutPercent: number | null;
   qualifyingRate: number;
   qualifying: number;
 };
@@ -171,6 +175,7 @@ export async function loadCompensationReport(
             scheduledRate: true,
             scheduledRateFrom: true,
             payoutRate: true,
+            payoutPercent: true,
             commissionEligible: true,
           },
         },
@@ -239,7 +244,15 @@ export async function loadCompensationReport(
         clientScheduledRateFrom: entry.client.scheduledRateFrom,
         entryDate: entry.date,
       }) ?? 0;
-    const payoutRate = toRate(entry.serviceType.payoutRate);
+    // Resolved against the rate THIS hour billed at, which is why it is done
+    // per entry rather than once per service type: a percentage share of a
+    // re-rated job is a different number of dollars.
+    const payoutPercent = toRate(entry.serviceType.payoutPercent);
+    const payoutRate = payoutPerHour({
+      billedRate,
+      payoutRate: toRate(entry.serviceType.payoutRate),
+      payoutPercent,
+    });
     const lineCents = qualifyingCents({ hours: entryHours, billedRate, payoutRate });
 
     hours += entryHours;
@@ -263,6 +276,7 @@ export async function loadCompensationReport(
       hours: 0,
       billedRate,
       payoutRate,
+      payoutPercent,
       qualifyingRate: fromCents(toCents(billedRate) - toCents(payoutRate ?? 0)),
       qualifying: 0,
     };

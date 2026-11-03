@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const serviceTypeFormSchema = z.object({
+const baseServiceTypeSchema = z.object({
   code: z
     .string()
     .min(1, "Code is required")
@@ -19,8 +19,32 @@ export const serviceTypeFormSchema = z.object({
   /// What SecureTECC pays out per hour on this type -- the subcontractor's or
   /// partner's share. Blank means nothing is paid out. Feeds the bonus.
   payoutRate: z.union([z.number(), z.nan()]).optional(),
+  /// The same share as a percentage of what the client was billed, for a cut
+  /// rather than a fixed figure. Follows the rate when the rate changes.
+  payoutPercent: z
+    .union([
+      z.number().min(0, "Must be zero or more").max(100, "A share cannot exceed 100%"),
+      z.nan(),
+    ])
+    .optional(),
   /// Whether a BBZ-performed hour of this type earns BBZ its commission.
   commissionEligible: z.boolean(),
 });
+
+// A share is one thing or the other. Holding both would leave the report
+// quietly preferring one and the settings page showing the other.
+export const serviceTypeFormSchema = baseServiceTypeSchema.refine(
+  (v) =>
+    !(
+      v.payoutRate !== undefined &&
+      !Number.isNaN(v.payoutRate) &&
+      v.payoutPercent !== undefined &&
+      !Number.isNaN(v.payoutPercent)
+    ),
+  {
+    message: "Give the payout as a rate or as a percentage, not both.",
+    path: ["payoutPercent"],
+  },
+);
 
 export type ServiceTypeFormValues = z.infer<typeof serviceTypeFormSchema>;

@@ -12,7 +12,13 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/db/prisma";
 import { withRLS } from "../src/lib/db/rls";
-import { bonusFor, toCents, fromCents, type BonusBandRow } from "../src/lib/bonus/calculate";
+import {
+  bonusFor,
+  payoutPerHour,
+  toCents,
+  fromCents,
+  type BonusBandRow,
+} from "../src/lib/bonus/calculate";
 import { loadCompensationReport } from "../src/lib/reports/compensation";
 import { bountyForClient, resolveWindowStart } from "../src/lib/bounty/calculate";
 import { resolveRate } from "../src/lib/billing/rates";
@@ -80,6 +86,27 @@ check("$25,000 pays $2,500.00", bonusAt(25000), 2500);
 
 console.log("\nRounding is half UP, to cents\n");
 check("$14,125 x 2.50% = $353.13, not $353.12", bonusAt(14125), 353.13);
+
+console.log("\nA payout share: a figure per hour, or a cut of what was billed\n");
+const share = (billedRate: number, rate: number | null, percent: number | null) =>
+  payoutPerHour({ billedRate, payoutRate: rate, payoutPercent: percent });
+
+check("nothing set pays out nothing", share(100, null, null), null);
+check("a flat $75 is $75 whatever the rate", share(150, 75, null)?.toFixed(2), "75.00");
+check("40% of a $100 hour is $40.00", share(100, 40, null)?.toFixed(2), "40.00");
+
+// The whole reason the percentage exists. A flat $40 agreed against $100
+// stays $40 when the hour bills at $150 -- a 27% share nobody asked for.
+check("a flat $40 against a $150 hour is only 26.7%", share(150, 40, null)?.toFixed(2), "40.00");
+check("40% against a $150 hour follows it to $60.00", share(150, null, 40)?.toFixed(2), "60.00");
+check("40% against a $125 hour is $50.00", share(125, null, 40)?.toFixed(2), "50.00");
+
+// Rounded to whole cents, the same half-up rule as the bonus, so the figure
+// on the report is the one the arithmetic used.
+check("33.33% of a $100 hour is $33.33", share(100, null, 33.33)?.toFixed(2), "33.33");
+check("12.5% of a $135 hour is $16.88, not $16.87", share(135, null, 12.5)?.toFixed(2), "16.88");
+check("100% leaves nothing qualifying", share(100, null, 100)?.toFixed(2), "100.00");
+check("0% pays out nothing", share(100, null, 0)?.toFixed(2), "0.00");
 
 console.log("\nAugust 2026 — the schedule's worked example, against live data\n");
 const tony = await prisma.user.findFirstOrThrow({ where: { canDelegateTasks: true } });

@@ -15,21 +15,20 @@ const commit = process.argv.includes("--commit");
 
 // Section 3.2: what SecureTECC pays out per hour, and who it goes to.
 //
-// S-D is absent only because the figure is not settled yet. Software
-// development is Aean's alone -- not BBZ's, and not Tony's own hours -- so
-// one rate per service type fits it the same way $75 fits low voltage.
-//
-// One caution when Tony names it: his share is being discussed as a
-// PERCENTAGE of the $100, and what goes here is dollars per hour. The two
-// agree only while software bills at $100. A scheduled rate change, or a
-// single entry re-rated on the fly, moves the billed figure and leaves this
-// one where it was -- $40 against a $150 entry is 27%, not 40%. If the share
-// is meant to track the rate, it has to be stored as a percentage instead.
+// S-D is absent from BOTH maps only because the figure is not settled yet.
+// Software development is Aean's alone -- not BBZ's, and not Tony's own
+// hours -- and his share is a percentage of the $100 rather than a figure
+// per hour, so it goes in PAYOUT_PERCENTS below once Tony names it.
 const PAYOUT_RATES: Record<string, number> = {
   "L-V": 75, // low-voltage subcontractor
   "W-D": 20, // BBZ Studio
   "A-I": 20, // BBZ Studio
 };
+
+// The same thing as a share of what the client was billed, for the lines
+// agreed as a cut rather than a figure. S-D belongs here once Tony names
+// Aean's percentage. A code must not appear in both maps.
+const PAYOUT_PERCENTS: Record<string, number> = {};
 
 // Section 7 of the build email: commission is for IT hours only. W-D and A-I
 // are already paid hourly; L-V is the subcontractor's. S-D is out for a
@@ -67,15 +66,20 @@ const serviceTypes = await prisma.serviceType.findMany({ orderBy: { code: "asc" 
 console.log("Service types");
 for (const st of serviceTypes) {
   const payout = PAYOUT_RATES[st.code] ?? null;
+  const percent = PAYOUT_PERCENTS[st.code] ?? null;
+  if (payout !== null && percent !== null) {
+    throw new Error(`${st.code} has both a payout rate and a payout percentage -- pick one.`);
+  }
   const eligible = COMMISSION_ELIGIBLE.includes(st.code);
+  const shown = percent !== null ? `${percent}% billed` : payout === null ? "—" : `$${payout.toFixed(2)}`;
   console.log(
     `  ${st.code.padEnd(5)} billed ${(st.rateOverride ? `$${st.rateOverride}` : "client rate").padEnd(12)}` +
-      ` payout ${(payout === null ? "—" : `$${payout.toFixed(2)}`).padEnd(8)} commission ${eligible ? "yes" : "no"}`,
+      ` payout ${shown.padEnd(10)} commission ${eligible ? "yes" : "no"}`,
   );
   if (commit) {
     await prisma.serviceType.update({
       where: { id: st.id },
-      data: { payoutRate: payout, commissionEligible: eligible },
+      data: { payoutRate: payout, payoutPercent: percent, commissionEligible: eligible },
     });
   }
 }

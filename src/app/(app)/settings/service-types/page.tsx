@@ -71,7 +71,11 @@ export default async function ServiceTypesPage() {
                     fields rather than constants so a rate change follows
                     without a deploy. */}
                 <TableCell>
-                  {st.payoutRate ? `$${st.payoutRate.toString()}/hr` : "—"}
+                  {st.payoutPercent
+                    ? `${st.payoutPercent.toString()}% of billed`
+                    : st.payoutRate
+                      ? `$${st.payoutRate.toString()}/hr`
+                      : "—"}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {st.commissionEligible ? "Yes" : "No"}
@@ -89,6 +93,7 @@ export default async function ServiceTypesPage() {
                         ? st.scheduledRateFrom.toISOString().slice(0, 10)
                         : null,
                       payoutRate: st.payoutRate ? Number(st.payoutRate) : undefined,
+                      payoutPercent: st.payoutPercent ? Number(st.payoutPercent) : undefined,
                       commissionEligible: st.commissionEligible,
                     }}
                     trigger={

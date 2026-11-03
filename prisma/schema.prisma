@@ -485,6 +485,18 @@ model ServiceType {
   /// bonus report without amending the compensation schedule or shipping a
   /// deploy. Seeded L-V 75.00, W-D 20.00, A-I 20.00.
   payoutRate          Decimal?     @db.Decimal(10, 2)
+  /// The same share, written as a PERCENTAGE of what the client is billed.
+  ///
+  /// Some shares are agreed as a cut rather than a figure -- Aean takes a
+  /// percentage of the $100 charged for software development. Holding that as
+  /// dollars per hour is right only while the billed rate never moves: a
+  /// scheduled rate change, or one job re-rated on the fly, leaves the payout
+  /// where it was, and $40 against a $150 hour is 27% and looks like nothing
+  /// is wrong. Stored as the percentage, it follows the rate by itself.
+  ///
+  /// Set one or the other, never both. payoutPerHour() resolves whichever is
+  /// present against the rate the hour actually billed at.
+  payoutPercent       Decimal?     @db.Decimal(5, 2)
   /// Whether an hour of this type earns BBZ Studio its 10% commission when a
   /// BBZ person performed it. IT service lines only -- W-D and A-I are
   /// already paid hourly, and L-V is the subcontractor's.

@@ -9,7 +9,8 @@
  *
  *  1. An hour enters at its NET figure. Where SecureTECC pays a third party
  *     out of a billed hour -- the low-voltage subcontractor at $75, BBZ at
- *     $20 on web and automation work -- only SecureTECC's share qualifies.
+ *     $20 on web and automation work, Aean at a percentage of software work
+ *     -- only SecureTECC's share qualifies.
  *     Everything else qualifies at the full billed rate, whoever worked it.
  *  2. The band rate applies to the WHOLE qualifying base, not to the portion
  *     above the threshold, and bands are exclusive at the bottom, inclusive
@@ -37,6 +38,33 @@ export function toCents(amount: number): number {
  */
 export function roundHalfUpCents(cents: number): number {
   return Math.floor(cents + 0.5);
+}
+
+/**
+ * What one hour of a service type pays out, in dollars.
+ *
+ * A share is agreed either as a figure per hour -- the low-voltage
+ * subcontractor's $75 -- or as a cut of what the client was charged, which is
+ * how Aean's software work is set. The second has to be resolved against the
+ * rate the hour ACTUALLY billed at, not the service type's list rate: an
+ * entry re-rated on the fly, or dated past a scheduled change, bills at a
+ * different figure, and a percentage is meant to follow it.
+ *
+ * Null means nothing is paid out and the whole billed rate is SecureTECC's.
+ * A percentage takes precedence if both are somehow set, because it is the
+ * one that cannot be silently stale -- though the form refuses to save both.
+ */
+export function payoutPerHour(input: {
+  billedRate: number;
+  payoutRate: number | null;
+  payoutPercent: number | null;
+}): number | null {
+  if (input.payoutPercent !== null) {
+    // Rounded to whole cents here rather than left fractional, so the figure
+    // shown on the report is the same one the bonus was worked out from.
+    return fromCents(roundHalfUpCents(toCents(input.billedRate) * (input.payoutPercent / 100)));
+  }
+  return input.payoutRate;
 }
 
 /** What one line contributes: hours x (billed rate - whatever is paid out). */
