@@ -67,7 +67,7 @@ SERVICE TYPE ACRONYMS, BILLING MINIMUMS, AND RATES:
 ${serviceTypeTable}
 - Travel — billed at Tony's discretion (no fixed minimum)
 
-You MUST always classify the entry with exactly one of these acronyms — never leave it untagged. Use explicit keywords when present (remote, phone call, email, on-site, in person, low voltage, website development, AI automation, travel). When no keyword is stated, infer the most likely service type from context using these defaults:
+You MUST always classify the entry with exactly one of these acronyms — never leave it untagged. Use explicit keywords when present (remote, phone call, email, on-site, in person, low voltage, website development, software development, AI automation, travel). When no keyword is stated, infer the most likely service type from context using these defaults:
 - Troubleshooting, fixing, checking, or configuring a computer, network, printer, account, or software issue with no mention of traveling to a location or being physically present = R-S (Remote Service) — this is the default for most IT work unless another type is clearly indicated.
 - A call or conversation with no video/screen-share mentioned = P-S (Phone Service).
 - A hosted video call, Google Meet, Teams meeting, or Zoom = R-S (Remote Service).
@@ -75,6 +75,7 @@ You MUST always classify the entry with exactly one of these acronyms — never 
 - Structured cabling, cameras, access control, or AV installation = L-V (Low Voltage).
 - Building, designing, or coding a website, landing page, or web app = W-D (Website Development).
 - Building AI agents, chatbots, automation workflows, integrations, or AI-related tooling/scripting = A-I (AI Automation).
+- Building or maintaining custom software that is not a website and not AI work — a desktop or mobile application, an API or backend service, a database, an internal tool, or a feature of a platform = S-D (Software Development). If the thing being built is a website, landing page, or web app, it stays W-D.
 
 Apply the matching acronym's billing minimum: if the stated/calculated hours are below that service type's minimum, round UP to the minimum.
 

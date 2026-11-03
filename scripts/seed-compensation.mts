@@ -18,10 +18,11 @@ const PAYOUT_RATES: Record<string, number> = {
   "L-V": 75, // low-voltage subcontractor
   "W-D": 20, // BBZ Studio
   "A-I": 20, // BBZ Studio
+  "S-D": 20, // BBZ Studio
 };
 
 // Section 7 of the build email: commission is for IT hours only. W-D and A-I
-// are already paid hourly; L-V is the subcontractor's.
+// are already paid hourly, as is S-D; L-V is the subcontractor's.
 const COMMISSION_ELIGIBLE = ["R-S", "O-S", "P-S", "E-S", "V-S"];
 
 // Section 3.1. Exclusive at the bottom, inclusive at the top; the last band
