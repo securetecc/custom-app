@@ -14,15 +14,23 @@ import { prisma } from "../src/lib/db/prisma";
 const commit = process.argv.includes("--commit");
 
 // Section 3.2: what SecureTECC pays out per hour, and who it goes to.
+//
+// S-D is deliberately absent. One rate per service type assumes one payee,
+// which holds for the lines below -- L-V is the subcontractor's, W-D and
+// A-I are BBZ's. Software development is worked by both Tony and Aean, and
+// a single figure here would pay out on Tony's own hours too. Awaiting his
+// decision; if the two need different treatment the payout has to follow
+// the performer rather than the service type.
 const PAYOUT_RATES: Record<string, number> = {
   "L-V": 75, // low-voltage subcontractor
   "W-D": 20, // BBZ Studio
   "A-I": 20, // BBZ Studio
-  "S-D": 20, // BBZ Studio
 };
 
 // Section 7 of the build email: commission is for IT hours only. W-D and A-I
-// are already paid hourly, as is S-D; L-V is the subcontractor's.
+// are already paid hourly; L-V is the subcontractor's. S-D is neither: it
+// is Tony's and Aean's line, and what it pays out is unsettled -- see the
+// note on the payout rates above.
 const COMMISSION_ELIGIBLE = ["R-S", "O-S", "P-S", "E-S", "V-S"];
 
 // Section 3.1. Exclusive at the bottom, inclusive at the top; the last band
