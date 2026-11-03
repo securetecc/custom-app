@@ -15,12 +15,10 @@ const commit = process.argv.includes("--commit");
 
 // Section 3.2: what SecureTECC pays out per hour, and who it goes to.
 //
-// S-D is deliberately absent. One rate per service type assumes one payee,
-// which holds for the lines below -- L-V is the subcontractor's, W-D and
-// A-I are BBZ's. Software development is worked by both Tony and Aean, and
-// a single figure here would pay out on Tony's own hours too. Awaiting his
-// decision; if the two need different treatment the payout has to follow
-// the performer rather than the service type.
+// S-D is absent only because the figure is not settled yet. Software
+// development is Aean's alone -- not BBZ's, and not Tony's own hours -- so
+// one rate per service type fits it the same way $75 fits low voltage. Add
+// his hourly rate here once Tony names it.
 const PAYOUT_RATES: Record<string, number> = {
   "L-V": 75, // low-voltage subcontractor
   "W-D": 20, // BBZ Studio
@@ -28,9 +26,10 @@ const PAYOUT_RATES: Record<string, number> = {
 };
 
 // Section 7 of the build email: commission is for IT hours only. W-D and A-I
-// are already paid hourly; L-V is the subcontractor's. S-D is neither: it
-// is Tony's and Aean's line, and what it pays out is unsettled -- see the
-// note on the payout rates above.
+// are already paid hourly; L-V is the subcontractor's. S-D is out for a
+// different reason -- commission is BBZ's share of hours a BBZ person worked,
+// and Tony has confirmed software development is Aean's only, so there are
+// none to take a share of.
 const COMMISSION_ELIGIBLE = ["R-S", "O-S", "P-S", "E-S", "V-S"];
 
 // Section 3.1. Exclusive at the bottom, inclusive at the top; the last band
