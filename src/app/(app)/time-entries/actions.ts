@@ -105,6 +105,7 @@ export async function updateTimeEntry(id: string, input: TimeEntryFormValues): P
 
   try {
     await withRLS(authUserId, async (tx) => {
+      await assertOwnEntry(tx, id, appUser);
       const serviceType = await tx.serviceType.findUniqueOrThrow({
         where: { id: data.serviceTypeId },
       });
@@ -159,6 +160,7 @@ export async function deleteTimeEntry(id: string): Promise<ActionResult> {
       // not found" from the delete itself. Admins are still allowed through --
       // RLS ("staff can delete unbilled, admin can delete any") permits it
       // too; the UI just asks for stronger confirmation for them.
+      await assertOwnEntry(tx, id, appUser);
       const entry = await tx.timeEntry.findUniqueOrThrow({ where: { id } });
       if (entry.invoiceId && appUser.role !== "admin") {
         throw new AlreadyInvoicedError();
@@ -175,9 +177,36 @@ export async function deleteTimeEntry(id: string): Promise<ActionResult> {
 
 class AlreadyInvoicedError extends Error {}
 
+class NotYoursError extends Error {}
+
+/**
+ * Refuses a contractor an entry that is not theirs.
+ *
+ * The row-level rule allows any non-admin to change an unbilled entry, which
+ * is right for a colleague and wrong for an outside pair of hands: they see
+ * only their own hours, so they should only be able to change their own.
+ */
+async function assertOwnEntry(
+  tx: TxClient,
+  id: string,
+  appUser: { id: string; role: string },
+): Promise<void> {
+  if (appUser.role !== "contractor") return;
+  const entry = await tx.timeEntry.findUnique({
+    where: { id },
+    select: { performedByUserId: true, loggedByUserId: true },
+  });
+  if (!entry || (entry.performedByUserId !== appUser.id && entry.loggedByUserId !== appUser.id)) {
+    throw new NotYoursError();
+  }
+}
+
 function errorMessage(err: unknown): string {
   if (err instanceof AlreadyInvoicedError) {
     return "This entry has already been invoiced — ask an admin to void the invoice first.";
+  }
+  if (err instanceof NotYoursError) {
+    return "That entry belongs to someone else.";
   }
   if (err instanceof Error) {
     if (err.message.includes("Record to update not found") || err.message.includes("No record")) {

@@ -21,6 +21,7 @@ import { staffInviteEmail, type Branding } from "@/lib/email/templates";
 const ROLE_LABELS: Record<string, string> = {
   admin: "administrator",
   technician: "technician",
+  contractor: "contractor",
 };
 
 /**

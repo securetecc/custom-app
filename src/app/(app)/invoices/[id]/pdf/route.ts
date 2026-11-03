@@ -22,9 +22,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const { data: invoice } = await requireOrgContext((tx) =>
-    tx.invoice.findUnique({
-      where: { id },
+  const { data: invoice } = await requireOrgContext((tx, me) =>
+    tx.invoice.findFirst({
+      // Scoped like the invoice page: a link nobody can see is not access
+      // control, and an id is guessable in a way a page is not.
+      where: {
+        id,
+        ...(me.role === "contractor"
+          ? { timeEntries: { some: { performedByUserId: me.id } } }
+          : {}),
+      },
       select: { pdfUrl: true, invoiceNumber: true, client: { select: { name: true } } },
     }),
   );
