@@ -17,8 +17,14 @@ const commit = process.argv.includes("--commit");
 //
 // S-D is absent only because the figure is not settled yet. Software
 // development is Aean's alone -- not BBZ's, and not Tony's own hours -- so
-// one rate per service type fits it the same way $75 fits low voltage. Add
-// his hourly rate here once Tony names it.
+// one rate per service type fits it the same way $75 fits low voltage.
+//
+// One caution when Tony names it: his share is being discussed as a
+// PERCENTAGE of the $100, and what goes here is dollars per hour. The two
+// agree only while software bills at $100. A scheduled rate change, or a
+// single entry re-rated on the fly, moves the billed figure and leaves this
+// one where it was -- $40 against a $150 entry is 27%, not 40%. If the share
+// is meant to track the rate, it has to be stored as a percentage instead.
 const PAYOUT_RATES: Record<string, number> = {
   "L-V": 75, // low-voltage subcontractor
   "W-D": 20, // BBZ Studio
