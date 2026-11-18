@@ -163,11 +163,37 @@ if (!report) {
   check("no other client appears", report.clients.length, Object.keys(expected).length);
 
   console.log("\nBilled or not, the hour counts\n");
-  check(
-    "5.75 hours in August are not yet invoiced and still counted",
-    report.unbilledHours.toFixed(2),
-    "5.75",
+  // Derived from the data, never written down. The figure this once asserted
+  // was a snapshot of how much of August happened to be uninvoiced on the day
+  // it was written, so it dropped every time an invoice went out and failed
+  // for a reason that was never a fault. What matters is the RULE: an hour
+  // counts in the month it was worked whether or not anyone has billed it.
+  const august = await withRLS(tony.authUserId, (tx) =>
+    tx.timeEntry.findMany({
+      where: {
+        billableStatus: "Billable",
+        date: { gte: new Date("2026-08-01T00:00:00Z"), lt: new Date("2026-09-01T00:00:00Z") },
+      },
+      select: { durationHours: true, invoiceId: true },
+    }),
   );
+  const sum = (rows: typeof august) => rows.reduce((t, e) => t + Number(e.durationHours), 0);
+  const uninvoiced = sum(august.filter((e) => e.invoiceId === null));
+  const invoiced = sum(august.filter((e) => e.invoiceId !== null));
+
+  check("the report's unbilled hours are the ones with no invoice",
+    report.unbilledHours.toFixed(2), uninvoiced.toFixed(2));
+  check("billable hours are the invoiced AND the uninvoiced, added up",
+    report.billableHours.toFixed(2), (invoiced + uninvoiced).toFixed(2));
+
+  // Without an uninvoiced hour in the month the two checks above still pass
+  // and prove nothing, so say so rather than report a green that is hollow.
+  if (uninvoiced > 0) {
+    check(`${uninvoiced.toFixed(2)} uninvoiced hours are inside the billable total`,
+      report.billableHours >= uninvoiced && report.billableHours > invoiced, true);
+  } else {
+    console.log("NOTE  every August hour is invoiced, so the rule is not exercised this run");
+  }
 
   console.log("\nCommission — every August entry is attributed to Tony, so it is nil\n");
   check("commission $0.00", report.commission.total.toFixed(2), "0.00");
