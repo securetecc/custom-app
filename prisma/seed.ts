@@ -21,6 +21,7 @@ const DEFAULT_SERVICE_TYPES = [
   { code: "W-D", label: "Website Development", billingMinimumHours: 0.25, rateOverride: 50 },
   { code: "A-I", label: "AI Automation", billingMinimumHours: 0.25, rateOverride: 50 },
   { code: "S-D", label: "Software Development", billingMinimumHours: 0.25, rateOverride: 100 },
+  { code: "S-E", label: "Search Engine Optimization", billingMinimumHours: 0.25, rateOverride: null },
 ] as const;
 
 // Reference-only, per the schema comment on AddonPricing -- pre-fills the
